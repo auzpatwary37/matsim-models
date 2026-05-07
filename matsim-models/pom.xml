@@ -7,9 +7,12 @@
     <groupId>com.citymodeler</groupId>
     <artifactId>matsim-models</artifactId>
     <version>1.0.0</version>
+    <packaging>jar</packaging>
 
     <name>MATSim Models</name>
-    <description>Standalone data models for MATSim-related CityModeler workflows.</description>
+    <description>Pure Java 17 POJOs and XML I/O for MATSim file formats. No MATSim dependency. Apache 2.0 licensed.</description>
+    <url>https://github.com/auzpatwary37/matsim-models</url>
+
     <licenses>
         <license>
             <name>Apache License, Version 2.0</name>
@@ -18,28 +21,44 @@
         </license>
     </licenses>
 
+    <scm>
+        <url>https://github.com/auzpatwary37/matsim-models</url>
+        <connection>scm:git@github.com:auzpatwary37/matsim-models.git</connection>
+        <developerConnection>scm:git@github.com:auzpatwary37/matsim-models.git</developerConnection>
+    </scm>
+
+    <developers>
+        <developer>
+            <name>CityModeler Contributors</name>
+            <organization>Urban Systems Technologies</organization>
+            <organizationUrl>https://www.citymodeler.com</organizationUrl>
+        </developer>
+    </developers>
+
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <jackson.version>2.17.1</jackson.version>
+        <junit.version>5.10.3</junit.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-xml</artifactId>
-            <version>2.17.1</version>
+            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>2.17.1</version>
+            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.10.3</version>
+            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -62,6 +81,29 @@
                     <useModulePath>false</useModulePath>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.1</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.7.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <version>3.2.0</version>
+            </plugin>
         </plugins>
     </build>
+
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/citymodeler/matsim-models</url>
+        </repository>
+    </distributionManagement>
 </project>
