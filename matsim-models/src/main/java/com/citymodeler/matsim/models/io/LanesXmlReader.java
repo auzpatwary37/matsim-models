@@ -26,6 +26,7 @@ public final class LanesXmlReader {
 
     private Lanes read(Element root) {
         Lanes lanes = new Lanes();
+        XmlSupport.readAttributes(root, lanes.getAttributes());
         for (Element assignmentElement : XmlSupport.children(root, "assignment")) {
             LanesToLinkAssignment assignment = new LanesToLinkAssignment(
                     Id.create(XmlSupport.attr(assignmentElement, "linkId"), Link.class));

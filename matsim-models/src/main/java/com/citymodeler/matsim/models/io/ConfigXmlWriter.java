@@ -25,6 +25,7 @@ public final class ConfigXmlWriter {
     private Document document(Config config) {
         Document document = XmlSupport.newDocument();
         Element root = document.createElement("config");
+        XmlSupport.appendAttributes(document, root, config.getAttributes());
         document.appendChild(root);
 
         for (ConfigGroup module : config.getModules().values()) {

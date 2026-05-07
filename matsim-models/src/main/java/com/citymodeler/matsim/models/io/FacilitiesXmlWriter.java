@@ -27,6 +27,7 @@ public final class FacilitiesXmlWriter {
         Document document = XmlSupport.newDocument();
         Element root = document.createElement("facilities");
         XmlSupport.setIfPresent(root, "name", facilities.getName());
+        XmlSupport.appendAttributes(document, root, facilities.getAttributes());
         document.appendChild(root);
         for (ActivityFacility facility : facilities.getFacilities().values()) {
             Element facilityElement = document.createElement("facility");

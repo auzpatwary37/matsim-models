@@ -38,6 +38,7 @@ public final class PopulationXmlReader {
 
     private Population read(Element root) {
         Population population = new Population();
+        XmlSupport.readAttributes(root, population.getAttributes());
         for (Element personElement : XmlSupport.children(root, "person")) {
             Person person = readPerson(personElement);
             population.addPerson(person);
@@ -97,19 +98,25 @@ public final class PopulationXmlReader {
         Element routeElement = XmlSupport.child(legElement, "route");
         if (routeElement != null) {
             String routeType = XmlSupport.attr(routeElement, "type");
-            if ("NetworkRoute".equals(routeType)) {
+            if (isNetworkRoute(routeType)) {
                 NetworkRoute route = new NetworkRoute();
-                String startLink = XmlSupport.attr(routeElement, "start_link");
+                String startLink = firstNonBlank(
+                        XmlSupport.attr(routeElement, "start_link"),
+                        XmlSupport.attr(routeElement, "startLink"));
                 if (startLink != null) {
                     route.setStartLinkId(Id.create(startLink, Link.class));
                 }
-                String endLink = XmlSupport.attr(routeElement, "end_link");
+                String endLink = firstNonBlank(
+                        XmlSupport.attr(routeElement, "end_link"),
+                        XmlSupport.attr(routeElement, "endLink"));
                 if (endLink != null) {
                     route.setEndLinkId(Id.create(endLink, Link.class));
                 }
-                String links = XmlSupport.attr(routeElement, "links");
+                String links = firstNonBlank(
+                        XmlSupport.attr(routeElement, "links"),
+                        childText(routeElement, "links"));
                 if (links != null && !links.isBlank()) {
-                    Arrays.stream(links.split(" "))
+                    Arrays.stream(links.split("[\\s,]+"))
                             .filter(s -> !s.isBlank())
                             .map(s -> Id.create(s, Link.class))
                             .forEach(route.getLinkIds()::add);
@@ -123,31 +130,87 @@ public final class PopulationXmlReader {
                     route.setDistance(Double.parseDouble(distance));
                 }
                 leg.setRoute(route);
-            } else if ("TransitPassengerRoute".equals(routeType)) {
+            } else if (isTransitPassengerRoute(routeType)) {
                 TransitPassengerRoute route = new TransitPassengerRoute();
-                String accessStopId = XmlSupport.attr(routeElement, "accessStopId");
+                String accessStopId = firstNonBlank(
+                        XmlSupport.attr(routeElement, "accessStopId"),
+                        XmlSupport.attr(routeElement, "accessStop"));
                 if (accessStopId != null) {
                     route.setAccessStopId(Id.create(accessStopId, TransitStopFacility.class));
                 }
-                String egressStopId = XmlSupport.attr(routeElement, "egressStopId");
+                String egressStopId = firstNonBlank(
+                        XmlSupport.attr(routeElement, "egressStopId"),
+                        XmlSupport.attr(routeElement, "egressStop"));
                 if (egressStopId != null) {
                     route.setEgressStopId(Id.create(egressStopId, TransitStopFacility.class));
                 }
-                String lineId = XmlSupport.attr(routeElement, "lineId");
-                if (lineId != null) {
-                    route.setLineId(Id.create(lineId, TransitLine.class));
-                }
-                String routeId = XmlSupport.attr(routeElement, "routeId");
-                if (routeId != null) {
-                    route.setRouteId(Id.create(routeId, TransitRoute.class));
-                }
-                String departureId = XmlSupport.attr(routeElement, "departureId");
-                if (departureId != null) {
-                    route.setDepartureId(Id.create(departureId, Departure.class));
+                Element transitRouteElement = XmlSupport.child(routeElement, "transitRoute");
+                if (transitRouteElement != null) {
+                    String lineId = XmlSupport.attr(transitRouteElement, "line");
+                    if (lineId != null) {
+                        route.setLineId(Id.create(lineId, TransitLine.class));
+                    }
+                    String routeId = XmlSupport.attr(transitRouteElement, "route");
+                    if (routeId != null) {
+                        route.setRouteId(Id.create(routeId, TransitRoute.class));
+                    }
+                    String departureId = XmlSupport.attr(transitRouteElement, "departure");
+                    if (departureId != null) {
+                        route.setDepartureId(Id.create(departureId, Departure.class));
+                    }
+                    Element accessStopElem = XmlSupport.child(transitRouteElement, "accessStop");
+                    if (accessStopElem != null) {
+                        String accessStop = XmlSupport.attr(accessStopElem, "stop");
+                        if (accessStop != null && route.getAccessStopId() == null) {
+                            route.setAccessStopId(Id.create(accessStop, TransitStopFacility.class));
+                        }
+                    }
+                    Element egressStopElem = XmlSupport.child(transitRouteElement, "egressStop");
+                    if (egressStopElem != null) {
+                        String egressStop = XmlSupport.attr(egressStopElem, "stop");
+                        if (egressStop != null && route.getEgressStopId() == null) {
+                            route.setEgressStopId(Id.create(egressStop, TransitStopFacility.class));
+                        }
+                    }
+                } else {
+                    String lineId = XmlSupport.attr(routeElement, "lineId");
+                    if (lineId != null) {
+                        route.setLineId(Id.create(lineId, TransitLine.class));
+                    }
+                    String routeId = XmlSupport.attr(routeElement, "routeId");
+                    if (routeId != null) {
+                        route.setRouteId(Id.create(routeId, TransitRoute.class));
+                    }
+                    String departureId = XmlSupport.attr(routeElement, "departureId");
+                    if (departureId != null) {
+                        route.setDepartureId(Id.create(departureId, Departure.class));
+                    }
                 }
                 leg.setRoute(route);
             }
         }
         return leg;
+    }
+
+    private boolean isNetworkRoute(String type) {
+        return "NetworkRoute".equals(type) || "links".equals(type);
+    }
+
+    private boolean isTransitPassengerRoute(String type) {
+        return "TransitPassengerRoute".equals(type) || "pt".equals(type);
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) {
+                return v;
+            }
+        }
+        return null;
+    }
+
+    private String childText(Element parent, String childName) {
+        Element child = XmlSupport.child(parent, childName);
+        return child != null ? child.getTextContent() : null;
     }
 }
