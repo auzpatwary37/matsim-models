@@ -4,14 +4,20 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
+import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
 
 public final class Lanes {
     private final Map<Id<Link>, LanesToLinkAssignment> lanesToLinkAssignments = new LinkedHashMap<>();
+    private final Attributes attributes = new Attributes();
 
     public Map<Id<Link>, LanesToLinkAssignment> getLanesToLinkAssignments() {
         return lanesToLinkAssignments;
+    }
+
+    public Attributes getAttributes() {
+        return attributes;
     }
 
     public void addAssignment(LanesToLinkAssignment assignment) {

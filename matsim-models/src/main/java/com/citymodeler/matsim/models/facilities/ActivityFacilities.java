@@ -3,11 +3,13 @@ package com.citymodeler.matsim.models.facilities;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Id;
 
 public final class ActivityFacilities {
     private String name;
     private final Map<Id<ActivityFacility>, ActivityFacility> facilities = new LinkedHashMap<>();
+    private final Attributes attributes = new Attributes();
 
     public ActivityFacilities() {
     }
@@ -26,6 +28,10 @@ public final class ActivityFacilities {
 
     public Map<Id<ActivityFacility>, ActivityFacility> getFacilities() {
         return facilities;
+    }
+
+    public Attributes getAttributes() {
+        return attributes;
     }
 
     public void addFacility(ActivityFacility facility) {
