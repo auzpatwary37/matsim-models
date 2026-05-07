@@ -13,6 +13,10 @@ public final class Id<T> {
         return new Id<>(id);
     }
 
+    public static Id<com.citymodeler.matsim.models.network.Link> createLinkId(String id) {
+        return new Id<>(id);
+    }
+
     @Override
     public boolean equals(Object object) {
         if (this == object) {
