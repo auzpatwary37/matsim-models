@@ -92,24 +92,30 @@ class TransitModelTest {
     @Test
     void postProcessClearsStaleResolvedStopFacilityBeforeMissingReferenceFailure() {
         TransitSchedule schedule = new TransitSchedule();
-        TransitStopFacility stop = new TransitStopFacility(Id.create("stop1", TransitStopFacility.class), new Coord(1, 2), false);
+        TransitStopFacility firstStop = new TransitStopFacility(Id.create("stop1", TransitStopFacility.class), new Coord(1, 2), false);
+        TransitStopFacility laterStop = new TransitStopFacility(Id.create("stop2", TransitStopFacility.class), new Coord(3, 4), false);
         TransitLine line = new TransitLine(Id.create("line1", TransitLine.class));
         TransitRoute route = new TransitRoute(Id.create("route1", TransitRoute.class));
-        TransitRouteStop routeStop = new TransitRouteStop(stop.getId(), 0, 0, false);
+        TransitRouteStop firstRouteStop = new TransitRouteStop(firstStop.getId(), 0, 0, false);
+        TransitRouteStop laterRouteStop = new TransitRouteStop(laterStop.getId(), 10, 10, false);
 
-        route.addStop(routeStop);
+        route.addStop(firstRouteStop);
+        route.addStop(laterRouteStop);
         line.addRoute(route);
-        schedule.addStopFacility(stop);
+        schedule.addStopFacility(firstStop);
+        schedule.addStopFacility(laterStop);
         schedule.addTransitLine(line);
         schedule.postProcess();
 
-        assertSame(stop, routeStop.getStopFacility());
+        assertSame(firstStop, firstRouteStop.getStopFacility());
+        assertSame(laterStop, laterRouteStop.getStopFacility());
 
-        routeStop.setStopFacilityId(Id.create("missingStop", TransitStopFacility.class));
+        firstRouteStop.setStopFacilityId(Id.create("missingStop", TransitStopFacility.class));
         IllegalStateException exception = assertThrows(IllegalStateException.class, schedule::postProcess);
 
         assertTrue(exception.getMessage().contains("missingStop"));
-        assertNull(routeStop.getStopFacility());
+        assertNull(firstRouteStop.getStopFacility());
+        assertNull(laterRouteStop.getStopFacility());
     }
 
     @Test
