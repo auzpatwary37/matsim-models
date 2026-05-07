@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.InputStream;
 
@@ -59,5 +60,12 @@ class LanesXmlTest {
         assertEquals(2, l1Assignment.getLanes().size());
         Lane lane1 = l1Assignment.getLanes().get(Id.create("lane-1", Lane.class));
         assertEquals("bus", lane1.getAttributes().getAttribute("lane-kind"));
+    }
+
+    @Test
+    void laneCollectionsAreUnmodifiable() {
+        Lane lane = new Lane(Id.create("lane-1", Lane.class));
+        assertThrows(UnsupportedOperationException.class, () -> lane.getToLinkIds().clear());
+        assertThrows(UnsupportedOperationException.class, () -> lane.getToLaneIds().clear());
     }
 }

@@ -80,8 +80,8 @@ class NetworkModelTest {
     void lanesAssignmentStoresLanesAndReferences() {
         Id<Link> linkId = Id.createLinkId("l1");
         Lane lane = new Lane(Id.create("lane1", Lane.class));
-        lane.getToLinkIds().add(Id.createLinkId("l2"));
-        lane.getToLaneIds().add(Id.create("lane2", Lane.class));
+        lane.addToLinkId(Id.createLinkId("l2"));
+        lane.addToLaneId(Id.create("lane2", Lane.class));
         lane.setCapacityVehiclesPerHour(600);
         lane.setStartsAtMeterFromLinkEnd(25);
         lane.setAlignment("right");
@@ -103,5 +103,19 @@ class NetworkModelTest {
     @Test
     void createLinkIdReturnsIdWithStringValue() {
         assertEquals("l1", Id.createLinkId("l1").toString());
+    }
+
+    @Test
+    void networkCollectionsAreUnmodifiable() {
+        Network network = new Network();
+        assertThrows(UnsupportedOperationException.class, () -> network.getNodes().clear());
+        assertThrows(UnsupportedOperationException.class, () -> network.getLinks().clear());
+    }
+
+    @Test
+    void nodeLinkCollectionsAreUnmodifiable() {
+        Node node = new Node(Id.create("n1", Node.class), new Coord(0, 0));
+        assertThrows(UnsupportedOperationException.class, () -> node.getInLinks().clear());
+        assertThrows(UnsupportedOperationException.class, () -> node.getOutLinks().clear());
     }
 }

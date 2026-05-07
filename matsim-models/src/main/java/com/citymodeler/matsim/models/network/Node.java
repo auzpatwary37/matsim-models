@@ -1,5 +1,6 @@
 package com.citymodeler.matsim.models.network;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -33,10 +34,18 @@ public final class Node {
     }
 
     public Map<Id<Link>, Link> getInLinks() {
-        return inLinks;
+        return Collections.unmodifiableMap(inLinks);
     }
 
     public Map<Id<Link>, Link> getOutLinks() {
+        return Collections.unmodifiableMap(outLinks);
+    }
+
+    Map<Id<Link>, Link> inLinks() {
+        return inLinks;
+    }
+
+    Map<Id<Link>, Link> outLinks() {
         return outLinks;
     }
 
