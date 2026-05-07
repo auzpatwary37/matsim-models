@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<events>
+    <event time="0.0" type="actend" person="p1" link="l1" facility="f1" actType="home" />
+    <event time="0.0" type="departure" person="p1" link="l1" legMode="car" />
+    <event time="1.0" type="entered link" person="p1" link="l1" vehicle="veh1" />
+    <event time="2.0" type="left link" person="p1" link="l1" vehicle="veh1" />
+    <event time="3.0" type="PersonEntersVehicle" person="p1" vehicle="veh1" />
+    <event time="4.0" type="PersonLeavesVehicle" person="p1" vehicle="veh1" />
+    <event time="5.0" type="arrival" person="p1" link="l2" legMode="car" />
+    <event time="6.0" type="actstart" person="p1" link="l2" facility="f2" actType="work" />
+    <event time="7.0" type="customEvent" person="p1" customField="kept" />
+</events>
