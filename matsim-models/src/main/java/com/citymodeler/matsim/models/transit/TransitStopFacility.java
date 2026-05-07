@@ -8,7 +8,7 @@ import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
 
 public final class TransitStopFacility {
-    private Id<TransitStopFacility> id;
+    private final Id<TransitStopFacility> id;
     private Coord coord;
     private Id<Link> linkId;
     private String name;
@@ -23,10 +23,6 @@ public final class TransitStopFacility {
 
     public Id<TransitStopFacility> getId() {
         return id;
-    }
-
-    public void setId(Id<TransitStopFacility> id) {
-        this.id = Objects.requireNonNull(id, "id");
     }
 
     public Coord getCoord() {

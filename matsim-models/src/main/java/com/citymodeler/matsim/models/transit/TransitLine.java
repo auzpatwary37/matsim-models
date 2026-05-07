@@ -8,7 +8,7 @@ import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Id;
 
 public final class TransitLine {
-    private Id<TransitLine> id;
+    private final Id<TransitLine> id;
     private String name;
     private final Map<Id<TransitRoute>, TransitRoute> routes = new LinkedHashMap<>();
     private final Attributes attributes = new Attributes();
@@ -19,10 +19,6 @@ public final class TransitLine {
 
     public Id<TransitLine> getId() {
         return id;
-    }
-
-    public void setId(Id<TransitLine> id) {
-        this.id = Objects.requireNonNull(id, "id");
     }
 
     public String getName() {
