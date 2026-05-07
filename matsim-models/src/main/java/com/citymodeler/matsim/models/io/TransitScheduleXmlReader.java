@@ -59,9 +59,15 @@ public final class TransitScheduleXmlReader {
                 if (descriptionElement != null) {
                     route.setDescription(descriptionElement.getTextContent());
                 }
-                Element modeElement = XmlSupport.child(routeElement, "transportMode");
-                if (modeElement != null) {
-                    route.setTransportMode(modeElement.getTextContent());
+                String transportMode = XmlSupport.attr(routeElement, "transportMode");
+                if (transportMode == null || transportMode.isBlank()) {
+                    Element modeElement = XmlSupport.child(routeElement, "transportMode");
+                    if (modeElement != null) {
+                        transportMode = modeElement.getTextContent();
+                    }
+                }
+                if (transportMode != null && !transportMode.isBlank()) {
+                    route.setTransportMode(transportMode);
                 }
                 XmlSupport.readAttributes(routeElement, route.getAttributes());
                 Element profileElement = XmlSupport.child(routeElement, "routeProfile");
