@@ -57,6 +57,10 @@ public final class TransitStopFacility {
         return blockingLane;
     }
 
+    public boolean getIsBlockingLane() {
+        return blockingLane;
+    }
+
     public void setBlockingLane(boolean blockingLane) {
         this.blockingLane = blockingLane;
     }
