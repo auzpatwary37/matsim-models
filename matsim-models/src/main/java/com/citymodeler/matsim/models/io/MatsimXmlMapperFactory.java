@@ -28,18 +28,28 @@ public final class MatsimXmlMapperFactory {
 
     private static XMLInputFactory createSafeInputFactory() {
         XMLInputFactory inputFactory = XMLInputFactory.newFactory();
-        setPropertyIfSupported(inputFactory, XMLInputFactory.SUPPORT_DTD, false);
+        requireProperty(inputFactory, XMLInputFactory.SUPPORT_DTD, false);
+        requireProperty(inputFactory, "javax.xml.stream.isSupportingExternalEntities", false);
+        // ACCESS_EXTERNAL_* are JAXP properties and are not recognized by Woodstox's StAX factory.
+        // Apply them when supported; DTD and external-entity controls above remain fail-closed.
         setPropertyIfSupported(inputFactory, XMLConstants.ACCESS_EXTERNAL_DTD, "");
         setPropertyIfSupported(inputFactory, XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
-        setPropertyIfSupported(inputFactory, "javax.xml.stream.isSupportingExternalEntities", false);
         return inputFactory;
+    }
+
+    private static void requireProperty(XMLInputFactory inputFactory, String propertyName, Object value) {
+        try {
+            inputFactory.setProperty(propertyName, value);
+        } catch (IllegalArgumentException exception) {
+            throw new MatsimModelException("Could not apply required XML mapper security property: " + propertyName, exception);
+        }
     }
 
     private static void setPropertyIfSupported(XMLInputFactory inputFactory, String propertyName, Object value) {
         try {
             inputFactory.setProperty(propertyName, value);
         } catch (IllegalArgumentException ignored) {
-            // StAX implementations differ; readers should keep using safe StAX/input handling when they need more control.
+            // StAX implementations differ on JAXP access properties; unsupported properties cannot be applied here.
         }
     }
 }

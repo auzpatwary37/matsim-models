@@ -34,6 +34,36 @@ class AttributesSerdeTest {
     }
 
     @Test
+    void serializesAttributesInStableKeyOrder() throws Exception {
+        Attributes attributes = new Attributes();
+        attributes.putAttribute("z", "last");
+        attributes.putAttribute("b", "third");
+        attributes.putAttribute("aa", "second");
+        attributes.putAttribute("a", "first");
+
+        XmlMapper mapper = MatsimXmlMapperFactory.createXmlMapper();
+        String xml = mapper.writeValueAsString(attributes);
+
+        assertTrue(xml.indexOf("name=\"a\"") < xml.indexOf("name=\"aa\""), xml);
+        assertTrue(xml.indexOf("name=\"aa\"") < xml.indexOf("name=\"b\""), xml);
+        assertTrue(xml.indexOf("name=\"b\"") < xml.indexOf("name=\"z\""), xml);
+    }
+
+    @Test
+    void mapperRejectsDoctypeDeclarations() {
+        String xml = """
+                <!DOCTYPE attributes [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+                <attributes>
+                    <attribute name=\"name\" class=\"java.lang.String\">&xxe;</attribute>
+                </attributes>
+                """;
+
+        XmlMapper mapper = MatsimXmlMapperFactory.createXmlMapper();
+
+        assertThrows(Exception.class, () -> mapper.readValue(xml, Attributes.class));
+    }
+
+    @Test
     void deserializesAttributesUsingMatsimClassHints() throws Exception {
         String xml = """
                 <attributes>

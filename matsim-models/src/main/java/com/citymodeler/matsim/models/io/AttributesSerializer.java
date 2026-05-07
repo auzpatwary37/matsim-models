@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.io;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.TreeMap;
 
 import javax.xml.namespace.QName;
 
@@ -21,7 +22,7 @@ public final class AttributesSerializer extends JsonSerializer<Attributes> {
         }
 
         StringBuilder xml = new StringBuilder();
-        for (Map.Entry<String, Object> entry : attributes.getAsMap().entrySet()) {
+        for (Map.Entry<String, Object> entry : new TreeMap<>(attributes.getAsMap()).entrySet()) {
             Object value = entry.getValue();
             if (value == null) {
                 continue;
