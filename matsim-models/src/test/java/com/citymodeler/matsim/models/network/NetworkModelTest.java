@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.network;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -117,5 +118,31 @@ class NetworkModelTest {
         Node node = new Node(Id.create("n1", Node.class), new Coord(0, 0));
         assertThrows(UnsupportedOperationException.class, () -> node.getInLinks().clear());
         assertThrows(UnsupportedOperationException.class, () -> node.getOutLinks().clear());
+    }
+
+    @Test
+    void networkDefaultConstructorCreatesEmptyNetwork() {
+        Network network = new Network();
+        assertEquals(0, network.getNodes().size());
+        assertEquals(0, network.getLinks().size());
+        assertNull(network.getName());
+    }
+
+    @Test
+    void networkNamedConstructorStoresName() {
+        Network network = new Network("my-network");
+        assertEquals("my-network", network.getName());
+    }
+
+    @Test
+    void networkAddNodeRejectsNull() {
+        Network network = new Network();
+        assertThrows(NullPointerException.class, () -> network.addNode(null));
+    }
+
+    @Test
+    void networkAddLinkRejectsNull() {
+        Network network = new Network();
+        assertThrows(NullPointerException.class, () -> network.addLink(null));
     }
 }

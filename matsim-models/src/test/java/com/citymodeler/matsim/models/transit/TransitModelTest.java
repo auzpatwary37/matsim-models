@@ -150,4 +150,29 @@ class TransitModelTest {
         assertThrows(NoSuchMethodException.class, () -> TransitRoute.class.getMethod("setId", Id.class));
         assertThrows(NoSuchMethodException.class, () -> Departure.class.getMethod("setId", Id.class));
     }
+
+    @Test
+    void activityFacilitiesDefaultConstructorCreatesEmptyFacilities() {
+        ActivityFacilities facilities = new ActivityFacilities();
+        assertEquals(0, facilities.getFacilities().size());
+        assertNull(facilities.getName());
+    }
+
+    @Test
+    void activityFacilitiesNamedConstructorStoresName() {
+        ActivityFacilities facilities = new ActivityFacilities("facilities-name");
+        assertEquals("facilities-name", facilities.getName());
+    }
+
+    @Test
+    void activityFacilitiesAddFacilityRejectsNull() {
+        ActivityFacilities facilities = new ActivityFacilities();
+        assertThrows(NullPointerException.class, () -> facilities.addFacility(null));
+    }
+
+    @Test
+    void activityFacilityActivityOptionsAreUnmodifiable() {
+        ActivityFacility facility = new ActivityFacility(Id.create("f1", ActivityFacility.class), new Coord(0, 0));
+        assertThrows(UnsupportedOperationException.class, () -> facility.getActivityOptions().clear());
+    }
 }
