@@ -1,7 +1,9 @@
 package com.citymodeler.matsim.models.transit;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Id;
@@ -12,11 +14,11 @@ public final class TransitSchedule {
     private final Attributes attributes = new Attributes();
 
     public Map<Id<TransitStopFacility>, TransitStopFacility> getFacilities() {
-        return facilities;
+        return Collections.unmodifiableMap(facilities);
     }
 
     public Map<Id<TransitLine>, TransitLine> getTransitLines() {
-        return transitLines;
+        return Collections.unmodifiableMap(transitLines);
     }
 
     public Attributes getAttributes() {
@@ -24,10 +26,12 @@ public final class TransitSchedule {
     }
 
     public void addStopFacility(TransitStopFacility stopFacility) {
+        Objects.requireNonNull(stopFacility, "stopFacility");
         facilities.put(stopFacility.getId(), stopFacility);
     }
 
     public void addTransitLine(TransitLine transitLine) {
+        Objects.requireNonNull(transitLine, "transitLine");
         transitLines.put(transitLine.getId(), transitLine);
     }
 

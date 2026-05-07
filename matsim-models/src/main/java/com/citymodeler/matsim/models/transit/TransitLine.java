@@ -1,5 +1,6 @@
 package com.citymodeler.matsim.models.transit;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -30,7 +31,7 @@ public final class TransitLine {
     }
 
     public Map<Id<TransitRoute>, TransitRoute> getRoutes() {
-        return routes;
+        return Collections.unmodifiableMap(routes);
     }
 
     public Attributes getAttributes() {
@@ -38,6 +39,7 @@ public final class TransitLine {
     }
 
     public void addRoute(TransitRoute route) {
+        Objects.requireNonNull(route, "route");
         routes.put(route.getId(), route);
     }
 }
