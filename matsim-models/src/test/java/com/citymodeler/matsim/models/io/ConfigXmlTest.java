@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.Map;
 
@@ -83,5 +84,22 @@ class ConfigXmlTest {
         Config loaded = ConfigUtils.loadConfig(path);
         assertNotNull(loaded);
         assertEquals("testValue", loaded.getModule("global").get().getParam("testKey").orElse(null));
+    }
+
+    @Test
+    void loadFromClasspathFixture() {
+        String fixturePath = "fixtures/config.xml";
+        InputStream is = getClass().getClassLoader().getResourceAsStream(fixturePath);
+        Config config = new ConfigXmlReader().read(is);
+
+        assertNotNull(config);
+        assertTrue(config.getModule("global").isPresent());
+        assertTrue(config.getModule("controller").isPresent());
+        assertTrue(config.getModule("planCalcScore").isPresent());
+        assertEquals("1.0", config.getModule("global").get().getParam("configVersion").orElse(null));
+        assertEquals("12345", config.getModule("global").get().getParam("globalRandomSeed").orElse(null));
+
+        ConfigGroup planCalcScore = config.getModule("planCalcScore").get();
+        assertEquals(2, planCalcScore.getParamSets().get("mode").size());
     }
 }

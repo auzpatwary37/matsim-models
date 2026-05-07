@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+    <attributes>
+        <attribute name="config-version" class="java.lang.String">1.0</attribute>
+        <attribute name="created-by" class="java.lang.String">city-modeler-test</attribute>
+    </attributes>
+    <module name="global">
+        <param name="configVersion" value="1.0" />
+        <param name="coordinateSystem" value="EPSG:4326" />
+        <param name="globalRandomSeed" value="12345" />
+    </module>
+    <module name="controller">
+        <param name="runsPath" value="/tmp/matsim/runs" />
+        <param name="lastIteration" value="500" />
+        <param name="writeEventsInterval" value="100" />
+    </module>
+    <module name="planCalcScore">
+        <param name="brainExpBeta" value="1.0" />
+        <param name="lateArrival penalty_scalingFactor" value="1.0" />
+        <parameterset type="mode">
+            <param name="mode" value="car" />
+            <param name="genericCost" value="0.0" />
+            <param name="marginalUtility" value="-6.0" />
+            <param name="monetaryDistanceCostRate" value="-0.01" />
+        </parameterset>
+        <parameterset type="mode">
+            <param name="mode" value="bike" />
+            <param name="genericCost" value="0.0" />
+            <param name="marginalUtility" value="-2.0" />
+        </parameterset>
+    </module>
+    <module name="network">
+        <param name="inputNetworkFile" value="network.xml" />
+        <param name="inputNetworkFile" value="lanes.xml" />
+    </module>
+</config>

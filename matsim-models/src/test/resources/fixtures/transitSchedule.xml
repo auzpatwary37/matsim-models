@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<transitSchedule>
+    <attributes>
+        <attribute name="schedule-kind" class="java.lang.String">weekday-commute</attribute>
+        <attribute name="system" class="java.lang.String">city-bus</attribute>
+    </attributes>
+    <transitStops>
+        <stopFacility id="stop-1" x="0.0" y="0.0" linkId="l1" name="Home Station" isBlocking="false">
+            <attributes>
+                <attribute name="stop-zone" class="java.lang.String">A</attribute>
+                <attribute name="platform-height" class="java.lang.Double">0.3</attribute>
+            </attributes>
+        </stopFacility>
+        <stopFacility id="stop-2" x="1000.0" y="0.0" linkId="l2" name="Midtown" isBlocking="false">
+            <attributes>
+                <attribute name="stop-zone" class="java.lang.String">A</attribute>
+            </attributes>
+        </stopFacility>
+        <stopFacility id="stop-3" x="2000.0" y="500.0" linkId="l3" name="Office Park" isBlocking="true">
+            <attributes>
+                <attribute name="stop-zone" class="java.lang.String">B</attribute>
+                <attribute name="platform-height" class="java.lang.Double">0.5</attribute>
+            </attributes>
+        </stopFacility>
+    </transitStops>
+    <transitLine id="line-1" name="Route 1 - Express">
+        <attributes>
+            <attribute name="line-kind" class="java.lang.String">express</attribute>
+            <attribute name="operator" class="java.lang.String">City Transit Authority</attribute>
+        </attributes>
+        <transitRoute id="route-1" transportMode="bus">
+            <description>Express route from home to office</description>
+            <routeProfile>
+                <stop refId="stop-1" arrivalOffset="0.0" departureOffset="60.0" awaitDeparture="true" />
+                <stop refId="stop-3" arrivalOffset="420.0" departureOffset="480.0" awaitDeparture="false" />
+            </routeProfile>
+            <departures>
+                <departure id="dep-1" departureTime="25200.0" vehicleRefId="bus-001" />
+                <departure id="dep-2" departureTime="28800.0" vehicleRefId="bus-002" />
+            </departures>
+        </transitRoute>
+    </transitLine>
+    <transitLine id="line-2" name="Route 2 - Local">
+        <attributes>
+            <attribute name="line-kind" class="java.lang.String">local</attribute>
+        </attributes>
+        <transitRoute id="route-2" transportMode="bus">
+            <description>Local route with all stops</description>
+            <routeProfile>
+                <stop refId="stop-1" arrivalOffset="0.0" departureOffset="30.0" awaitDeparture="true" />
+                <stop refId="stop-2" arrivalOffset="180.0" departureOffset="210.0" awaitDeparture="true" />
+                <stop refId="stop-3" arrivalOffset="360.0" departureOffset="420.0" awaitDeparture="false" />
+            </routeProfile>
+            <departures>
+                <departure id="dep-3" departureTime="21600.0" vehicleRefId="bus-003" />
+            </departures>
+        </transitRoute>
+    </transitLine>
+</transitSchedule>

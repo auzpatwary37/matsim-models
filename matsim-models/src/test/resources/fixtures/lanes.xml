@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lanes>
+    <attributes>
+        <attribute name="lanes-version" class="java.lang.String">1.0</attribute>
+        <attribute name="source" class="java.lang.String">city-modeler-test</attribute>
+    </attributes>
+    <assignment linkId="l1">
+        <lane id="lane-1" toLinkIds="l2" capacityVehiclesPerHour="1800.0" startsAtMeterFromLinkEnd="0.0" alignment="left">
+            <attributes>
+                <attribute name="lane-kind" class="java.lang.String">bus</attribute>
+                <attribute name="lane-width" class="java.lang.Double">3.5</attribute>
+            </attributes>
+        </lane>
+        <lane id="lane-2" toLinkIds="l2" toLaneIds="lane-3" capacityVehiclesPerHour="1800.0" startsAtMeterFromLinkEnd="45.0" alignment="center">
+            <attributes>
+                <attribute name="lane-kind" class="java.lang.String">car</attribute>
+            </attributes>
+        </lane>
+    </assignment>
+    <assignment linkId="l2">
+        <lane id="lane-3" toLinkIds="l3" capacityVehiclesPerHour="900.0" startsAtMeterFromLinkEnd="0.0" alignment="center">
+            <attributes>
+                <attribute name="lane-kind" class="java.lang.String">mixed</attribute>
+            </attributes>
+        </lane>
+    </assignment>
+</lanes>

@@ -1,6 +1,9 @@
 package com.citymodeler.matsim.models.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+import java.io.InputStream;
 
 import org.junit.jupiter.api.Test;
 
@@ -41,5 +44,20 @@ class LanesXmlTest {
         assertEquals(45.0, lane.getStartsAtMeterFromLinkEnd());
         assertEquals("center", lane.getAlignment());
         assertEquals("bus", lane.getAttributes().getAttribute("lane-kind"));
+    }
+
+    @Test
+    void loadFromClasspathFixture() {
+        String fixturePath = "fixtures/lanes.xml";
+        InputStream is = getClass().getClassLoader().getResourceAsStream(fixturePath);
+        Lanes lanes = new LanesXmlReader().read(is);
+
+        assertNotNull(lanes);
+        assertEquals(2, lanes.getLanesToLinkAssignments().size());
+
+        LanesToLinkAssignment l1Assignment = lanes.getLanesToLinkAssignments().get(Id.create("l1", Link.class));
+        assertEquals(2, l1Assignment.getLanes().size());
+        Lane lane1 = l1Assignment.getLanes().get(Id.create("lane-1", Lane.class));
+        assertEquals("bus", lane1.getAttributes().getAttribute("lane-kind"));
     }
 }

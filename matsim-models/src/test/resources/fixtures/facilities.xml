@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<facilities name="test-facilities">
+    <attributes>
+        <attribute name="facilities-version" class="java.lang.String">1.0</attribute>
+        <attribute name="coordinateReferenceSystem" class="java.lang.String">EPSG:4326</attribute>
+    </attributes>
+    <facility id="f1" x="0.0" y="0.0" linkId="l1" desc="Home Base">
+        <attributes>
+            <attribute name="facility-kind" class="java.lang.String">residential</attribute>
+            <attribute name="capacity" class="java.lang.Integer">500</attribute>
+        </attributes>
+        <activity type="home" capacity="10.0" />
+        <activity type="education" capacity="50.0" />
+    </facility>
+    <facility id="f2" x="1000.0" y="0.0" linkId="l2" desc="Shopping Center">
+        <attributes>
+            <attribute name="facility-kind" class="java.lang.String">retail</attribute>
+        </attributes>
+        <activity type="shop" capacity="200.0" />
+    </facility>
+    <facility id="f3" x="2000.0" y="500.0" linkId="l3" desc="Office Park">
+        <attributes>
+            <attribute name="facility-kind" class="java.lang.String">office</attribute>
+            <attribute name="parkingSpaces" class="java.lang.Integer">1000</attribute>
+        </attributes>
+        <activity type="work" capacity="3000.0" />
+    </facility>
+</facilities>
