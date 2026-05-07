@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.transit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -89,6 +90,29 @@ class TransitModelTest {
     }
 
     @Test
+    void postProcessClearsStaleResolvedStopFacilityBeforeMissingReferenceFailure() {
+        TransitSchedule schedule = new TransitSchedule();
+        TransitStopFacility stop = new TransitStopFacility(Id.create("stop1", TransitStopFacility.class), new Coord(1, 2), false);
+        TransitLine line = new TransitLine(Id.create("line1", TransitLine.class));
+        TransitRoute route = new TransitRoute(Id.create("route1", TransitRoute.class));
+        TransitRouteStop routeStop = new TransitRouteStop(stop.getId(), 0, 0, false);
+
+        route.addStop(routeStop);
+        line.addRoute(route);
+        schedule.addStopFacility(stop);
+        schedule.addTransitLine(line);
+        schedule.postProcess();
+
+        assertSame(stop, routeStop.getStopFacility());
+
+        routeStop.setStopFacilityId(Id.create("missingStop", TransitStopFacility.class));
+        IllegalStateException exception = assertThrows(IllegalStateException.class, schedule::postProcess);
+
+        assertTrue(exception.getMessage().contains("missingStop"));
+        assertNull(routeStop.getStopFacility());
+    }
+
+    @Test
     void transitStopFacilityReturnsConfiguredBlockingLane() {
         TransitStopFacility blockingStop = new TransitStopFacility(Id.create("stop1", TransitStopFacility.class), new Coord(1, 2), true);
         TransitStopFacility nonBlockingStop = new TransitStopFacility(Id.create("stop2", TransitStopFacility.class), new Coord(3, 4), false);
@@ -97,5 +121,14 @@ class TransitModelTest {
         assertTrue(blockingStop.getIsBlockingLane());
         assertEquals(false, nonBlockingStop.isBlockingLane());
         assertEquals(false, nonBlockingStop.getIsBlockingLane());
+    }
+
+    @Test
+    void identityModelClassesDoNotExposeIdSetters() {
+        assertThrows(NoSuchMethodException.class, () -> ActivityFacility.class.getMethod("setId", Id.class));
+        assertThrows(NoSuchMethodException.class, () -> TransitStopFacility.class.getMethod("setId", Id.class));
+        assertThrows(NoSuchMethodException.class, () -> TransitLine.class.getMethod("setId", Id.class));
+        assertThrows(NoSuchMethodException.class, () -> TransitRoute.class.getMethod("setId", Id.class));
+        assertThrows(NoSuchMethodException.class, () -> Departure.class.getMethod("setId", Id.class));
     }
 }

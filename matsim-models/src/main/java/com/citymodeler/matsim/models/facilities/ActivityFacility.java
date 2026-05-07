@@ -10,7 +10,7 @@ import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
 
 public final class ActivityFacility {
-    private Id<ActivityFacility> id;
+    private final Id<ActivityFacility> id;
     private Coord coord;
     private Id<Link> linkId;
     private final Map<String, ActivityOption> activityOptions = new LinkedHashMap<>();
@@ -24,10 +24,6 @@ public final class ActivityFacility {
 
     public Id<ActivityFacility> getId() {
         return id;
-    }
-
-    public void setId(Id<ActivityFacility> id) {
-        this.id = Objects.requireNonNull(id, "id");
     }
 
     public Coord getCoord() {

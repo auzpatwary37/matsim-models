@@ -35,6 +35,7 @@ public final class TransitSchedule {
         for (TransitLine line : transitLines.values()) {
             for (TransitRoute route : line.getRoutes().values()) {
                 for (TransitRouteStop stop : route.getStops()) {
+                    stop.clearStopFacility();
                     TransitStopFacility stopFacility = facilities.get(stop.getStopFacilityId());
                     if (stopFacility == null) {
                         throw new IllegalStateException("Missing transit stop facility: " + stop.getStopFacilityId());

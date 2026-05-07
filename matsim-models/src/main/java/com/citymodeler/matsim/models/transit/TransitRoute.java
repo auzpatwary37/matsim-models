@@ -10,7 +10,7 @@ import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Id;
 
 public final class TransitRoute {
-    private Id<TransitRoute> id;
+    private final Id<TransitRoute> id;
     private String description;
     private String transportMode;
     private final List<TransitRouteStop> stops = new ArrayList<>();
@@ -23,10 +23,6 @@ public final class TransitRoute {
 
     public Id<TransitRoute> getId() {
         return id;
-    }
-
-    public void setId(Id<TransitRoute> id) {
-        this.id = Objects.requireNonNull(id, "id");
     }
 
     public String getDescription() {

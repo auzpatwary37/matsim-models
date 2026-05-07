@@ -5,7 +5,7 @@ import java.util.Objects;
 import com.citymodeler.matsim.models.api.Id;
 
 public final class Departure {
-    private Id<Departure> id;
+    private final Id<Departure> id;
     private double departureTime;
     private String vehicleId;
 
@@ -16,10 +16,6 @@ public final class Departure {
 
     public Id<Departure> getId() {
         return id;
-    }
-
-    public void setId(Id<Departure> id) {
-        this.id = Objects.requireNonNull(id, "id");
     }
 
     public double getDepartureTime() {

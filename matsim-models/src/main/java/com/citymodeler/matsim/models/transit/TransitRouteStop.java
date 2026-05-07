@@ -38,6 +38,10 @@ public final class TransitRouteStop {
         this.stopFacility = stopFacility;
     }
 
+    public void clearStopFacility() {
+        stopFacility = null;
+    }
+
     public double getArrivalOffset() {
         return arrivalOffset;
     }
