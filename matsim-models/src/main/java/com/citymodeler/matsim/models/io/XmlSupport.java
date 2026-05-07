@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -47,10 +48,14 @@ final class XmlSupport {
     static Document parse(InputStream inputStream) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
-            setFeatureIfSupported(factory, "http://apache.org/xml/features/disallow-doctype-decl", true);
-            setFeatureIfSupported(factory, "http://xml.org/sax/features/external-general-entities", false);
-            setFeatureIfSupported(factory, "http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setXIncludeAware(false);
+            requireFeature(factory, XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            requireFeature(factory, "http://apache.org/xml/features/disallow-doctype-decl", true);
+            requireFeature(factory, "http://xml.org/sax/features/external-general-entities", false);
+            requireFeature(factory, "http://xml.org/sax/features/external-parameter-entities", false);
+            requireFeature(factory, "http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            requireAttribute(factory, XMLConstants.ACCESS_EXTERNAL_DTD, "");
+            requireAttribute(factory, XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
             factory.setExpandEntityReferences(false);
             Document document = factory.newDocumentBuilder().parse(inputStream);
             document.getDocumentElement().normalize();
@@ -155,7 +160,7 @@ final class XmlSupport {
             return;
         }
         Element attributesElement = document.createElement("attributes");
-        for (Map.Entry<String, Object> entry : attributes.getAsMap().entrySet()) {
+        for (Map.Entry<String, Object> entry : new TreeMap<>(attributes.getAsMap()).entrySet()) {
             if (entry.getValue() == null) {
                 continue;
             }
@@ -206,11 +211,19 @@ final class XmlSupport {
         return String.class.getName();
     }
 
-    private static void setFeatureIfSupported(DocumentBuilderFactory factory, String name, boolean value) {
+    private static void requireFeature(DocumentBuilderFactory factory, String name, boolean value) {
         try {
             factory.setFeature(name, value);
-        } catch (ParserConfigurationException ignored) {
-            // XML parsers differ; keep the supported hardening flags active.
+        } catch (ParserConfigurationException exception) {
+            throw new MatsimModelException("Could not apply required XML parser security feature: " + name, exception);
+        }
+    }
+
+    private static void requireAttribute(DocumentBuilderFactory factory, String name, String value) {
+        try {
+            factory.setAttribute(name, value);
+        } catch (IllegalArgumentException exception) {
+            throw new MatsimModelException("Could not apply required XML parser security attribute: " + name, exception);
         }
     }
 }

@@ -2,6 +2,8 @@ package com.citymodeler.matsim.models.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -58,5 +60,31 @@ class NetworkXmlTest {
         assertEquals(node, link.getFromNode());
         assertNotNull(link.getToNode());
         assertEquals(link, node.getOutLinks().get(link.getId()));
+    }
+
+    @Test
+    void writesAttributesInStableKeyOrder() {
+        Network network = new Network("ordered-attributes");
+        network.getAttributes().putAttribute("b", "second");
+        network.getAttributes().putAttribute("a", "first");
+
+        String xml = new NetworkXmlWriter().writeToString(network);
+
+        assertTrue(xml.indexOf("name=\"a\"") < xml.indexOf("name=\"b\""), xml);
+    }
+
+    @Test
+    void rejectsDoctypeDeclarations() {
+        String xml = """
+                <!DOCTYPE network [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+                <network>
+                    <nodes>
+                        <node id="n1" x="0.0" y="0.0" />
+                    </nodes>
+                    <links />
+                </network>
+                """;
+
+        assertThrows(MatsimModelException.class, () -> new NetworkXmlReader().read(xml));
     }
 }
