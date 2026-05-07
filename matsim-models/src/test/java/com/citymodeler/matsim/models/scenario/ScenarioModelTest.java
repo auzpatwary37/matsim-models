@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.scenario;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -131,5 +132,18 @@ class ScenarioModelTest {
         assertSame(link, network.getNodes().get(fromNodeId).getOutLinks().get(link.getId()));
         assertSame(transitSchedule.getFacilities().get(stopId), stop.getStopFacility());
         assertSame(person, plan.getPerson());
+    }
+
+    @Test
+    void scenarioGetPopulation_returnsUnmodifiableView() {
+        Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
+        assertThrows(UnsupportedOperationException.class, () -> scenario.getPopulation().clear());
+    }
+
+    @Test
+    void planGetPlanElements_returnsUnmodifiableView() {
+        Plan plan = new Plan();
+        plan.addPlanElement(new Activity("home"));
+        assertThrows(UnsupportedOperationException.class, () -> plan.getPlanElements().clear());
     }
 }

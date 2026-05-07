@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.population;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import com.citymodeler.matsim.models.api.Attributes;
@@ -14,7 +15,7 @@ public final class Plan {
     private final Attributes attributes = new Attributes();
 
     public List<PlanElement> getPlanElements() {
-        return planElements;
+        return Collections.unmodifiableList(planElements);
     }
 
     public void addPlanElement(PlanElement planElement) {

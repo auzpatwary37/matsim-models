@@ -1,5 +1,6 @@
 package com.citymodeler.matsim.models.facilities;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -27,7 +28,7 @@ public final class ActivityFacilities {
     }
 
     public Map<Id<ActivityFacility>, ActivityFacility> getFacilities() {
-        return facilities;
+        return Collections.unmodifiableMap(facilities);
     }
 
     public Attributes getAttributes() {

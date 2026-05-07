@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.InputStream;
 
@@ -38,6 +39,21 @@ class FacilitiesXmlTest {
         assertEquals("Main hub", facility.getDesc());
         assertEquals("station", facility.getAttributes().getAttribute("facility-kind"));
         assertEquals(250.0, facility.getActivityOptions().get("work").getCapacity());
+    }
+
+    @Test
+    void getFacilities_returnsUnmodifiableView() {
+        ActivityFacilities facilities = new ActivityFacilities();
+        assertThrows(UnsupportedOperationException.class, () -> facilities.getFacilities().clear());
+    }
+
+    @Test
+    void getActivityOptions_returnsUnmodifiableView() {
+        ActivityFacilities facilities = new ActivityFacilities();
+        ActivityFacility facility = new ActivityFacility(
+                Id.create("f1", ActivityFacility.class),
+                new com.citymodeler.matsim.models.api.Coord(0.0, 0.0));
+        assertThrows(UnsupportedOperationException.class, () -> facility.getActivityOptions().clear());
     }
 
     @Test

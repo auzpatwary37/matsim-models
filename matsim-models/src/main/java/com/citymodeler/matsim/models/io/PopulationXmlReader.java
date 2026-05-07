@@ -119,7 +119,7 @@ public final class PopulationXmlReader {
                     Arrays.stream(links.split("[\\s,]+"))
                             .filter(s -> !s.isBlank())
                             .map(s -> Id.create(s, Link.class))
-                            .forEach(route.getLinkIds()::add);
+                            .forEach(route::addLinkId);
                 }
                 String travelTime = XmlSupport.attr(routeElement, "travel_time");
                 if (travelTime != null) {

@@ -1,7 +1,9 @@
 package com.citymodeler.matsim.models.population;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
@@ -30,7 +32,11 @@ public final class NetworkRoute implements Route {
     }
 
     public List<Id<Link>> getLinkIds() {
-        return linkIds;
+        return Collections.unmodifiableList(linkIds);
+    }
+
+    public void addLinkId(Id<Link> linkId) {
+        linkIds.add(Objects.requireNonNull(linkId, "linkId"));
     }
 
     public double getTravelTime() {

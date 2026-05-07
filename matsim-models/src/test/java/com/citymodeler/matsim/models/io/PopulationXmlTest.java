@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
@@ -39,7 +40,7 @@ class PopulationXmlTest {
         NetworkRoute route = new NetworkRoute();
         route.setStartLinkId(Id.create("1", com.citymodeler.matsim.models.network.Link.class));
         route.setEndLinkId(Id.create("3", com.citymodeler.matsim.models.network.Link.class));
-        route.getLinkIds().add(Id.create("2", com.citymodeler.matsim.models.network.Link.class));
+        route.addLinkId(Id.create("2", com.citymodeler.matsim.models.network.Link.class));
         leg.setRoute(route);
         plan.addPlanElement(leg);
         plan.addPlanElement(new Activity(
@@ -294,5 +295,41 @@ class PopulationXmlTest {
         assertFalse(xml.contains("start_time"));
         assertFalse(xml.contains("end_time"));
         assertFalse(xml.contains("maximumDuration"));
+    }
+
+    @Test
+    void personGetPlans_returnsUnmodifiableView() {
+        Person person = new Person(Id.create("p1", Person.class));
+        assertThrows(UnsupportedOperationException.class, () -> person.getPlans().clear());
+    }
+
+    @Test
+    void populationAddPerson_rejectsNull() {
+        Population population = new Population();
+        assertThrows(NullPointerException.class, () -> population.addPerson(null));
+    }
+
+    @Test
+    void personAddPlan_rejectsNull() {
+        Person person = new Person(Id.create("p1", Person.class));
+        assertThrows(NullPointerException.class, () -> person.addPlan(null));
+    }
+
+    @Test
+    void networkRouteGetLinkIds_returnsUnmodifiableView() {
+        NetworkRoute route = new NetworkRoute();
+        route.setStartLinkId(Id.create("1", com.citymodeler.matsim.models.network.Link.class));
+        route.setEndLinkId(Id.create("3", com.citymodeler.matsim.models.network.Link.class));
+        assertThrows(UnsupportedOperationException.class, () -> route.getLinkIds().clear());
+    }
+
+    @Test
+    void networkRouteAddLinkId_works() {
+        NetworkRoute route = new NetworkRoute();
+        route.setStartLinkId(Id.create("1", com.citymodeler.matsim.models.network.Link.class));
+        route.setEndLinkId(Id.create("3", com.citymodeler.matsim.models.network.Link.class));
+        route.addLinkId(Id.create("2", com.citymodeler.matsim.models.network.Link.class));
+        assertEquals(1, route.getLinkIds().size());
+        assertEquals("2", route.getLinkIds().get(0).toString());
     }
 }
