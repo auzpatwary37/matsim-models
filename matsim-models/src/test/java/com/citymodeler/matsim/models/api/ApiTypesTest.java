@@ -46,8 +46,8 @@ class ApiTypesTest {
     void tupleExposesFirstAndSecondValues() {
         Tuple<String, Integer> tuple = new Tuple<>("left", 42);
 
-        assertEquals("left", tuple.getFirst());
-        assertEquals(42, tuple.getSecond());
+        assertEquals("left", tuple.first());
+        assertEquals(42, tuple.second());
     }
 
     @Test
