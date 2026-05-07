@@ -37,7 +37,7 @@ final class XmlSupport {
         try (InputStream inputStream = Files.newInputStream(path)) {
             return parse(inputStream);
         } catch (IOException exception) {
-            throw new MatsimModelException("Could not read XML from " + path, exception);
+            throw new MatsimParseException("Could not read XML from " + path, exception);
         }
     }
 
@@ -61,7 +61,7 @@ final class XmlSupport {
             document.getDocumentElement().normalize();
             return document;
         } catch (IOException | ParserConfigurationException | SAXException exception) {
-            throw new MatsimModelException("Could not parse XML", exception);
+            throw new MatsimParseException("Could not parse XML", exception);
         }
     }
 
@@ -77,7 +77,7 @@ final class XmlSupport {
         try (OutputStream outputStream = Files.newOutputStream(path)) {
             write(document, outputStream);
         } catch (IOException exception) {
-            throw new MatsimModelException("Could not write XML to " + path, exception);
+            throw new MatsimWriteException("Could not write XML to " + path, exception);
         }
     }
 
@@ -92,7 +92,7 @@ final class XmlSupport {
             transformer.setOutputProperty(OutputKeys.ENCODING, StandardCharsets.UTF_8.name());
             transformer.transform(new DOMSource(document), new StreamResult(outputStream));
         } catch (Exception exception) {
-            throw new MatsimModelException("Could not write XML", exception);
+            throw new MatsimWriteException("Could not write XML", exception);
         }
     }
 
