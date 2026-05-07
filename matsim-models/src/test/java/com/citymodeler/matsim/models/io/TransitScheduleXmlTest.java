@@ -3,6 +3,8 @@ package com.citymodeler.matsim.models.io;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.io.InputStream;
+
 import org.junit.jupiter.api.Test;
 
 import com.citymodeler.matsim.models.api.Id;
@@ -73,5 +75,24 @@ class TransitScheduleXmlTest {
         Departure departure = route.getDepartures().get(Id.create("dep-1", Departure.class));
         assertEquals(3600.0, departure.getDepartureTime());
         assertEquals("veh-1", departure.getVehicleId());
+    }
+
+    @Test
+    void loadFromClasspathFixture() {
+        String fixturePath = "fixtures/transitSchedule.xml";
+        InputStream is = getClass().getClassLoader().getResourceAsStream(fixturePath);
+        TransitSchedule schedule = new TransitScheduleXmlReader().read(is);
+
+        assertNotNull(schedule);
+        assertEquals(3, schedule.getFacilities().size());
+        assertEquals(2, schedule.getTransitLines().size());
+        assertEquals("weekday-commute", schedule.getAttributes().getAttribute("schedule-kind"));
+
+        TransitStopFacility stop1 = schedule.getFacilities().get(Id.create("stop-1", TransitStopFacility.class));
+        assertEquals("Home Station", stop1.getName());
+
+        TransitLine line1 = schedule.getTransitLines().get(Id.create("line-1", TransitLine.class));
+        TransitRoute route1 = line1.getRoutes().get(Id.create("route-1", TransitRoute.class));
+        assertEquals(2, route1.getStops().size());
     }
 }

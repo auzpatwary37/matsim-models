@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<network name="test-network">
+    <attributes>
+        <attribute name="network-source" class="java.lang.String">city-modeler-test</attribute>
+        <attribute name="coordinateSystem" class="java.lang.String">EPSG:4326</attribute>
+    </attributes>
+    <nodes>
+        <node id="n1" x="0.0" y="0.0">
+            <attributes>
+                <attribute name="node-kind" class="java.lang.String">origin</attribute>
+                <attribute name="elevation" class="java.lang.Double">10.5</attribute>
+            </attributes>
+        </node>
+        <node id="n2" x="1000.0" y="0.0" />
+        <node id="n3" x="2000.0" y="500.0" />
+        <node id="n4" x="3000.0" y="500.0" />
+    </nodes>
+    <links>
+        <link id="l1" from="n1" to="n2" length="1000.0" capacity="3600.0" freespeed="13.9" permlanes="2.0" modes="car,bus">
+            <attributes>
+                <attribute name="link-kind" class="java.lang.String">arterial</attribute>
+                <attribute name="lanes" class="java.lang.Integer">2</attribute>
+            </attributes>
+        </link>
+        <link id="l2" from="n2" to="n3" length="1120.0" capacity="1800.0" freespeed="13.9" permlanes="1.0" modes="car,bus">
+            <attributes>
+                <attribute name="link-kind" class="java.lang.String">primary</attribute>
+            </attributes>
+        </link>
+        <link id="l3" from="n3" to="n4" length="1000.0" capacity="3600.0" freespeed="13.9" permlanes="2.0" modes="car,bus">
+            <attributes>
+                <attribute name="link-kind" class="java.lang.String">arterial</attribute>
+            </attributes>
+        </link>
+    </links>
+</network>

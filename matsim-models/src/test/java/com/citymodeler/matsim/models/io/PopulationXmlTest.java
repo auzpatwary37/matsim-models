@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.InputStream;
 import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
@@ -136,5 +137,21 @@ class PopulationXmlTest {
         Population result = reader.readString(xml);
         assertNotNull(result);
         assertEquals(1, result.getPersons().size());
+    }
+
+    @Test
+    void loadFromClasspathFixture() {
+        String fixturePath = "fixtures/population.xml";
+        InputStream is = getClass().getClassLoader().getResourceAsStream(fixturePath);
+        Population population = new PopulationXmlReader().read(is);
+
+        assertNotNull(population);
+        assertEquals(2, population.getPersons().size());
+
+        Person person1 = population.getPersons().get(Id.create("person-1", Person.class));
+        assertNotNull(person1);
+        Plan plan1 = person1.getSelectedPlan();
+        assertNotNull(plan1);
+        assertEquals(3, plan1.getPlanElements().size());
     }
 }

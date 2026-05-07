@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<population name="test-population">
+    <attributes>
+        <attribute name="population-version" class="java.lang.String">1.0</attribute>
+        <attribute name="source" class="java.lang.String">city-modeler-test</attribute>
+    </attributes>
+    <person id="person-1">
+        <attributes>
+            <attribute name="household-id" class="java.lang.String">hh-001</attribute>
+            <attribute name="income-level" class="java.lang.Integer">75000</attribute>
+        </attributes>
+        <plan selected="yes">
+            <activity type="home" facility="f1" x="0.0" y="0.0" end_time="08:00:00">
+                <attributes>
+                    <attribute name="activity-kind" class="java.lang.String">origin</attribute>
+                </attributes>
+            </activity>
+            <leg mode="car">
+                <attributes>
+                    <attribute name="route-kind" class="java.lang.String">fastest</attribute>
+                </attributes>
+                <route type="links" startLink="l1" endLink="l2">
+                    <links>l1,l2</links>
+                </route>
+            </leg>
+            <activity type="work" facility="f3" x="2000.0" y="500.0" end_time="17:00:00">
+                <attributes>
+                    <attribute name="activity-kind" class="java.lang.String">destination</attribute>
+                </attributes>
+            </activity>
+        </plan>
+    </person>
+    <person id="person-2">
+        <attributes>
+            <attribute name="household-id" class="java.lang.String">hh-001</attribute>
+            <attribute name="income-level" class="java.lang.Integer">75000</attribute>
+        </attributes>
+        <plan selected="yes">
+            <activity type="home" facility="f1" x="0.0" y="0.0" end_time="08:30:00" />
+            <leg mode="pt">
+                <attributes>
+                    <attribute name="route-kind" class="java.lang.String">transit</attribute>
+                </attributes>
+                <route type="pt" startLink="l1" endLink="l3">
+                    <transitRoute line="line-1" route="route-1" departure="dep-1">
+                        <accessStop stop="stop-1" />
+                        <egressStop stop="stop-3" />
+                    </transitRoute>
+                </route>
+            </leg>
+            <activity type="work" facility="f3" x="2000.0" y="500.0" end_time="09:30:00" />
+        </plan>
+    </person>
+</population>

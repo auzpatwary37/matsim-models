@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.InputStream;
+
 import org.junit.jupiter.api.Test;
 
 import com.citymodeler.matsim.models.api.Id;
@@ -86,5 +88,21 @@ class NetworkXmlTest {
                 """;
 
         assertThrows(MatsimModelException.class, () -> new NetworkXmlReader().read(xml));
+    }
+
+    @Test
+    void loadFromClasspathFixture() {
+        String fixturePath = "fixtures/network.xml";
+        InputStream is = getClass().getClassLoader().getResourceAsStream(fixturePath);
+        Network network = new NetworkXmlReader().read(is);
+
+        assertNotNull(network);
+        assertEquals(4, network.getNodes().size());
+        assertEquals(3, network.getLinks().size());
+        assertEquals("city-modeler-test", network.getAttributes().getAttribute("network-source"));
+
+        Node n1 = network.getNodes().get(Id.create("n1", Node.class));
+        assertEquals(0.0, n1.getCoord().getX());
+        assertEquals("origin", n1.getAttributes().getAttribute("node-kind"));
     }
 }

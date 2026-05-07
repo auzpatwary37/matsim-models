@@ -1,6 +1,9 @@
 package com.citymodeler.matsim.models.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+import java.io.InputStream;
 
 import org.junit.jupiter.api.Test;
 
@@ -35,5 +38,19 @@ class FacilitiesXmlTest {
         assertEquals("Main hub", facility.getDesc());
         assertEquals("station", facility.getAttributes().getAttribute("facility-kind"));
         assertEquals(250.0, facility.getActivityOptions().get("work").getCapacity());
+    }
+
+    @Test
+    void loadFromClasspathFixture() {
+        String fixturePath = "fixtures/facilities.xml";
+        InputStream is = getClass().getClassLoader().getResourceAsStream(fixturePath);
+        ActivityFacilities facilities = new FacilitiesXmlReader().read(is);
+
+        assertNotNull(facilities);
+        assertEquals("test-facilities", facilities.getName());
+        assertEquals(3, facilities.getFacilities().size());
+
+        ActivityFacility f1 = facilities.getFacilities().get(Id.create("f1", ActivityFacility.class));
+        assertEquals("residential", f1.getAttributes().getAttribute("facility-kind"));
     }
 }
