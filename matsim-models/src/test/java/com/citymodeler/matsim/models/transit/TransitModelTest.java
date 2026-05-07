@@ -94,6 +94,8 @@ class TransitModelTest {
         TransitStopFacility nonBlockingStop = new TransitStopFacility(Id.create("stop2", TransitStopFacility.class), new Coord(3, 4), false);
 
         assertTrue(blockingStop.isBlockingLane());
+        assertTrue(blockingStop.getIsBlockingLane());
         assertEquals(false, nonBlockingStop.isBlockingLane());
+        assertEquals(false, nonBlockingStop.getIsBlockingLane());
     }
 }
