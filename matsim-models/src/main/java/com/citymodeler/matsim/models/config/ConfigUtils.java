@@ -1,5 +1,7 @@
 package com.citymodeler.matsim.models.config;
 
+import java.nio.file.Path;
+
 public final class ConfigUtils {
     private ConfigUtils() {
     }
@@ -18,5 +20,9 @@ public final class ConfigUtils {
         config.scoring();
         config.replanning();
         return config;
+    }
+
+    public static Config loadConfig(Path path) {
+        return new com.citymodeler.matsim.models.io.ConfigXmlReader().read(path);
     }
 }

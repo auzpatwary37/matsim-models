@@ -9,6 +9,7 @@ public final class Plan {
     private final List<PlanElement> planElements = new ArrayList<>();
     private String type;
     private Double score;
+    private boolean selected;
     private Person person;
     private final Attributes attributes = new Attributes();
 
@@ -46,5 +47,13 @@ public final class Plan {
 
     public Attributes getAttributes() {
         return attributes;
+    }
+
+    public boolean isSelected() {
+        return selected;
+    }
+
+    public void setSelected(boolean selected) {
+        this.selected = selected;
     }
 }
