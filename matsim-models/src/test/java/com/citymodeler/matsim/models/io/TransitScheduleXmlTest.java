@@ -2,6 +2,8 @@ package com.citymodeler.matsim.models.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.io.InputStream;
 
@@ -94,5 +96,55 @@ class TransitScheduleXmlTest {
         TransitLine line1 = schedule.getTransitLines().get(Id.create("line-1", TransitLine.class));
         TransitRoute route1 = line1.getRoutes().get(Id.create("route-1", TransitRoute.class));
         assertEquals(2, route1.getStops().size());
+        assertEquals("bus", route1.getTransportMode());
+    }
+
+    @Test
+    void transportModeAsAttribute_parsedCorrectly() {
+        String xml = """
+                <transitSchedule>
+                    <transitLine id="line-1">
+                        <transitRoute id="route-1" transportMode="tram">
+                        </transitRoute>
+                    </transitLine>
+                </transitSchedule>
+                """;
+        TransitSchedule schedule = new TransitScheduleXmlReader().read(xml);
+        TransitLine line = schedule.getTransitLines().get(Id.create("line-1", TransitLine.class));
+        TransitRoute route = line.getRoutes().get(Id.create("route-1", TransitRoute.class));
+        assertEquals("tram", route.getTransportMode());
+    }
+
+    @Test
+    void transportModeAsChildElement_parsedCorrectly() {
+        String xml = """
+                <transitSchedule>
+                    <transitLine id="line-1">
+                        <transitRoute id="route-1">
+                            <transportMode>bus</transportMode>
+                        </transitRoute>
+                    </transitLine>
+                </transitSchedule>
+                """;
+        TransitSchedule schedule = new TransitScheduleXmlReader().read(xml);
+        TransitLine line = schedule.getTransitLines().get(Id.create("line-1", TransitLine.class));
+        TransitRoute route = line.getRoutes().get(Id.create("route-1", TransitRoute.class));
+        assertEquals("bus", route.getTransportMode());
+    }
+
+    @Test
+    void writer_usesTransportModeAttribute() {
+        String xml = """
+                <transitSchedule>
+                    <transitLine id="line-1">
+                        <transitRoute id="route-1" transportMode="bus">
+                        </transitRoute>
+                    </transitLine>
+                </transitSchedule>
+                """;
+        TransitSchedule schedule = new TransitScheduleXmlReader().read(xml);
+        String output = new TransitScheduleXmlWriter().writeToString(schedule);
+        assertTrue(output.contains("transportMode=\"bus\""));
+        assertFalse(output.contains("<transportMode>bus</transportMode>"));
     }
 }

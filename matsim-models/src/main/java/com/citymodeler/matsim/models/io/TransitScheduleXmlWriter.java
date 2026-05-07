@@ -54,8 +54,10 @@ public final class TransitScheduleXmlWriter {
             for (TransitRoute route : line.getRoutes().values()) {
                 Element routeElement = document.createElement("transitRoute");
                 routeElement.setAttribute("id", route.getId().toString());
+                if (route.getTransportMode() != null) {
+                    routeElement.setAttribute("transportMode", route.getTransportMode());
+                }
                 appendText(document, routeElement, "description", route.getDescription());
-                appendText(document, routeElement, "transportMode", route.getTransportMode());
                 XmlSupport.appendAttributes(document, routeElement, route.getAttributes());
 
                 Element profileElement = document.createElement("routeProfile");

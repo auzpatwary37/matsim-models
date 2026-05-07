@@ -23,6 +23,7 @@ public final class ConfigXmlReader {
 
     private Config read(Element root) {
         Config config = new Config();
+        XmlSupport.readAttributes(root, config.getAttributes());
         for (Element moduleElement : XmlSupport.children(root, "module")) {
             ConfigGroup module = readModule(moduleElement);
             config.addModule(module);
