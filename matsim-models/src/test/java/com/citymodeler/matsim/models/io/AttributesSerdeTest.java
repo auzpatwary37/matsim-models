@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -62,5 +63,19 @@ class AttributesSerdeTest {
 
         assertTrue(xml.equals("<attributes/>") || xml.equals("<attributes></attributes>"));
         assertTrue(attributes.getAsMap().isEmpty());
+    }
+
+    @Test
+    void rejectsMalformedBooleanAttributeValues() {
+        String xml = """
+                <attributes>
+                    <attribute name=\"enabled\" class=\"java.lang.Boolean\">yes</attribute>
+                </attributes>
+                """;
+
+        XmlMapper mapper = MatsimXmlMapperFactory.createXmlMapper();
+        Exception exception = assertThrows(Exception.class, () -> mapper.readValue(xml, Attributes.class));
+
+        assertTrue(exception.getMessage().contains("yes"), exception.getMessage());
     }
 }

@@ -67,7 +67,13 @@ public final class AttributesDeserializer extends JsonDeserializer<Attributes> {
             return Long.valueOf(value);
         }
         if (Boolean.class.getName().equals(className)) {
-            return Boolean.valueOf(value);
+            if ("true".equalsIgnoreCase(value)) {
+                return Boolean.TRUE;
+            }
+            if ("false".equalsIgnoreCase(value)) {
+                return Boolean.FALSE;
+            }
+            throw new MatsimModelException("Invalid boolean attribute value: " + value);
         }
         return value;
     }
