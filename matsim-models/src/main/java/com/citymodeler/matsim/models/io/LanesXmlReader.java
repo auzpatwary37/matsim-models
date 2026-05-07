@@ -12,16 +12,27 @@ import com.citymodeler.matsim.models.lanes.LanesToLinkAssignment;
 import com.citymodeler.matsim.models.network.Link;
 
 public final class LanesXmlReader {
+    private static final String SCHEMA = "/schemas/lanes.xsd";
+    private final boolean validateSchema;
+
+    public LanesXmlReader() {
+        this(false);
+    }
+
+    public LanesXmlReader(boolean validateSchema) {
+        this.validateSchema = validateSchema;
+    }
+
     public Lanes read(Path path) {
-        return read(XmlSupport.parse(path).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(path, SCHEMA) : XmlSupport.parse(path)).getDocumentElement());
     }
 
     public Lanes read(InputStream inputStream) {
-        return read(XmlSupport.parse(inputStream).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(inputStream, SCHEMA) : XmlSupport.parse(inputStream)).getDocumentElement());
     }
 
     public Lanes read(String xml) {
-        return read(XmlSupport.parse(xml).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(xml, SCHEMA) : XmlSupport.parse(xml)).getDocumentElement());
     }
 
     private Lanes read(Element root) {

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://www.matsim.org/schema/households"
+           xmlns="http://www.matsim.org/schema/households"
+           elementFormDefault="qualified">
+    <xs:element name="households" type="xs:anyType" />
+</xs:schema>

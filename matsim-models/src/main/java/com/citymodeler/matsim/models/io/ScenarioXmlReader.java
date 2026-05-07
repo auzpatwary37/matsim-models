@@ -7,18 +7,28 @@ import com.citymodeler.matsim.models.config.Config;
 import com.citymodeler.matsim.models.scenario.Scenario;
 
 public final class ScenarioXmlReader {
+    private final boolean validateSchema;
+
+    public ScenarioXmlReader() {
+        this(false);
+    }
+
+    public ScenarioXmlReader(boolean validateSchema) {
+        this.validateSchema = validateSchema;
+    }
+
     public Scenario read(Path configPath) {
-        Config config = new ConfigXmlReader().read(configPath);
+        Config config = new ConfigXmlReader(validateSchema).read(configPath);
         return read(config, configPath.getParent());
     }
 
     public Scenario read(InputStream inputStream, Path baseDirectory) {
-        Config config = new ConfigXmlReader().read(inputStream);
+        Config config = new ConfigXmlReader(validateSchema).read(inputStream);
         return read(config, baseDirectory);
     }
 
     public Scenario readString(String xml, Path baseDirectory) {
-        Config config = new ConfigXmlReader().readString(xml);
+        Config config = new ConfigXmlReader(validateSchema).readString(xml);
         return read(config, baseDirectory);
     }
 
@@ -30,7 +40,7 @@ public final class ScenarioXmlReader {
             String inputFile = networkModule.getParam("inputNetworkFile").orElse(null);
             if (inputFile != null) {
                 Path networkPath = baseDirectory.resolve(inputFile);
-                scenario.setNetwork(new NetworkXmlReader().read(networkPath));
+                scenario.setNetwork(new NetworkXmlReader(validateSchema).read(networkPath));
             }
         });
 
@@ -38,7 +48,7 @@ public final class ScenarioXmlReader {
             String inputFile = plansModule.getParam("inputPlansFile").orElse(null);
             if (inputFile != null) {
                 Path plansPath = baseDirectory.resolve(inputFile);
-                for (var person : new PopulationXmlReader().read(plansPath).getPersons().entrySet()) {
+                for (var person : new PopulationXmlReader(validateSchema).read(plansPath).getPersons().entrySet()) {
                     scenario.addPerson(person.getValue());
                 }
             }
@@ -48,7 +58,7 @@ public final class ScenarioXmlReader {
             String inputFile = facilitiesModule.getParam("inputFacilitiesFile").orElse(null);
             if (inputFile != null) {
                 Path facilitiesPath = baseDirectory.resolve(inputFile);
-                scenario.setActivityFacilities(new FacilitiesXmlReader().read(facilitiesPath));
+                scenario.setActivityFacilities(new FacilitiesXmlReader(validateSchema).read(facilitiesPath));
             }
         });
 
@@ -56,7 +66,7 @@ public final class ScenarioXmlReader {
             String inputFile = transitModule.getParam("transitScheduleFile").orElse(null);
             if (inputFile != null) {
                 Path transitPath = baseDirectory.resolve(inputFile);
-                scenario.setTransitSchedule(new TransitScheduleXmlReader().read(transitPath));
+                scenario.setTransitSchedule(new TransitScheduleXmlReader(validateSchema).read(transitPath));
             }
         });
 
@@ -64,7 +74,7 @@ public final class ScenarioXmlReader {
             String inputFile = lanesModule.getParam("inputFile").orElse(null);
             if (inputFile != null) {
                 Path lanesPath = baseDirectory.resolve(inputFile);
-                scenario.setLanes(new LanesXmlReader().read(lanesPath));
+                scenario.setLanes(new LanesXmlReader(validateSchema).read(lanesPath));
             }
         });
 

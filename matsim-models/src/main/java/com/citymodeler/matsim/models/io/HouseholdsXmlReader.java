@@ -12,16 +12,27 @@ import com.citymodeler.matsim.models.households.Households;
 import com.citymodeler.matsim.models.households.Person;
 
 public final class HouseholdsXmlReader {
+    private static final String SCHEMA = "/schemas/households.xsd";
+    private final boolean validateSchema;
+
+    public HouseholdsXmlReader() {
+        this(false);
+    }
+
+    public HouseholdsXmlReader(boolean validateSchema) {
+        this.validateSchema = validateSchema;
+    }
+
     public Households read(Path path) {
-        return read(XmlSupport.parse(path).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(path, SCHEMA) : XmlSupport.parse(path)).getDocumentElement());
     }
 
     public Households read(InputStream inputStream) {
-        return read(XmlSupport.parse(inputStream).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(inputStream, SCHEMA) : XmlSupport.parse(inputStream)).getDocumentElement());
     }
 
     public Households read(String xml) {
-        return read(XmlSupport.parse(xml).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(xml, SCHEMA) : XmlSupport.parse(xml)).getDocumentElement());
     }
 
     private Households read(Element root) {

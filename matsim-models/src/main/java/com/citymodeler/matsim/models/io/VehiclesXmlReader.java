@@ -10,16 +10,27 @@ import com.citymodeler.matsim.models.vehicles.Vehicle;
 import com.citymodeler.matsim.models.vehicles.VehicleDefinitions;
 
 public final class VehiclesXmlReader {
+    private static final String SCHEMA = "/schemas/vehicles.xsd";
+    private final boolean validateSchema;
+
+    public VehiclesXmlReader() {
+        this(false);
+    }
+
+    public VehiclesXmlReader(boolean validateSchema) {
+        this.validateSchema = validateSchema;
+    }
+
     public VehicleDefinitions read(Path path) {
-        return read(XmlSupport.parse(path).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(path, SCHEMA) : XmlSupport.parse(path)).getDocumentElement());
     }
 
     public VehicleDefinitions read(InputStream inputStream) {
-        return read(XmlSupport.parse(inputStream).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(inputStream, SCHEMA) : XmlSupport.parse(inputStream)).getDocumentElement());
     }
 
     public VehicleDefinitions read(String xml) {
-        return read(XmlSupport.parse(xml).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(xml, SCHEMA) : XmlSupport.parse(xml)).getDocumentElement());
     }
 
     private VehicleDefinitions read(Element root) {

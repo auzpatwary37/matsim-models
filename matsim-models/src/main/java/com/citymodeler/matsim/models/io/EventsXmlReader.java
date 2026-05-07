@@ -32,8 +32,21 @@ import com.citymodeler.matsim.models.events.PersonEntersVehicleEvent;
 import com.citymodeler.matsim.models.events.PersonLeavesVehicleEvent;
 
 public final class EventsXmlReader {
+    private static final String SCHEMA = "/schemas/events.xsd";
+    private final boolean validateSchema;
+
+    public EventsXmlReader() {
+        this(false);
+    }
+
+    public EventsXmlReader(boolean validateSchema) {
+        this.validateSchema = validateSchema;
+    }
 
     public void read(Path path, MatsimEventHandler handler) {
+        if (validateSchema) {
+            XmlSupport.validate(path, SCHEMA);
+        }
         try (InputStream inputStream = Files.newInputStream(path)) {
             read(inputStream, handler);
         } catch (IOException exception) {
@@ -42,10 +55,27 @@ public final class EventsXmlReader {
     }
 
     public void readString(String xml, MatsimEventHandler handler) {
+        if (validateSchema) {
+            XmlSupport.parse(xml, SCHEMA);
+        }
         read(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)), handler);
     }
 
     public void read(InputStream inputStream, MatsimEventHandler handler) {
+        if (validateSchema) {
+            try {
+                byte[] bytes = inputStream.readAllBytes();
+                XmlSupport.validate(new ByteArrayInputStream(bytes), SCHEMA);
+                readUnvalidated(new ByteArrayInputStream(bytes), handler);
+                return;
+            } catch (IOException exception) {
+                throw new MatsimParseException("Could not read events XML", exception);
+            }
+        }
+        readUnvalidated(inputStream, handler);
+    }
+
+    private void readUnvalidated(InputStream inputStream, MatsimEventHandler handler) {
         XMLStreamReader reader = null;
         try {
             reader = createSafeInputFactory().createXMLStreamReader(inputStream);
