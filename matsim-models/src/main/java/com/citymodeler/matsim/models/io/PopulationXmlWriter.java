@@ -34,6 +34,7 @@ public final class PopulationXmlWriter {
     private Document document(Population population) {
         Document document = XmlSupport.newDocument();
         Element root = document.createElement("population");
+        XmlSupport.appendAttributes(document, root, population.getAttributes());
         document.appendChild(root);
 
         for (Person person : population.getPersons().values()) {
@@ -51,11 +52,26 @@ public final class PopulationXmlWriter {
                 for (PlanElement element : plan.getPlanElements()) {
                     if (element instanceof Activity activity) {
                         Element activityElement = document.createElement("activity");
-                        activityElement.setAttribute("facility", activity.getFacilityId().toString());
+                        if (activity.getFacilityId() != null) {
+                            activityElement.setAttribute("facility", activity.getFacilityId().toString());
+                        }
                         activityElement.setAttribute("type", activity.getType());
-                        activityElement.setAttribute("x", Double.toString(activity.getCoord().getX()));
-                        activityElement.setAttribute("y", Double.toString(activity.getCoord().getY()));
-                        XmlSupport.setIfPresent(activityElement, "end_time", activity.getEndTime());
+                        if (activity.getCoord() != null) {
+                            activityElement.setAttribute("x", Double.toString(activity.getCoord().getX()));
+                            activityElement.setAttribute("y", Double.toString(activity.getCoord().getY()));
+                        }
+                        if (activity.getLinkId() != null) {
+                            activityElement.setAttribute("link", activity.getLinkId().toString());
+                        }
+                        if (!Double.isNaN(activity.getStartTime()) && activity.getStartTime() != Double.MAX_VALUE) {
+                            activityElement.setAttribute("start_time", Double.toString(activity.getStartTime()));
+                        }
+                        if (!Double.isNaN(activity.getEndTime()) && activity.getEndTime() != Double.MAX_VALUE) {
+                            activityElement.setAttribute("end_time", Double.toString(activity.getEndTime()));
+                        }
+                        if (!Double.isNaN(activity.getMaximumDuration()) && activity.getMaximumDuration() != Double.MAX_VALUE) {
+                            activityElement.setAttribute("maximumDuration", Double.toString(activity.getMaximumDuration()));
+                        }
                         XmlSupport.appendAttributes(document, activityElement, activity.getAttributes());
                         planElement.appendChild(activityElement);
                     } else if (element instanceof Leg leg) {
@@ -65,11 +81,19 @@ public final class PopulationXmlWriter {
                             if (leg.getRoute() instanceof NetworkRoute networkRoute) {
                                 Element routeElement = document.createElement("route");
                                 routeElement.setAttribute("type", "NetworkRoute");
-                                routeElement.setAttribute("start_link", networkRoute.getStartLinkId().toString());
-                                routeElement.setAttribute("end_link", networkRoute.getEndLinkId().toString());
-                                StringJoiner linkJoiner = new StringJoiner(" ");
-                                networkRoute.getLinkIds().forEach(link -> linkJoiner.add(link.toString()));
-                                routeElement.setAttribute("links", linkJoiner.toString());
+                                if (networkRoute.getStartLinkId() != null) {
+                                    routeElement.setAttribute("start_link", networkRoute.getStartLinkId().toString());
+                                }
+                                if (networkRoute.getEndLinkId() != null) {
+                                    routeElement.setAttribute("end_link", networkRoute.getEndLinkId().toString());
+                                }
+                                if (!networkRoute.getLinkIds().isEmpty()) {
+                                    Element linksElement = document.createElement("links");
+                                    StringJoiner linkJoiner = new StringJoiner(" ");
+                                    networkRoute.getLinkIds().forEach(link -> linkJoiner.add(link.toString()));
+                                    linksElement.setTextContent(linkJoiner.toString());
+                                    routeElement.appendChild(linksElement);
+                                }
                                 if (networkRoute.getTravelTime() > 0) {
                                     routeElement.setAttribute("travel_time", Double.toString(networkRoute.getTravelTime()));
                                 }
@@ -80,11 +104,39 @@ public final class PopulationXmlWriter {
                             } else if (leg.getRoute() instanceof TransitPassengerRoute ptRoute) {
                                 Element routeElement = document.createElement("route");
                                 routeElement.setAttribute("type", "TransitPassengerRoute");
-                                routeElement.setAttribute("accessStopId", ptRoute.getAccessStopId().toString());
-                                routeElement.setAttribute("egressStopId", ptRoute.getEgressStopId().toString());
-                                routeElement.setAttribute("lineId", ptRoute.getLineId().toString());
-                                routeElement.setAttribute("routeId", ptRoute.getRouteId().toString());
-                                routeElement.setAttribute("departureId", ptRoute.getDepartureId().toString());
+                                if (ptRoute.getLineId() != null && ptRoute.getRouteId() != null && ptRoute.getDepartureId() != null) {
+                                    Element transitRouteElement = document.createElement("transitRoute");
+                                    transitRouteElement.setAttribute("line", ptRoute.getLineId().toString());
+                                    transitRouteElement.setAttribute("route", ptRoute.getRouteId().toString());
+                                    transitRouteElement.setAttribute("departure", ptRoute.getDepartureId().toString());
+                                    if (ptRoute.getAccessStopId() != null) {
+                                        Element accessStopElement = document.createElement("accessStop");
+                                        accessStopElement.setAttribute("stop", ptRoute.getAccessStopId().toString());
+                                        transitRouteElement.appendChild(accessStopElement);
+                                    }
+                                    if (ptRoute.getEgressStopId() != null) {
+                                        Element egressStopElement = document.createElement("egressStop");
+                                        egressStopElement.setAttribute("stop", ptRoute.getEgressStopId().toString());
+                                        transitRouteElement.appendChild(egressStopElement);
+                                    }
+                                    routeElement.appendChild(transitRouteElement);
+                                } else {
+                                    if (ptRoute.getAccessStopId() != null) {
+                                        routeElement.setAttribute("accessStopId", ptRoute.getAccessStopId().toString());
+                                    }
+                                    if (ptRoute.getEgressStopId() != null) {
+                                        routeElement.setAttribute("egressStopId", ptRoute.getEgressStopId().toString());
+                                    }
+                                    if (ptRoute.getLineId() != null) {
+                                        routeElement.setAttribute("lineId", ptRoute.getLineId().toString());
+                                    }
+                                    if (ptRoute.getRouteId() != null) {
+                                        routeElement.setAttribute("routeId", ptRoute.getRouteId().toString());
+                                    }
+                                    if (ptRoute.getDepartureId() != null) {
+                                        routeElement.setAttribute("departureId", ptRoute.getDepartureId().toString());
+                                    }
+                                }
                                 legElement.appendChild(routeElement);
                             }
                         }

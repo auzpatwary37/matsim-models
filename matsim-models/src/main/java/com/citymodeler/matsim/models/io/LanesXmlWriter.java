@@ -29,6 +29,7 @@ public final class LanesXmlWriter {
     private Document document(Lanes lanes) {
         Document document = XmlSupport.newDocument();
         Element root = document.createElement("lanes");
+        XmlSupport.appendAttributes(document, root, lanes.getAttributes());
         document.appendChild(root);
         for (LanesToLinkAssignment assignment : lanes.getLanesToLinkAssignments().values()) {
             Element assignmentElement = document.createElement("assignment");

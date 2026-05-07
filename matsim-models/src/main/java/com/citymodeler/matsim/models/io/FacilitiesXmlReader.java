@@ -27,6 +27,7 @@ public final class FacilitiesXmlReader {
 
     private ActivityFacilities read(Element root) {
         ActivityFacilities facilities = new ActivityFacilities(XmlSupport.attr(root, "name"));
+        XmlSupport.readAttributes(root, facilities.getAttributes());
         for (Element facilityElement : XmlSupport.children(root, "facility")) {
             ActivityFacility facility = new ActivityFacility(
                     Id.create(XmlSupport.attr(facilityElement, "id"), ActivityFacility.class),
