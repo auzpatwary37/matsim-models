@@ -66,10 +66,16 @@ public final class PopulationXmlWriter {
                             activityElement.setAttribute("link", activity.getLinkId().toString());
                         }
                         if (!Double.isNaN(activity.getStartTime()) && activity.getStartTime() != Double.MAX_VALUE) {
-                            activityElement.setAttribute("start_time", Double.toString(activity.getStartTime()));
+                            String formatted = Activity.formatTime(activity.getStartTime());
+                            if (formatted != null) {
+                                activityElement.setAttribute("start_time", formatted);
+                            }
                         }
                         if (!Double.isNaN(activity.getEndTime()) && activity.getEndTime() != Double.MAX_VALUE) {
-                            activityElement.setAttribute("end_time", Double.toString(activity.getEndTime()));
+                            String formatted = Activity.formatTime(activity.getEndTime());
+                            if (formatted != null) {
+                                activityElement.setAttribute("end_time", formatted);
+                            }
                         }
                         if (!Double.isNaN(activity.getMaximumDuration()) && activity.getMaximumDuration() != Double.MAX_VALUE) {
                             activityElement.setAttribute("maximumDuration", Double.toString(activity.getMaximumDuration()));

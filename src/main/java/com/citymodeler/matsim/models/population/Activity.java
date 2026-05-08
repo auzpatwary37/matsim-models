@@ -37,7 +37,6 @@ public final class Activity implements PlanElement {
 
     public Activity(String type) {
         this.type = type;
-        this.coord = new Coord(0.0, 0.0);
     }
 
     public static double parseTime(String time) {
