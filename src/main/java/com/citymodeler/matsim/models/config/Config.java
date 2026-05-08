@@ -3,6 +3,7 @@ package com.citymodeler.matsim.models.config;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Collections;
 
 import com.citymodeler.matsim.models.api.Attributes;
 
@@ -11,7 +12,7 @@ public final class Config {
     private final Attributes attributes = new Attributes();
 
     public Map<String, ConfigGroup> getModules() {
-        return modules;
+        return Collections.unmodifiableMap(modules);
     }
 
     public void addModule(ConfigGroup module) {

@@ -62,4 +62,16 @@ public final class ActivityFacility {
     public void addActivityOption(ActivityOption activityOption) {
         activityOptions.put(activityOption.getType(), activityOption);
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof ActivityFacility that)) return false;
+        return id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return id.hashCode();
+    }
 }

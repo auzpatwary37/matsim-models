@@ -54,4 +54,20 @@ public final class NetworkRoute implements Route {
     public void setDistance(double distance) {
         this.distance = distance;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof NetworkRoute that)) return false;
+        return Double.compare(that.travelTime, travelTime) == 0 &&
+               Double.compare(that.distance, distance) == 0 &&
+               Objects.equals(startLinkId, that.startLinkId) &&
+               Objects.equals(endLinkId, that.endLinkId) &&
+               Objects.equals(linkIds, that.linkIds);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(startLinkId, endLinkId, linkIds, travelTime, distance);
+    }
 }

@@ -64,12 +64,12 @@ public final class NetworkValidator {
                         "Set link freespeed to a positive value"));
             }
 
-            if (link.getLanes() <= 0) {
+            if (link.getNumberOfLanes() <= 0) {
                 report.addIssue(new ValidationIssue(
                         ValidationSeverity.ERROR,
                         "network",
                         "link-invalid-lanes",
-                        "Link " + linkId + " has non-positive lanes: " + link.getLanes(),
+                        "Link " + linkId + " has non-positive lanes: " + link.getNumberOfLanes(),
                         linkId,
                         "Set link lanes to a positive integer"));
             }

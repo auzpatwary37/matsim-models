@@ -1,5 +1,7 @@
 package com.citymodeler.matsim.models.population;
 
+import java.util.Objects;
+
 import com.citymodeler.matsim.models.api.Attributes;
 
 public final class Leg implements PlanElement {
@@ -29,5 +31,18 @@ public final class Leg implements PlanElement {
 
     public Attributes getAttributes() {
         return attributes;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Leg that)) return false;
+        return Objects.equals(mode, that.mode) &&
+               Objects.equals(route, that.route);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mode, route);
     }
 }

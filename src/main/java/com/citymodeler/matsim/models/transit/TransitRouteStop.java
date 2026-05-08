@@ -61,4 +61,18 @@ public final class TransitRouteStop {
     public void setAwaitDeparture(boolean awaitDeparture) {
         this.awaitDeparture = awaitDeparture;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof TransitRouteStop that)) return false;
+        return Double.compare(that.arrivalOffset, arrivalOffset) == 0 &&
+               Double.compare(that.departureOffset, departureOffset) == 0 &&
+               Objects.equals(stopFacilityId, that.stopFacilityId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(stopFacilityId, arrivalOffset, departureOffset);
+    }
 }

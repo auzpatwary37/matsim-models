@@ -1,5 +1,7 @@
 package com.citymodeler.matsim.models.population;
 
+import java.util.Objects;
+
 import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Coord;
 import com.citymodeler.matsim.models.api.Id;
@@ -138,5 +140,23 @@ public final class Activity implements PlanElement {
 
     public boolean hasMaximumDuration() {
         return !Double.isNaN(maximumDuration);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Activity that)) return false;
+        return Double.compare(that.startTime, startTime) == 0 &&
+               Double.compare(that.endTime, endTime) == 0 &&
+               Double.compare(that.maximumDuration, maximumDuration) == 0 &&
+               Objects.equals(facilityId, that.facilityId) &&
+               Objects.equals(type, that.type) &&
+               Objects.equals(coord, that.coord) &&
+               Objects.equals(linkId, that.linkId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(facilityId, type, coord, linkId, startTime, endTime, maximumDuration);
     }
 }

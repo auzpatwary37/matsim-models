@@ -63,4 +63,16 @@ public final class TransitRoute {
         Objects.requireNonNull(departure, "departure");
         departures.put(departure.getId(), departure);
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof TransitRoute that)) return false;
+        return id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return id.hashCode();
+    }
 }
