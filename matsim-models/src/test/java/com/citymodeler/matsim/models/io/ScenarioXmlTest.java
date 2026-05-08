@@ -3,7 +3,9 @@ package com.citymodeler.matsim.models.io;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayInputStream;
 import java.nio.file.Path;
+import java.nio.file.Files;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -73,6 +75,83 @@ class ScenarioXmlTest {
         assertNotNull(scenario.getNetwork());
         assertNotNull(scenario.getPopulation());
         assertTrue(scenario.getPopulation().size() > 0);
+    }
+
+    @Test
+    void readScenario_fromInputStream() {
+        String configXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                "<config>" +
+                "  <module name=\"global\">" +
+                "    <param name=\"configVersion\" value=\"1.0\"/>" +
+                "  </module>" +
+                "  <module name=\"network\">" +
+                "    <param name=\"inputNetworkFile\" value=\"network.xml\"/>" +
+                "  </module>" +
+                "</config>";
+
+        String networkXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                "<network name=\"test\">" +
+                "  <nodes>" +
+                "    <node id=\"1\" x=\"0.0\" y=\"0.0\"/>" +
+                "    <node id=\"2\" x=\"100.0\" y=\"0.0\"/>" +
+                "  </nodes>" +
+                "  <links>" +
+                "    <link id=\"1\" from=\"1\" to=\"2\" length=\"100.0\" capacity=\"3600\" freespeed=\"10.0\" permlanes=\"1\"/>" +
+                "  </links>" +
+                "</network>";
+
+        Path networkPath = tempDir.resolve("network.xml");
+        try {
+            Files.writeString(networkPath, networkXml);
+        } catch (java.io.IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        ByteArrayInputStream inputStream = new ByteArrayInputStream(configXml.getBytes());
+        Scenario scenario = new ScenarioXmlReader().read(inputStream, tempDir);
+
+        assertNotNull(scenario);
+        assertNotNull(scenario.getConfig());
+        assertTrue(scenario.getConfig().getModule("network").isPresent());
+        assertNotNull(scenario.getNetwork());
+    }
+
+    @Test
+    void readScenario_fromString() {
+        String configXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                "<config>" +
+                "  <module name=\"global\">" +
+                "    <param name=\"configVersion\" value=\"1.0\"/>" +
+                "  </module>" +
+                "  <module name=\"network\">" +
+                "    <param name=\"inputNetworkFile\" value=\"network.xml\"/>" +
+                "  </module>" +
+                "</config>";
+
+        String networkXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                "<network name=\"test\">" +
+                "  <nodes>" +
+                "    <node id=\"1\" x=\"0.0\" y=\"0.0\"/>" +
+                "    <node id=\"2\" x=\"100.0\" y=\"0.0\"/>" +
+                "  </nodes>" +
+                "  <links>" +
+                "    <link id=\"1\" from=\"1\" to=\"2\" length=\"100.0\" capacity=\"3600\" freespeed=\"10.0\" permlanes=\"1\"/>" +
+                "  </links>" +
+                "</network>";
+
+        Path networkPath = tempDir.resolve("network.xml");
+        try {
+            Files.writeString(networkPath, networkXml);
+        } catch (java.io.IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        Scenario scenario = new ScenarioXmlReader().readString(configXml, tempDir);
+
+        assertNotNull(scenario);
+        assertNotNull(scenario.getConfig());
+        assertTrue(scenario.getConfig().getModule("network").isPresent());
+        assertNotNull(scenario.getNetwork());
     }
 
     @Test

@@ -30,12 +30,16 @@ cd matsim-models
 mvn clean install
 ```
 
-### From Source
+## Programmatic Construction
 
-```bash
-git clone https://github.com/auzpatwary37/matsim-models.git
-cd matsim-models
-mvn clean install
+When constructing models in code, call `postProcess()` after all nodes, links, stops, routes, and persons have been added. Readers call this automatically.
+
+```java
+Network network = new Network();
+network.addNode(new Node(Id.create("n1", Node.class), new Coord(0, 0)));
+network.addNode(new Node(Id.create("n2", Node.class), new Coord(100, 0)));
+network.addLink(new Link(Id.create("l1", Link.class), Id.create("n1", Node.class), Id.create("n2", Node.class), 100, 1000, 13.9, 1));
+network.postProcess();
 ```
 
 ## Quick Start
@@ -72,6 +76,19 @@ new NetworkXmlWriter().write(network, Path.of("output.xml"));
 | `com.citymodeler.matsim.models.config` | `Config`, `ConfigGroup`, `ConfigUtils` |
 | `com.citymodeler.matsim.models.scenario` | `Scenario`, `ScenarioUtils` |
 | `com.citymodeler.matsim.models.io` | XML readers and writers for all models |
+
+## Domain Table
+
+| Domain | Key Types |
+|--------|-----------|
+| Network | `Node`, `Link` |
+| TransitSchedule | `TransitStopFacility`, `TransitLine`, `TransitRoute`, `Departure` |
+| ActivityFacilities | `ActivityFacility`, `ActivityOption` |
+| Population | `Person`, `Plan`, `Activity`, `Leg` |
+| Config | `Config`, `ConfigGroup` |
+| Scenario | `Scenario` (aggregates all domains) |
+| Vehicles | `Vehicle`, `VehicleType` |
+| Households | `Household`, `Person` |
 
 ## Versioning
 

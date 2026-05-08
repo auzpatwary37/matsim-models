@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.transit;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,11 +43,11 @@ public final class TransitRoute {
     }
 
     public List<TransitRouteStop> getStops() {
-        return stops;
+        return Collections.unmodifiableList(stops);
     }
 
     public Map<Id<Departure>, Departure> getDepartures() {
-        return departures;
+        return Collections.unmodifiableMap(departures);
     }
 
     public Attributes getAttributes() {
@@ -54,10 +55,12 @@ public final class TransitRoute {
     }
 
     public void addStop(TransitRouteStop stop) {
+        Objects.requireNonNull(stop, "stop");
         stops.add(stop);
     }
 
     public void addDeparture(Departure departure) {
+        Objects.requireNonNull(departure, "departure");
         departures.put(departure.getId(), departure);
     }
 }

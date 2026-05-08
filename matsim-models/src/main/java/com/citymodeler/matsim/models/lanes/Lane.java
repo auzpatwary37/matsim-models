@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.lanes;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -26,11 +27,19 @@ public final class Lane {
     }
 
     public List<Id<Link>> getToLinkIds() {
-        return toLinkIds;
+        return Collections.unmodifiableList(toLinkIds);
     }
 
     public List<Id<Lane>> getToLaneIds() {
-        return toLaneIds;
+        return Collections.unmodifiableList(toLaneIds);
+    }
+
+    public void addToLinkId(Id<Link> linkId) {
+        toLinkIds.add(linkId);
+    }
+
+    public void addToLaneId(Id<Lane> laneId) {
+        toLaneIds.add(laneId);
     }
 
     public double getCapacityVehiclesPerHour() {

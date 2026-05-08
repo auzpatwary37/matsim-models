@@ -20,6 +20,8 @@ import javax.xml.transform.OutputKeys;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+import javax.xml.transform.stream.StreamSource;
+import javax.xml.validation.SchemaFactory;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -37,12 +39,23 @@ final class XmlSupport {
         try (InputStream inputStream = Files.newInputStream(path)) {
             return parse(inputStream);
         } catch (IOException exception) {
-            throw new MatsimModelException("Could not read XML from " + path, exception);
+            throw new MatsimParseException("Could not read XML from " + path, exception);
         }
+    }
+
+    static Document parse(Path path, String schemaResource) {
+        validate(path, schemaResource);
+        return parse(path);
     }
 
     static Document parse(String xml) {
         return parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    static Document parse(String xml, String schemaResource) {
+        byte[] bytes = xml.getBytes(StandardCharsets.UTF_8);
+        validate(new ByteArrayInputStream(bytes), schemaResource);
+        return parse(new ByteArrayInputStream(bytes));
     }
 
     static Document parse(InputStream inputStream) {
@@ -61,7 +74,45 @@ final class XmlSupport {
             document.getDocumentElement().normalize();
             return document;
         } catch (IOException | ParserConfigurationException | SAXException exception) {
-            throw new MatsimModelException("Could not parse XML", exception);
+            throw new MatsimParseException("Could not parse XML", exception);
+        }
+    }
+
+    static Document parse(InputStream inputStream, String schemaResource) {
+        try {
+            byte[] bytes = inputStream.readAllBytes();
+            validate(new ByteArrayInputStream(bytes), schemaResource);
+            return parse(new ByteArrayInputStream(bytes));
+        } catch (IOException exception) {
+            throw new MatsimParseException("Could not read XML", exception);
+        }
+    }
+
+    static void validate(Path path, String schemaResource) {
+        try (InputStream inputStream = Files.newInputStream(path)) {
+            validate(inputStream, schemaResource);
+        } catch (IOException exception) {
+            throw new MatsimParseException("Could not read XML from " + path, exception);
+        }
+    }
+
+    static void validate(InputStream inputStream, String schemaResource) {
+        try (InputStream schemaStream = XmlSupport.class.getResourceAsStream(schemaResource)) {
+            if (schemaStream == null) {
+                throw new MatsimValidationException("Schema resource not found: " + schemaResource);
+            }
+            var schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
+            schemaFactory.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+            schemaFactory.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+            var schema = schemaFactory.newSchema(new StreamSource(schemaStream));
+            var validator = schema.newValidator();
+            validator.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+            validator.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+            validator.validate(new StreamSource(inputStream));
+        } catch (MatsimValidationException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new MatsimValidationException("XML schema validation failed", exception);
         }
     }
 
@@ -77,7 +128,7 @@ final class XmlSupport {
         try (OutputStream outputStream = Files.newOutputStream(path)) {
             write(document, outputStream);
         } catch (IOException exception) {
-            throw new MatsimModelException("Could not write XML to " + path, exception);
+            throw new MatsimWriteException("Could not write XML to " + path, exception);
         }
     }
 
@@ -92,7 +143,7 @@ final class XmlSupport {
             transformer.setOutputProperty(OutputKeys.ENCODING, StandardCharsets.UTF_8.name());
             transformer.transform(new DOMSource(document), new StreamResult(outputStream));
         } catch (Exception exception) {
-            throw new MatsimModelException("Could not write XML", exception);
+            throw new MatsimWriteException("Could not write XML", exception);
         }
     }
 

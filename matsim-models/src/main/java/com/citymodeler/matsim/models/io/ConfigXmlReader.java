@@ -9,16 +9,27 @@ import com.citymodeler.matsim.models.config.Config;
 import com.citymodeler.matsim.models.config.ConfigGroup;
 
 public final class ConfigXmlReader {
+    private static final String SCHEMA = "/schemas/config.xsd";
+    private final boolean validateSchema;
+
+    public ConfigXmlReader() {
+        this(false);
+    }
+
+    public ConfigXmlReader(boolean validateSchema) {
+        this.validateSchema = validateSchema;
+    }
+
     public Config read(Path path) {
-        return read(XmlSupport.parse(path).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(path, SCHEMA) : XmlSupport.parse(path)).getDocumentElement());
     }
 
     public Config read(InputStream inputStream) {
-        return read(XmlSupport.parse(inputStream).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(inputStream, SCHEMA) : XmlSupport.parse(inputStream)).getDocumentElement());
     }
 
     public Config readString(String xml) {
-        return read(XmlSupport.parse(xml).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(xml, SCHEMA) : XmlSupport.parse(xml)).getDocumentElement());
     }
 
     private Config read(Element root) {

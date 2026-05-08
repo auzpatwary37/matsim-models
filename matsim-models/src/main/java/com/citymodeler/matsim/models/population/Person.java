@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.population;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -22,11 +23,11 @@ public final class Person {
     }
 
     public List<Plan> getPlans() {
-        return plans;
+        return Collections.unmodifiableList(plans);
     }
 
     public void addPlan(Plan plan) {
-        plans.add(plan);
+        plans.add(Objects.requireNonNull(plan, "plan"));
     }
 
     public Plan getSelectedPlan() {

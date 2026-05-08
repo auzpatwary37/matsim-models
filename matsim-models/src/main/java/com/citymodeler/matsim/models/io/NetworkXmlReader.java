@@ -15,16 +15,27 @@ import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.network.Node;
 
 public final class NetworkXmlReader {
+    private static final String SCHEMA = "/schemas/network.xsd";
+    private final boolean validateSchema;
+
+    public NetworkXmlReader() {
+        this(false);
+    }
+
+    public NetworkXmlReader(boolean validateSchema) {
+        this.validateSchema = validateSchema;
+    }
+
     public Network read(Path path) {
-        return read(XmlSupport.parse(path).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(path, SCHEMA) : XmlSupport.parse(path)).getDocumentElement());
     }
 
     public Network read(InputStream inputStream) {
-        return read(XmlSupport.parse(inputStream).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(inputStream, SCHEMA) : XmlSupport.parse(inputStream)).getDocumentElement());
     }
 
     public Network read(String xml) {
-        return read(XmlSupport.parse(xml).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(xml, SCHEMA) : XmlSupport.parse(xml)).getDocumentElement());
     }
 
     private Network read(Element root) {

@@ -1,7 +1,9 @@
 package com.citymodeler.matsim.models.scenario;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Id;
@@ -54,11 +56,11 @@ public final class Scenario {
     }
 
     public Map<Id<Person>, Person> getPopulation() {
-        return population;
+        return Collections.unmodifiableMap(population);
     }
 
     public void addPerson(Person person) {
-        population.put(person.getId(), person);
+        population.put(Objects.requireNonNull(person, "person").getId(), person);
     }
 
     public Lanes getLanes() {

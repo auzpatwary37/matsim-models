@@ -24,16 +24,27 @@ import com.citymodeler.matsim.models.transit.TransitRoute;
 import com.citymodeler.matsim.models.transit.TransitStopFacility;
 
 public final class PopulationXmlReader {
+    private static final String SCHEMA = "/schemas/population.xsd";
+    private final boolean validateSchema;
+
+    public PopulationXmlReader() {
+        this(false);
+    }
+
+    public PopulationXmlReader(boolean validateSchema) {
+        this.validateSchema = validateSchema;
+    }
+
     public Population read(Path path) {
-        return read(XmlSupport.parse(path).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(path, SCHEMA) : XmlSupport.parse(path)).getDocumentElement());
     }
 
     public Population read(InputStream inputStream) {
-        return read(XmlSupport.parse(inputStream).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(inputStream, SCHEMA) : XmlSupport.parse(inputStream)).getDocumentElement());
     }
 
     public Population readString(String xml) {
-        return read(XmlSupport.parse(xml).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(xml, SCHEMA) : XmlSupport.parse(xml)).getDocumentElement());
     }
 
     private Population read(Element root) {
@@ -119,7 +130,7 @@ public final class PopulationXmlReader {
                     Arrays.stream(links.split("[\\s,]+"))
                             .filter(s -> !s.isBlank())
                             .map(s -> Id.create(s, Link.class))
-                            .forEach(route.getLinkIds()::add);
+                            .forEach(route::addLinkId);
                 }
                 String travelTime = XmlSupport.attr(routeElement, "travel_time");
                 if (travelTime != null) {

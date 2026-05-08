@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<households xmlns="http://www.matsim.org/schema/households">
+    <household id="h1" income="50000">
+        <members><personId ref="p1"/><personId ref="p2"/></members>
+    </household>
+</households>

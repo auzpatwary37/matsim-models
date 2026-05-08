@@ -1,5 +1,6 @@
 package com.citymodeler.matsim.models.lanes;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -20,7 +21,7 @@ public final class LanesToLinkAssignment {
     }
 
     public Map<Id<Lane>, Lane> getLanes() {
-        return lanes;
+        return Collections.unmodifiableMap(lanes);
     }
 
     public void addLane(Lane lane) {

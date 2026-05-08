@@ -16,16 +16,27 @@ import com.citymodeler.matsim.models.transit.TransitSchedule;
 import com.citymodeler.matsim.models.transit.TransitStopFacility;
 
 public final class TransitScheduleXmlReader {
+    private static final String SCHEMA = "/schemas/transitSchedule.xsd";
+    private final boolean validateSchema;
+
+    public TransitScheduleXmlReader() {
+        this(false);
+    }
+
+    public TransitScheduleXmlReader(boolean validateSchema) {
+        this.validateSchema = validateSchema;
+    }
+
     public TransitSchedule read(Path path) {
-        return read(XmlSupport.parse(path).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(path, SCHEMA) : XmlSupport.parse(path)).getDocumentElement());
     }
 
     public TransitSchedule read(InputStream inputStream) {
-        return read(XmlSupport.parse(inputStream).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(inputStream, SCHEMA) : XmlSupport.parse(inputStream)).getDocumentElement());
     }
 
     public TransitSchedule read(String xml) {
-        return read(XmlSupport.parse(xml).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(xml, SCHEMA) : XmlSupport.parse(xml)).getDocumentElement());
     }
 
     private TransitSchedule read(Element root) {

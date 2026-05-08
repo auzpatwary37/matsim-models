@@ -12,16 +12,27 @@ import com.citymodeler.matsim.models.lanes.LanesToLinkAssignment;
 import com.citymodeler.matsim.models.network.Link;
 
 public final class LanesXmlReader {
+    private static final String SCHEMA = "/schemas/lanes.xsd";
+    private final boolean validateSchema;
+
+    public LanesXmlReader() {
+        this(false);
+    }
+
+    public LanesXmlReader(boolean validateSchema) {
+        this.validateSchema = validateSchema;
+    }
+
     public Lanes read(Path path) {
-        return read(XmlSupport.parse(path).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(path, SCHEMA) : XmlSupport.parse(path)).getDocumentElement());
     }
 
     public Lanes read(InputStream inputStream) {
-        return read(XmlSupport.parse(inputStream).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(inputStream, SCHEMA) : XmlSupport.parse(inputStream)).getDocumentElement());
     }
 
     public Lanes read(String xml) {
-        return read(XmlSupport.parse(xml).getDocumentElement());
+        return read((validateSchema ? XmlSupport.parse(xml, SCHEMA) : XmlSupport.parse(xml)).getDocumentElement());
     }
 
     private Lanes read(Element root) {
@@ -32,8 +43,8 @@ public final class LanesXmlReader {
                     Id.create(XmlSupport.attr(assignmentElement, "linkId"), Link.class));
             for (Element laneElement : XmlSupport.children(assignmentElement, "lane")) {
                 Lane lane = new Lane(Id.create(XmlSupport.attr(laneElement, "id"), Lane.class));
-                addIds(lane.getToLinkIds(), XmlSupport.attr(laneElement, "toLinkIds"), Link.class);
-                addIds(lane.getToLaneIds(), XmlSupport.attr(laneElement, "toLaneIds"), Lane.class);
+                addLinkIds(lane, XmlSupport.attr(laneElement, "toLinkIds"));
+                addLaneIds(lane, XmlSupport.attr(laneElement, "toLaneIds"));
                 lane.setCapacityVehiclesPerHour(XmlSupport.optionalDouble(laneElement, "capacityVehiclesPerHour", 0.0));
                 lane.setStartsAtMeterFromLinkEnd(XmlSupport.optionalDouble(laneElement, "startsAtMeterFromLinkEnd", 0.0));
                 lane.setAlignment(XmlSupport.attr(laneElement, "alignment"));
@@ -45,13 +56,24 @@ public final class LanesXmlReader {
         return lanes;
     }
 
-    private static <T> void addIds(java.util.List<Id<T>> ids, String value, Class<T> type) {
+    private static void addLinkIds(Lane lane, String value) {
         if (value == null || value.isBlank()) {
             return;
         }
         for (String id : value.split(",")) {
             if (!id.isBlank()) {
-                ids.add(Id.create(id.trim(), type));
+                lane.addToLinkId(Id.create(id.trim(), Link.class));
+            }
+        }
+    }
+
+    private static void addLaneIds(Lane lane, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        for (String id : value.split(",")) {
+            if (!id.isBlank()) {
+                lane.addToLaneId(Id.create(id.trim(), Lane.class));
             }
         }
     }

@@ -26,10 +26,6 @@ public final class TransitRouteStop {
         return stopFacilityId;
     }
 
-    public void setStopFacilityId(Id<TransitStopFacility> stopFacilityId) {
-        this.stopFacilityId = Objects.requireNonNull(stopFacilityId, "stopFacilityId");
-    }
-
     public TransitStopFacility getStopFacility() {
         return stopFacility;
     }

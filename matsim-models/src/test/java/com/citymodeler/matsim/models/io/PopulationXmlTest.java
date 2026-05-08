@@ -2,6 +2,8 @@ package com.citymodeler.matsim.models.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
@@ -39,7 +41,7 @@ class PopulationXmlTest {
         NetworkRoute route = new NetworkRoute();
         route.setStartLinkId(Id.create("1", com.citymodeler.matsim.models.network.Link.class));
         route.setEndLinkId(Id.create("3", com.citymodeler.matsim.models.network.Link.class));
-        route.getLinkIds().add(Id.create("2", com.citymodeler.matsim.models.network.Link.class));
+        route.addLinkId(Id.create("2", com.citymodeler.matsim.models.network.Link.class));
         leg.setRoute(route);
         plan.addPlanElement(leg);
         plan.addPlanElement(new Activity(
@@ -294,5 +296,103 @@ class PopulationXmlTest {
         assertFalse(xml.contains("start_time"));
         assertFalse(xml.contains("end_time"));
         assertFalse(xml.contains("maximumDuration"));
+    }
+
+    @Test
+    void personGetPlans_returnsUnmodifiableView() {
+        Person person = new Person(Id.create("p1", Person.class));
+        assertThrows(UnsupportedOperationException.class, () -> person.getPlans().clear());
+    }
+
+    @Test
+    void populationAddPerson_rejectsNull() {
+        Population population = new Population();
+        assertThrows(NullPointerException.class, () -> population.addPerson(null));
+    }
+
+    @Test
+    void personAddPlan_rejectsNull() {
+        Person person = new Person(Id.create("p1", Person.class));
+        assertThrows(NullPointerException.class, () -> person.addPlan(null));
+    }
+
+    @Test
+    void networkRouteGetLinkIds_returnsUnmodifiableView() {
+        NetworkRoute route = new NetworkRoute();
+        route.setStartLinkId(Id.create("1", com.citymodeler.matsim.models.network.Link.class));
+        route.setEndLinkId(Id.create("3", com.citymodeler.matsim.models.network.Link.class));
+        assertThrows(UnsupportedOperationException.class, () -> route.getLinkIds().clear());
+    }
+
+    @Test
+    void networkRouteAddLinkId_works() {
+        NetworkRoute route = new NetworkRoute();
+        route.setStartLinkId(Id.create("1", com.citymodeler.matsim.models.network.Link.class));
+        route.setEndLinkId(Id.create("3", com.citymodeler.matsim.models.network.Link.class));
+        route.addLinkId(Id.create("2", com.citymodeler.matsim.models.network.Link.class));
+        assertEquals(1, route.getLinkIds().size());
+        assertEquals("2", route.getLinkIds().get(0).toString());
+    }
+
+    @Test
+    void activityParseTime_rejectsInvalidFormat() {
+        MatsimModelException ex = assertThrows(MatsimModelException.class,
+                () -> Activity.parseTime("not-a-time"));
+        assertTrue(ex.getMessage().contains("Invalid time format"));
+        assertTrue(ex.getMessage().contains("not-a-time"));
+    }
+
+    @Test
+    void activityParseTime_rejectsNonNumericComponent() {
+        MatsimModelException ex = assertThrows(MatsimModelException.class,
+                () -> Activity.parseTime("ab:cd:ef"));
+        assertTrue(ex.getMessage().contains("Invalid time format"));
+    }
+
+    @Test
+    void activityParseTime_acceptsNullReturnsNaN() {
+        assertTrue(Double.isNaN(Activity.parseTime(null)));
+    }
+
+    @Test
+    void activityParseTime_acceptsBlankReturnsNaN() {
+        assertTrue(Double.isNaN(Activity.parseTime("   ")));
+    }
+
+    @Test
+    void activityParseTime_acceptsNumericSeconds() {
+        assertEquals(3661.0, Activity.parseTime("3661"), 0.01);
+    }
+
+    @Test
+    void activityParseTime_acceptsHHMMSS() {
+        assertEquals(8 * 3600 + 30 * 60 + 15, Activity.parseTime("08:30:15"), 0.01);
+    }
+
+    @Test
+    void activityParseTime_acceptsHHMM() {
+        assertEquals(9 * 3600 + 5 * 60, Activity.parseTime("09:05"), 0.01);
+    }
+
+    @Test
+    void planScoreNullRoundtrip() {
+        Population population = new Population();
+        Person person = new Person(Id.create("p1", Person.class));
+        Plan plan = new Plan();
+        plan.setSelected(true);
+        plan.setScore(null);
+        plan.addPlanElement(new Activity(
+                Id.create("f1", com.citymodeler.matsim.models.facilities.ActivityFacility.class),
+                "home", null, 0.0, 0.0));
+        person.addPlan(plan);
+        person.setSelectedPlan(plan);
+        population.addPerson(person);
+
+        String xml = new PopulationXmlWriter().writeToString(population);
+        assertFalse(xml.contains("score="));
+
+        Population result = new PopulationXmlReader().readString(xml);
+        Person roundTripped = result.getPersons().get(Id.create("p1", Person.class));
+        assertNull(roundTripped.getSelectedPlan().getScore());
     }
 }

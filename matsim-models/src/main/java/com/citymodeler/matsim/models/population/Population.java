@@ -3,6 +3,7 @@ package com.citymodeler.matsim.models.population;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Id;
@@ -20,6 +21,6 @@ public final class Population {
     }
 
     public void addPerson(Person person) {
-        persons.put(person.getId(), person);
+        persons.put(Objects.requireNonNull(person, "person").getId(), person);
     }
 }

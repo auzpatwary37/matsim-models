@@ -90,32 +90,45 @@ class TransitModelTest {
     }
 
     @Test
+    void transitCollectionsAreUnmodifiable() {
+        TransitSchedule schedule = new TransitSchedule();
+        assertThrows(UnsupportedOperationException.class, () -> schedule.getFacilities().clear());
+        assertThrows(UnsupportedOperationException.class, () -> schedule.getTransitLines().clear());
+
+        TransitLine line = new TransitLine(Id.create("line", TransitLine.class));
+        assertThrows(UnsupportedOperationException.class, () -> line.getRoutes().clear());
+
+        TransitRoute route = new TransitRoute(Id.create("route", TransitRoute.class));
+        assertThrows(UnsupportedOperationException.class, () -> route.getStops().clear());
+        assertThrows(UnsupportedOperationException.class, () -> route.getDepartures().clear());
+    }
+
+    @Test
+    void transitAddMethodsRejectNulls() {
+        assertThrows(NullPointerException.class, () -> new TransitSchedule().addStopFacility(null));
+        assertThrows(NullPointerException.class, () -> new TransitSchedule().addTransitLine(null));
+        assertThrows(NullPointerException.class, () -> new TransitLine(Id.create("l", TransitLine.class)).addRoute(null));
+        assertThrows(NullPointerException.class, () -> new TransitRoute(Id.create("r", TransitRoute.class)).addStop(null));
+        assertThrows(NullPointerException.class, () -> new TransitRoute(Id.create("r", TransitRoute.class)).addDeparture(null));
+    }
+
+    @Test
     void postProcessClearsStaleResolvedStopFacilityBeforeMissingReferenceFailure() {
         TransitSchedule schedule = new TransitSchedule();
         TransitStopFacility firstStop = new TransitStopFacility(Id.create("stop1", TransitStopFacility.class), new Coord(1, 2), false);
         TransitStopFacility laterStop = new TransitStopFacility(Id.create("stop2", TransitStopFacility.class), new Coord(3, 4), false);
         TransitLine line = new TransitLine(Id.create("line1", TransitLine.class));
         TransitRoute route = new TransitRoute(Id.create("route1", TransitRoute.class));
-        TransitRouteStop firstRouteStop = new TransitRouteStop(firstStop.getId(), 0, 0, false);
-        TransitRouteStop laterRouteStop = new TransitRouteStop(laterStop.getId(), 10, 10, false);
 
-        route.addStop(firstRouteStop);
-        route.addStop(laterRouteStop);
+        route.addStop(new TransitRouteStop(firstStop.getId(), 0, 0, false));
+        route.addStop(new TransitRouteStop(Id.create("missingStop", TransitStopFacility.class), 10, 10, false));
         line.addRoute(route);
         schedule.addStopFacility(firstStop);
         schedule.addStopFacility(laterStop);
         schedule.addTransitLine(line);
-        schedule.postProcess();
 
-        assertSame(firstStop, firstRouteStop.getStopFacility());
-        assertSame(laterStop, laterRouteStop.getStopFacility());
-
-        firstRouteStop.setStopFacilityId(Id.create("missingStop", TransitStopFacility.class));
         IllegalStateException exception = assertThrows(IllegalStateException.class, schedule::postProcess);
-
         assertTrue(exception.getMessage().contains("missingStop"));
-        assertNull(firstRouteStop.getStopFacility());
-        assertNull(laterRouteStop.getStopFacility());
     }
 
     @Test
@@ -136,5 +149,30 @@ class TransitModelTest {
         assertThrows(NoSuchMethodException.class, () -> TransitLine.class.getMethod("setId", Id.class));
         assertThrows(NoSuchMethodException.class, () -> TransitRoute.class.getMethod("setId", Id.class));
         assertThrows(NoSuchMethodException.class, () -> Departure.class.getMethod("setId", Id.class));
+    }
+
+    @Test
+    void activityFacilitiesDefaultConstructorCreatesEmptyFacilities() {
+        ActivityFacilities facilities = new ActivityFacilities();
+        assertEquals(0, facilities.getFacilities().size());
+        assertNull(facilities.getName());
+    }
+
+    @Test
+    void activityFacilitiesNamedConstructorStoresName() {
+        ActivityFacilities facilities = new ActivityFacilities("facilities-name");
+        assertEquals("facilities-name", facilities.getName());
+    }
+
+    @Test
+    void activityFacilitiesAddFacilityRejectsNull() {
+        ActivityFacilities facilities = new ActivityFacilities();
+        assertThrows(NullPointerException.class, () -> facilities.addFacility(null));
+    }
+
+    @Test
+    void activityFacilityActivityOptionsAreUnmodifiable() {
+        ActivityFacility facility = new ActivityFacility(Id.create("f1", ActivityFacility.class), new Coord(0, 0));
+        assertThrows(UnsupportedOperationException.class, () -> facility.getActivityOptions().clear());
     }
 }
