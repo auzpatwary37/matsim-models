@@ -18,6 +18,7 @@ import com.citymodeler.matsim.models.population.Plan;
 import com.citymodeler.matsim.models.population.PlanElement;
 import com.citymodeler.matsim.models.population.Population;
 import com.citymodeler.matsim.models.population.TransitPassengerRoute;
+import com.citymodeler.matsim.models.population.UnknownRoute;
 import com.citymodeler.matsim.models.transit.Departure;
 import com.citymodeler.matsim.models.transit.TransitLine;
 import com.citymodeler.matsim.models.transit.TransitRoute;
@@ -91,13 +92,44 @@ public final class PopulationXmlReader {
     }
 
     private Activity readActivity(Element activityElement) {
-        Id<ActivityFacility> facilityId = Id.create(XmlSupport.attr(activityElement, "facility"), ActivityFacility.class);
         String type = XmlSupport.attr(activityElement, "type");
-        double x = XmlSupport.optionalDouble(activityElement, "x", 0.0);
-        double y = XmlSupport.optionalDouble(activityElement, "y", 0.0);
-        String endTime = XmlSupport.attr(activityElement, "end_time");
+        double x = XmlSupport.optionalDouble(activityElement, "x", Double.NaN);
+        double y = XmlSupport.optionalDouble(activityElement, "y", Double.NaN);
 
-        Activity activity = new Activity(facilityId, type, endTime, x, y);
+        Activity activity = new Activity(type);
+
+        String facility = XmlSupport.attr(activityElement, "facility");
+        if (facility != null && !facility.isBlank()) {
+            activity.setFacilityId(Id.create(facility, ActivityFacility.class));
+        }
+
+        if (!Double.isNaN(x) && !Double.isNaN(y)) {
+            activity.setCoord(new com.citymodeler.matsim.models.api.Coord(x, y));
+        }
+
+        String link = XmlSupport.attr(activityElement, "link");
+        if (link != null && !link.isBlank()) {
+            activity.setLinkId(Id.create(link, com.citymodeler.matsim.models.network.Link.class));
+        }
+
+        String startTime = XmlSupport.attr(activityElement, "start_time");
+        if (startTime != null && !startTime.isBlank()) {
+            activity.setStartTime(Activity.parseTime(startTime));
+        }
+
+        String endTime = XmlSupport.attr(activityElement, "end_time");
+        if (endTime != null && !endTime.isBlank()) {
+            activity.setEndTime(Activity.parseTime(endTime));
+        }
+
+        String maximumDuration = XmlSupport.attr(activityElement, "maximumDuration");
+        if (maximumDuration == null) {
+            maximumDuration = XmlSupport.attr(activityElement, "maximum_duration");
+        }
+        if (maximumDuration != null && !maximumDuration.isBlank()) {
+            activity.setMaximumDuration(Double.parseDouble(maximumDuration));
+        }
+
         XmlSupport.readAttributes(activityElement, activity.getAttributes());
         return activity;
     }
@@ -195,6 +227,26 @@ public final class PopulationXmlReader {
                     String departureId = XmlSupport.attr(routeElement, "departureId");
                     if (departureId != null) {
                         route.setDepartureId(Id.create(departureId, Departure.class));
+                    }
+                }
+                leg.setRoute(route);
+            } else if (routeType != null) {
+                UnknownRoute route = new UnknownRoute(routeType);
+                var childNodes = routeElement.getChildNodes();
+                for (int i = 0; i < childNodes.getLength(); i++) {
+                    org.w3c.dom.Node childNode = childNodes.item(i);
+                    if (childNode.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE) {
+                        Element childElem = (Element) childNode;
+                        String childName = childElem.getTagName();
+                        String childText = childElem.getTextContent();
+                        if (childText != null && !childText.isBlank()) {
+                            route.setChild(childName, childText.trim());
+                        }
+                    }
+                }
+                for (java.util.Map.Entry<String, String> attr : XmlSupport.attributes(routeElement).entrySet()) {
+                    if (!"type".equals(attr.getKey())) {
+                        route.setAttribute(attr.getKey(), attr.getValue());
                     }
                 }
                 leg.setRoute(route);

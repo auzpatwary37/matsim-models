@@ -178,6 +178,16 @@ final class XmlSupport {
         return element.hasAttribute(name) ? element.getAttribute(name) : null;
     }
 
+    static Map<String, String> attributes(Element element) {
+        Map<String, String> result = new TreeMap<>();
+        var attributes = element.getAttributes();
+        for (int i = 0; i < attributes.getLength(); i++) {
+            var attr = (org.w3c.dom.Attr) attributes.item(i);
+            result.put(attr.getName(), attr.getValue());
+        }
+        return result;
+    }
+
     static double requiredDouble(Element element, String name) {
         String value = attr(element, name);
         if (value == null || value.isBlank()) {

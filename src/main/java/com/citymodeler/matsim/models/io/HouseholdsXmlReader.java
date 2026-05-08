@@ -45,8 +45,7 @@ public final class HouseholdsXmlReader {
             Element membersElement = XmlSupport.child(householdElement, "members");
             if (membersElement != null) {
                 for (Element personIdElement : XmlSupport.children(membersElement, "personId")) {
-                    household.getMemberIds().add(
-                            Id.create(XmlSupport.attr(personIdElement, "ref"), Person.class));
+                    household.addMemberId(Id.create(XmlSupport.attr(personIdElement, "ref"), Person.class));
                 }
             }
 

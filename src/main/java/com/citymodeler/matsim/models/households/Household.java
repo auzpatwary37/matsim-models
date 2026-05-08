@@ -34,10 +34,26 @@ public final class Household {
     }
 
     public List<Id<Person>> getMemberIds() {
-        return memberIds;
+        return Collections.unmodifiableList(memberIds);
+    }
+
+    public void addMemberId(Id<Person> memberId) {
+        memberIds.add(Objects.requireNonNull(memberId, "memberId"));
     }
 
     public Attributes getAttributes() {
         return attributes;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Household that)) return false;
+        return id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return id.hashCode();
     }
 }

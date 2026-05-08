@@ -33,4 +33,16 @@ public final class Departure {
     public void setVehicleId(String vehicleId) {
         this.vehicleId = vehicleId;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Departure that)) return false;
+        return id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return id.hashCode();
+    }
 }

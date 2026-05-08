@@ -34,4 +34,18 @@ abstract class AbstractMatsimEvent implements MatsimEvent {
     String attr(String name) {
         return attributes.get(name);
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof AbstractMatsimEvent that)) return false;
+        return Double.compare(that.time, time) == 0 &&
+               type.equals(that.type) &&
+               attributes.equals(that.attributes);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(time, type, attributes);
+    }
 }

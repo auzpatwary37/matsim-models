@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.config;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,15 +31,15 @@ public final class ConfigGroup {
     }
 
     public Map<String, String> getParams() {
-        return params;
+        return Collections.unmodifiableMap(params);
     }
 
     public void addParamSet(String name, Map<String, String> params) {
-        paramSets.computeIfAbsent(name, ignored -> new ArrayList<>()).add(new LinkedHashMap<>(params));
+        paramSets.computeIfAbsent(name, ignored -> new ArrayList<>()).add(Collections.unmodifiableMap(new LinkedHashMap<>(params)));
     }
 
     public Map<String, List<Map<String, String>>> getParamSets() {
-        return paramSets;
+        return Collections.unmodifiableMap(paramSets);
     }
 
     public void addSubModule(ConfigGroup subModule) {
@@ -46,6 +47,6 @@ public final class ConfigGroup {
     }
 
     public Map<String, ConfigGroup> getSubModules() {
-        return subModules;
+        return Collections.unmodifiableMap(subModules);
     }
 }

@@ -3,6 +3,7 @@ package com.citymodeler.matsim.models.network;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Collections;
 
 import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Id;
@@ -89,7 +90,7 @@ public final class Link {
     }
 
     public Set<String> getAllowedModes() {
-        return allowedModes;
+        return Collections.unmodifiableSet(allowedModes);
     }
 
     public Attributes getAttributes() {
@@ -102,5 +103,17 @@ public final class Link {
 
     void setToNode(Node toNode) {
         this.toNode = toNode;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Link that)) return false;
+        return id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return id.hashCode();
     }
 }

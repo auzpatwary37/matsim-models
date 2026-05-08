@@ -3,6 +3,7 @@ package com.citymodeler.matsim.models.lanes;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Collections;
 
 import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Id;
@@ -13,7 +14,7 @@ public final class Lanes {
     private final Attributes attributes = new Attributes();
 
     public Map<Id<Link>, LanesToLinkAssignment> getLanesToLinkAssignments() {
-        return lanesToLinkAssignments;
+        return Collections.unmodifiableMap(lanesToLinkAssignments);
     }
 
     public Attributes getAttributes() {

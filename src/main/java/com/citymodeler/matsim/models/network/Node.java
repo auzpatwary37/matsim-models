@@ -18,7 +18,7 @@ public final class Node {
 
     public Node(Id<Node> id, Coord coord) {
         this.id = Objects.requireNonNull(id, "id");
-        this.coord = Objects.requireNonNull(coord, "coord");
+        this.coord = coord;
     }
 
     public Id<Node> getId() {
@@ -30,7 +30,7 @@ public final class Node {
     }
 
     public void setCoord(Coord coord) {
-        this.coord = Objects.requireNonNull(coord, "coord");
+        this.coord = coord;
     }
 
     public Map<Id<Link>, Link> getInLinks() {
@@ -51,5 +51,17 @@ public final class Node {
 
     public Attributes getAttributes() {
         return attributes;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Node that)) return false;
+        return id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return id.hashCode();
     }
 }

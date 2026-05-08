@@ -25,4 +25,16 @@ public final class ActivityOption {
     public void setCapacity(double capacity) {
         this.capacity = capacity;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof ActivityOption that)) return false;
+        return type.equals(that.type);
+    }
+
+    @Override
+    public int hashCode() {
+        return type.hashCode();
+    }
 }
