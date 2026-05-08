@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.io;
 
 import java.io.OutputStream;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.StringJoiner;
 
 import org.w3c.dom.Document;
@@ -17,6 +18,7 @@ import com.citymodeler.matsim.models.population.Plan;
 import com.citymodeler.matsim.models.population.PlanElement;
 import com.citymodeler.matsim.models.population.Population;
 import com.citymodeler.matsim.models.population.TransitPassengerRoute;
+import com.citymodeler.matsim.models.population.UnknownRoute;
 
 public final class PopulationXmlWriter {
     public void write(Population population, Path path) {
@@ -136,6 +138,18 @@ public final class PopulationXmlWriter {
                                     if (ptRoute.getDepartureId() != null) {
                                         routeElement.setAttribute("departureId", ptRoute.getDepartureId().toString());
                                     }
+                                }
+                                legElement.appendChild(routeElement);
+                            } else if (leg.getRoute() instanceof UnknownRoute unknownRoute) {
+                                Element routeElement = document.createElement("route");
+                                routeElement.setAttribute("type", unknownRoute.getRouteType());
+                                for (Map.Entry<String, String> attr : unknownRoute.getAttributes().entrySet()) {
+                                    routeElement.setAttribute(attr.getKey(), attr.getValue());
+                                }
+                                for (Map.Entry<String, String> child : unknownRoute.getChildren().entrySet()) {
+                                    Element childElement = document.createElement(child.getKey());
+                                    childElement.setTextContent(child.getValue());
+                                    routeElement.appendChild(childElement);
                                 }
                                 legElement.appendChild(routeElement);
                             }

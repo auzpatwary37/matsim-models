@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<population name="activity-fields-test">
+    <person id="person-link-start">
+        <plan selected="yes">
+            <activity type="home" link="l1" start_time="07:00:00" end_time="08:30:00" maximumDuration="5400" x="0.0" y="0.0" />
+            <leg mode="car">
+                <route type="links" start_link="l1" end_link="l2">
+                    <links>l2</links>
+                </route>
+            </leg>
+            <activity type="work" facility="f1" link="l5" start_time="09:00:00" end_time="17:00:00" maximumDuration="28800" x="1000.0" y="500.0" />
+        </plan>
+    </person>
+    <person id="person-facility-only">
+        <plan selected="yes">
+            <activity type="home" facility="f1" end_time="09:00:00" />
+            <leg mode="walk" />
+            <activity type="shop" facility="f2" end_time="12:00:00" />
+        </plan>
+    </person>
+    <person id="person-link-only">
+        <plan selected="yes">
+            <activity type="home" link="l1" />
+            <leg mode="bike" />
+            <activity type="work" link="l10" />
+        </plan>
+    </person>
+    <person id="person-no-time-fields">
+        <plan selected="yes">
+            <activity type="home" facility="f1" x="0.0" y="0.0" />
+            <leg mode="car" />
+            <activity type="work" facility="f2" x="1000.0" y="500.0" />
+        </plan>
+    </person>
+    <person id="person-seconds-time">
+        <plan selected="yes">
+            <activity type="home" facility="f1" start_time="25200.0" end_time="32400.0" />
+            <leg mode="pt" />
+            <activity type="work" facility="f2" start_time="36000.0" end_time="61200.0" />
+        </plan>
+    </person>
+    <person id="person-unknown-route">
+        <plan selected="yes">
+            <activity type="home" facility="f1" />
+            <leg mode="bike">
+                <route type="GenericRoute" vehicle="bike-001" distance="1500">
+                    <travel_time>300</travel_time>
+                </route>
+            </leg>
+            <activity type="work" facility="f2" />
+        </plan>
+    </person>
+</population>

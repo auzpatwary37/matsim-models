@@ -213,6 +213,103 @@ class PopulationXmlTest {
     }
 
     @Test
+    void readActivityFieldsFixture_linkStartTimeMaximumDuration() {
+        InputStream is = getClass().getClassLoader().getResourceAsStream("fixtures/population-activity-fields.xml");
+        Population population = new PopulationXmlReader().read(is);
+
+        Person p1 = population.getPersons().get(Id.create("person-link-start", Person.class));
+        Plan plan = p1.getSelectedPlan();
+
+        Activity home = (Activity) plan.getPlanElements().get(0);
+        assertEquals("l1", home.getLinkId().toString());
+        assertEquals(7.0 * 3600, home.getStartTime(), 0.01);
+        assertEquals(8.5 * 3600, home.getEndTime(), 0.01);
+        assertEquals(5400.0, home.getMaximumDuration(), 0.01);
+        assertEquals(0.0, home.getCoord().getX(), 0.01);
+        assertEquals(0.0, home.getCoord().getY(), 0.01);
+
+        Activity work = (Activity) plan.getPlanElements().get(2);
+        assertEquals("l5", work.getLinkId().toString());
+        assertEquals(9.0 * 3600, work.getStartTime(), 0.01);
+        assertEquals(17.0 * 3600, work.getEndTime(), 0.01);
+        assertEquals(28800.0, work.getMaximumDuration(), 0.01);
+        assertEquals(1000.0, work.getCoord().getX(), 0.01);
+        assertEquals(500.0, work.getCoord().getY(), 0.01);
+    }
+
+    @Test
+    void readActivityFacilityOnly_noCoords() {
+        InputStream is = getClass().getClassLoader().getResourceAsStream("fixtures/population-activity-fields.xml");
+        Population population = new PopulationXmlReader().read(is);
+
+        Person p2 = population.getPersons().get(Id.create("person-facility-only", Person.class));
+        Activity home = (Activity) p2.getSelectedPlan().getPlanElements().get(0);
+        assertNotNull(home.getFacilityId());
+        assertEquals("f1", home.getFacilityId().toString());
+        assertEquals(9.0 * 3600, home.getEndTime(), 0.01);
+        assertNull(home.getCoord());
+    }
+
+    @Test
+    void readActivityLinkOnly_noFacility() {
+        InputStream is = getClass().getClassLoader().getResourceAsStream("fixtures/population-activity-fields.xml");
+        Population population = new PopulationXmlReader().read(is);
+
+        Person p3 = population.getPersons().get(Id.create("person-link-only", Person.class));
+        Activity home = (Activity) p3.getSelectedPlan().getPlanElements().get(0);
+        assertEquals("l1", home.getLinkId().toString());
+        assertNull(home.getFacilityId());
+        assertFalse(home.hasStartTime());
+        assertFalse(home.hasEndTime());
+    }
+
+    @Test
+    void readActivitySecondsTimeFormat() {
+        InputStream is = getClass().getClassLoader().getResourceAsStream("fixtures/population-activity-fields.xml");
+        Population population = new PopulationXmlReader().read(is);
+
+        Person p5 = population.getPersons().get(Id.create("person-seconds-time", Person.class));
+        Activity home = (Activity) p5.getSelectedPlan().getPlanElements().get(0);
+        assertEquals(25200.0, home.getStartTime(), 0.01);
+        assertEquals(32400.0, home.getEndTime(), 0.01);
+
+        Activity work = (Activity) p5.getSelectedPlan().getPlanElements().get(2);
+        assertEquals(36000.0, work.getStartTime(), 0.01);
+        assertEquals(61200.0, work.getEndTime(), 0.01);
+    }
+
+    @Test
+    void writeAndReadBack_activityLinkStartTimeMaximumDuration() {
+        Population population = new Population();
+        Person person = new Person(Id.create("test", Person.class));
+        Plan plan = new Plan();
+        plan.setSelected(true);
+
+        Activity activity = new Activity(
+                Id.create("f1", com.citymodeler.matsim.models.facilities.ActivityFacility.class),
+                "home", null, 0.0, 0.0);
+        activity.setLinkId(Id.createLinkId("l1"));
+        activity.setStartTime(7.0 * 3600);
+        activity.setEndTime(8.5 * 3600);
+        activity.setMaximumDuration(5400);
+        plan.addPlanElement(activity);
+        person.addPlan(plan);
+        person.setSelectedPlan(plan);
+        population.addPerson(person);
+
+        Path path = tempDir.resolve("activity-fields.xml");
+        new PopulationXmlWriter().write(population, path);
+        Population result = new PopulationXmlReader().read(path);
+
+        Activity roundTripped = (Activity) result.getPersons().get(Id.create("test", Person.class))
+                .getSelectedPlan().getPlanElements().get(0);
+        assertEquals("l1", roundTripped.getLinkId().toString());
+        assertEquals(7.0 * 3600, roundTripped.getStartTime(), 0.01);
+        assertEquals(8.5 * 3600, roundTripped.getEndTime(), 0.01);
+        assertEquals(5400.0, roundTripped.getMaximumDuration(), 0.01);
+    }
+
+    @Test
     void fixture_activityWithoutEndTime_hasNaNEndTime() {
         String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
                 "<population>" +
@@ -394,5 +491,61 @@ class PopulationXmlTest {
         Population result = new PopulationXmlReader().readString(xml);
         Person roundTripped = result.getPersons().get(Id.create("p1", Person.class));
         assertNull(roundTripped.getSelectedPlan().getScore());
+    }
+
+    @Test
+    void fixture_unknownRoute_parsedAndPreserved() {
+        InputStream is = getClass().getClassLoader().getResourceAsStream("fixtures/population-activity-fields.xml");
+        Population population = new PopulationXmlReader().read(is);
+
+        Person person = population.getPersons().get(Id.create("person-unknown-route", Person.class));
+        Leg leg = (Leg) person.getSelectedPlan().getPlanElements().get(1);
+        assertEquals("bike", leg.getMode());
+        assertTrue(leg.getRoute() instanceof UnknownRoute);
+        UnknownRoute route = (UnknownRoute) leg.getRoute();
+        assertEquals("GenericRoute", route.getRouteType());
+        assertEquals("bike-001", route.getAttributes().get("vehicle"));
+        assertEquals("1500", route.getAttributes().get("distance"));
+        assertEquals("300", route.getChildren().get("travel_time"));
+    }
+
+    @Test
+    void unknownRoute_roundTrip() {
+        Population population = new Population();
+        Person person = new Person(Id.create("p1", Person.class));
+        Plan plan = new Plan();
+        plan.setSelected(true);
+        plan.addPlanElement(new Activity(
+                Id.create("f1", com.citymodeler.matsim.models.facilities.ActivityFacility.class),
+                "home", null, 0.0, 0.0));
+        Leg leg = new Leg("bike");
+        UnknownRoute route = new UnknownRoute("GenericRoute");
+        route.setAttribute("vehicle", "bike-001");
+        route.setAttribute("distance", "1500");
+        route.setChild("travel_time", "300");
+        leg.setRoute(route);
+        plan.addPlanElement(leg);
+        plan.addPlanElement(new Activity(
+                Id.create("f2", com.citymodeler.matsim.models.facilities.ActivityFacility.class),
+                "work", null, 0.0, 0.0));
+        person.addPlan(plan);
+        person.setSelectedPlan(plan);
+        population.addPerson(person);
+
+        String xml = new PopulationXmlWriter().writeToString(population);
+        assertTrue(xml.contains("type=\"GenericRoute\""));
+        assertTrue(xml.contains("vehicle=\"bike-001\""));
+        assertTrue(xml.contains("distance=\"1500\""));
+        assertTrue(xml.contains("<travel_time>300</travel_time>"));
+
+        Population result = new PopulationXmlReader().readString(xml);
+        Leg roundTrippedLeg = (Leg) result.getPersons().get(Id.create("p1", Person.class))
+                .getSelectedPlan().getPlanElements().get(1);
+        assertTrue(roundTrippedLeg.getRoute() instanceof UnknownRoute);
+        UnknownRoute roundTrippedRoute = (UnknownRoute) roundTrippedLeg.getRoute();
+        assertEquals("GenericRoute", roundTrippedRoute.getRouteType());
+        assertEquals("bike-001", roundTrippedRoute.getAttributes().get("vehicle"));
+        assertEquals("1500", roundTrippedRoute.getAttributes().get("distance"));
+        assertEquals("300", roundTrippedRoute.getChildren().get("travel_time"));
     }
 }
