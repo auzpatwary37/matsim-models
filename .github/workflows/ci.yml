@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [17]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn clean verify -B
+
+      - name: Verify no MATSim runtime imports
+        run: |
+          if grep -r "import org.matsim" src/main/java; then
+            echo "Error: MATSim runtime imports found in source code"
+            exit 1
+          fi
+          echo "No MATSim runtime imports - OK"
