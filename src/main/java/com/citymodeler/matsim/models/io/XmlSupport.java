@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -36,7 +38,7 @@ final class XmlSupport {
     }
 
     static Document parse(Path path) {
-        try (InputStream inputStream = Files.newInputStream(path)) {
+        try (InputStream inputStream = openInputStream(path)) {
             return parse(inputStream);
         } catch (IOException exception) {
             throw new MatsimParseException("Could not read XML from " + path, exception);
@@ -89,7 +91,7 @@ final class XmlSupport {
     }
 
     static void validate(Path path, String schemaResource) {
-        try (InputStream inputStream = Files.newInputStream(path)) {
+        try (InputStream inputStream = openInputStream(path)) {
             validate(inputStream, schemaResource);
         } catch (IOException exception) {
             throw new MatsimParseException("Could not read XML from " + path, exception);
@@ -125,7 +127,7 @@ final class XmlSupport {
     }
 
     static void write(Document document, Path path) {
-        try (OutputStream outputStream = Files.newOutputStream(path)) {
+        try (OutputStream outputStream = openOutputStream(path)) {
             write(document, outputStream);
         } catch (IOException exception) {
             throw new MatsimWriteException("Could not write XML to " + path, exception);
@@ -230,6 +232,32 @@ final class XmlSupport {
         if (value != null) {
             element.setAttribute(name, value.toString());
         }
+    }
+
+    static InputStream openInputStream(Path path) throws IOException {
+        InputStream inputStream = Files.newInputStream(path);
+        if (path.toString().endsWith(".gz")) {
+            try {
+                return new GZIPInputStream(inputStream);
+            } catch (IOException exception) {
+                inputStream.close();
+                throw exception;
+            }
+        }
+        return inputStream;
+    }
+
+    static OutputStream openOutputStream(Path path) throws IOException {
+        OutputStream outputStream = Files.newOutputStream(path);
+        if (path.toString().endsWith(".gz")) {
+            try {
+                return new GZIPOutputStream(outputStream);
+            } catch (IOException exception) {
+                outputStream.close();
+                throw exception;
+            }
+        }
+        return outputStream;
     }
 
     private static Object convert(String value, String className) {

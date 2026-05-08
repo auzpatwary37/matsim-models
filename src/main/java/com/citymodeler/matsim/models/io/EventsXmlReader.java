@@ -4,7 +4,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,7 +46,7 @@ public final class EventsXmlReader {
         if (validateSchema) {
             XmlSupport.validate(path, SCHEMA);
         }
-        try (InputStream inputStream = Files.newInputStream(path)) {
+        try (InputStream inputStream = XmlSupport.openInputStream(path)) {
             read(inputStream, handler);
         } catch (IOException exception) {
             throw new MatsimParseException("Could not read events from " + path, exception);
@@ -95,7 +94,7 @@ public final class EventsXmlReader {
     public Stream<MatsimEvent> stream(Path path) {
         InputStream inputStream;
         try {
-            inputStream = Files.newInputStream(path);
+            inputStream = XmlSupport.openInputStream(path);
         } catch (IOException exception) {
             throw new MatsimParseException("Could not read events from " + path, exception);
         }

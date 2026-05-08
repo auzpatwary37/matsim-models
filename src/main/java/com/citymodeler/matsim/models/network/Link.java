@@ -27,6 +27,17 @@ public final class Link {
             double length,
             double capacity,
             double freespeed,
+            double numberOfLanes) {
+        this(id, fromNodeId, toNodeId, length, capacity, freespeed, numberOfLanes, null);
+    }
+
+    public Link(
+            Id<Link> id,
+            Id<Node> fromNodeId,
+            Id<Node> toNodeId,
+            double length,
+            double capacity,
+            double freespeed,
             double numberOfLanes,
             Set<String> allowedModes) {
         this.id = Objects.requireNonNull(id, "id");

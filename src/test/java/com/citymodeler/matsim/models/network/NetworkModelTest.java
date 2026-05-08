@@ -70,9 +70,11 @@ class NetworkModelTest {
 
     @Test
     void linkDefaultsAllowedModesToCarWhenUnset() {
+        Link defaultConstructorLink = new Link(Id.createLinkId("l0"), Id.create("n1", Node.class), Id.create("n2", Node.class), 100, 1000, 13.89, 1);
         Link nullModesLink = new Link(Id.createLinkId("l1"), Id.create("n1", Node.class), Id.create("n2", Node.class), 100, 1000, 13.89, 1, null);
         Link emptyModesLink = new Link(Id.createLinkId("l2"), Id.create("n1", Node.class), Id.create("n2", Node.class), 100, 1000, 13.89, 1, Set.of());
 
+        assertEquals(Set.of("car"), defaultConstructorLink.getAllowedModes());
         assertEquals(Set.of("car"), nullModesLink.getAllowedModes());
         assertEquals(Set.of("car"), emptyModesLink.getAllowedModes());
     }

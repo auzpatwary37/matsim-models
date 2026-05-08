@@ -2,7 +2,6 @@ package com.citymodeler.matsim.models.io;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +35,7 @@ public final class PopulationStaxReader {
     }
 
     public void read(Path path, PersonHandler handler) {
-        try (InputStream inputStream = Files.newInputStream(path)) {
+        try (InputStream inputStream = XmlSupport.openInputStream(path)) {
             read(inputStream, handler);
         } catch (IOException exception) {
             throw new MatsimParseException("Could not read population from " + path, exception);
@@ -357,7 +356,7 @@ public final class PopulationStaxReader {
     public Stream<Person> stream(Path path) {
         InputStream inputStream;
         try {
-            inputStream = Files.newInputStream(path);
+            inputStream = XmlSupport.openInputStream(path);
         } catch (IOException exception) {
             throw new MatsimParseException("Could not read population from " + path, exception);
         }
@@ -365,7 +364,10 @@ public final class PopulationStaxReader {
         try {
             XMLStreamReader reader = inputFactory.createXMLStreamReader(inputStream);
             return StreamSupport.stream(new PersonSpliterator(reader), false)
-                    .onClose(() -> closeQuietly(reader));
+                    .onClose(() -> {
+                        closeQuietly(reader);
+                        closeQuietly(inputStream);
+                    });
         } catch (XMLStreamException exception) {
             closeQuietly(inputStream);
             throw new MatsimParseException("Could not create XML stream reader", exception);
