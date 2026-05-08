@@ -182,7 +182,7 @@ final class XmlSupport {
         Map<String, String> result = new TreeMap<>();
         var attributes = element.getAttributes();
         for (int i = 0; i < attributes.getLength(); i++) {
-            var attr = attributes.item(i);
+            var attr = (org.w3c.dom.Attr) attributes.item(i);
             result.put(attr.getName(), attr.getValue());
         }
         return result;

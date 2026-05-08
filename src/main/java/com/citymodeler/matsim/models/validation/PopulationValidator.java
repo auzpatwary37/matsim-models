@@ -6,6 +6,7 @@ import com.citymodeler.matsim.models.population.Activity;
 import com.citymodeler.matsim.models.population.Leg;
 import com.citymodeler.matsim.models.population.Person;
 import com.citymodeler.matsim.models.population.Plan;
+import com.citymodeler.matsim.models.population.PlanElement;
 import com.citymodeler.matsim.models.population.Population;
 
 import java.util.HashSet;

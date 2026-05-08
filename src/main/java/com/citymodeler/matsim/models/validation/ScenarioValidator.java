@@ -38,9 +38,11 @@ public final class ScenarioValidator {
             report.addIssues(networkValidator.getReport().getIssues());
         }
 
-        if (scenario.getPopulation() != null) {
+        if (scenario.getPopulation() != null && !scenario.getPopulation().isEmpty()) {
+            Population pop = new Population();
+            scenario.getPopulation().values().forEach(pop::addPerson);
             PopulationValidator populationValidator = new PopulationValidator(
-                    scenario.getPopulation(),
+                    pop,
                     scenario.getNetwork());
             populationValidator.validate();
             report.addIssues(populationValidator.getReport().getIssues());
@@ -51,7 +53,6 @@ public final class ScenarioValidator {
 
     private void validateCrossDomains() {
         Network network = scenario.getNetwork();
-        Population population = scenario.getPopulation();
         ActivityFacilities facilities = scenario.getActivityFacilities();
         TransitSchedule transitSchedule = scenario.getTransitSchedule();
 

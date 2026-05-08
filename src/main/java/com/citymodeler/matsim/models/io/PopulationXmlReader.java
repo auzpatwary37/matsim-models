@@ -19,6 +19,7 @@ import com.citymodeler.matsim.models.population.PlanElement;
 import com.citymodeler.matsim.models.population.Population;
 import com.citymodeler.matsim.models.population.TransitPassengerRoute;
 import com.citymodeler.matsim.models.population.UnknownRoute;
+import com.citymodeler.matsim.models.transit.Departure;
 import com.citymodeler.matsim.models.transit.TransitLine;
 import com.citymodeler.matsim.models.transit.TransitRoute;
 import com.citymodeler.matsim.models.transit.TransitStopFacility;
@@ -227,7 +228,9 @@ public final class PopulationXmlReader {
                 leg.setRoute(route);
             } else if (routeType != null) {
                 UnknownRoute route = new UnknownRoute(routeType);
-                for (org.w3c.dom.Node childNode : routeElement.getChildNodes()) {
+                var childNodes = routeElement.getChildNodes();
+                for (int i = 0; i < childNodes.getLength(); i++) {
+                    org.w3c.dom.Node childNode = childNodes.item(i);
                     if (childNode.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE) {
                         Element childElem = (Element) childNode;
                         String childName = childElem.getTagName();
