@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.GZIPOutputStream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -103,11 +104,33 @@ class PopulationStaxReaderTest {
         assertTrue(leg2.getRoute() instanceof TransitPassengerRoute);
     }
 
+    @Test
+    void stream_readsGzipPath() throws IOException {
+        Path path = tempDir.resolve("population.xml.gz");
+        gzipFixtureToTemp(path);
+
+        PopulationStaxReader reader = new PopulationStaxReader();
+        List<Person> persons = new ArrayList<>();
+        try (var stream = reader.stream(path)) {
+            stream.forEach(persons::add);
+        }
+
+        assertEquals(2, persons.size());
+        assertEquals("person-1", persons.get(0).getId().toString());
+    }
+
     private void copyFixtureToTemp(Path target) {
         try (var input = getClass().getClassLoader().getResourceAsStream("fixtures/population.xml")) {
             Files.copy(input, target);
         } catch (IOException e) {
             throw new RuntimeException("Failed to copy fixture", e);
+        }
+    }
+
+    private void gzipFixtureToTemp(Path target) throws IOException {
+        try (var input = getClass().getClassLoader().getResourceAsStream("fixtures/population.xml");
+                var output = new GZIPOutputStream(Files.newOutputStream(target))) {
+            input.transferTo(output);
         }
     }
 }

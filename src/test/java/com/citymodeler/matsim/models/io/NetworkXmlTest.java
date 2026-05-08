@@ -6,8 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
+import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
@@ -15,6 +17,9 @@ import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.network.Node;
 
 class NetworkXmlTest {
+    @TempDir
+    Path tempDir;
+
     @Test
     void readsWritesAndReadsNetworkXml() {
         String xml = """
@@ -104,5 +109,17 @@ class NetworkXmlTest {
         Node n1 = network.getNodes().get(Id.create("n1", Node.class));
         assertEquals(0.0, n1.getCoord().getX());
         assertEquals("origin", n1.getAttributes().getAttribute("node-kind"));
+    }
+
+    @Test
+    void writesAndReadsGzipPath() {
+        Network network = new NetworkXmlReader().read(Path.of("src/test/resources/fixtures/network.xml"));
+        Path gzipPath = tempDir.resolve("network.xml.gz");
+
+        new NetworkXmlWriter().write(network, gzipPath);
+        Network roundTripped = new NetworkXmlReader().read(gzipPath);
+
+        assertEquals(network.getNodes().size(), roundTripped.getNodes().size());
+        assertEquals(network.getLinks().size(), roundTripped.getLinks().size());
     }
 }

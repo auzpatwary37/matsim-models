@@ -4,16 +4,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.GZIPOutputStream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import com.citymodeler.matsim.models.io.EventsXmlReader;
 import com.citymodeler.matsim.models.io.MatsimParseException;
 
 class EventsXmlReaderTest {
+    @TempDir
+    Path tempDir;
 
     @Test
     void callbackReadsTypedAndGenericEvents() {
@@ -71,6 +77,19 @@ class EventsXmlReaderTest {
     }
 
     @Test
+    void streamReadsGzipPath() throws IOException {
+        Path gzipPath = gzipFixture("events.xml.gz");
+        EventsXmlReader reader = new EventsXmlReader();
+
+        try (var stream = reader.stream(gzipPath)) {
+            List<MatsimEvent> events = stream.toList();
+
+            assertEquals(9, events.size());
+            assertInstanceOf(ActivityEndEvent.class, events.get(0));
+        }
+    }
+
+    @Test
     void typedHandlerDispatchesSpecificCallbacks() {
         CountingEventHandler handler = new CountingEventHandler();
 
@@ -97,6 +116,15 @@ class EventsXmlReaderTest {
 
     private Path fixturePath() {
         return Path.of("src/test/resources/fixtures/events.xml");
+    }
+
+    private Path gzipFixture(String fileName) throws IOException {
+        Path gzipPath = tempDir.resolve(fileName);
+        try (var inputStream = Files.newInputStream(fixturePath());
+                var outputStream = new GZIPOutputStream(Files.newOutputStream(gzipPath))) {
+            inputStream.transferTo(outputStream);
+        }
+        return gzipPath;
     }
 
     private static final class CountingEventHandler implements MatsimEventHandler {
