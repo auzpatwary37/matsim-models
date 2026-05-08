@@ -87,7 +87,7 @@ class HouseholdsXmlTest {
     void writeHouseholdsWithAttributes() {
         Households households = new Households();
         Household household = new Household(Id.create("h1", Household.class), "50000");
-        household.getMemberIds().add(Id.create("p1", Person.class));
+        household.addMemberId(Id.create("p1", Person.class));
         household.getAttributes().putAttribute("cars", 2);
         households.addHousehold(household);
 

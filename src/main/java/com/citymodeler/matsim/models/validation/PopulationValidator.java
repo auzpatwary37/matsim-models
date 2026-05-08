@@ -9,9 +9,7 @@ import com.citymodeler.matsim.models.population.Plan;
 import com.citymodeler.matsim.models.population.PlanElement;
 import com.citymodeler.matsim.models.population.Population;
 
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public final class PopulationValidator {
     private final Population population;
@@ -59,26 +57,26 @@ public final class PopulationValidator {
                         "Set a selected plan explicitly"));
             }
 
-            Set<Plan> selectedPlans = new HashSet<>();
+            int selectedPlanCount = 0;
             for (Plan plan : person.getPlans()) {
                 if (plan.isSelected()) {
-                    selectedPlans.add(plan);
+                    selectedPlanCount++;
                 }
                 validatePlan(plan, personId);
             }
 
-            if (selectedPlans.size() > 1) {
+            if (selectedPlanCount > 1) {
                 report.addIssue(new ValidationIssue(
                         ValidationSeverity.ERROR,
                         "population",
                         "person-multiple-selected-plans",
-                        "Person " + personId + " has " + selectedPlans.size() + " selected plans",
+                        "Person " + personId + " has " + selectedPlanCount + " selected plans",
                         personId,
                         "Ensure only one plan is selected per person"));
             }
 
-            if (!selectedPlans.isEmpty() && person.getSelectedPlan() != null
-                    && !selectedPlans.contains(person.getSelectedPlan())) {
+            if (selectedPlanCount > 0 && person.getSelectedPlan() != null
+                    && !person.getSelectedPlan().isSelected()) {
                 report.addIssue(new ValidationIssue(
                         ValidationSeverity.WARNING,
                         "population",

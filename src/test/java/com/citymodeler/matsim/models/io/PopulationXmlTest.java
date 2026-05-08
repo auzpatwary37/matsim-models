@@ -21,6 +21,7 @@ import com.citymodeler.matsim.models.population.Person;
 import com.citymodeler.matsim.models.population.Plan;
 import com.citymodeler.matsim.models.population.Population;
 import com.citymodeler.matsim.models.population.TransitPassengerRoute;
+import com.citymodeler.matsim.models.population.UnknownRoute;
 import com.citymodeler.matsim.models.transit.TransitRoute;
 
 class PopulationXmlTest {

@@ -24,8 +24,8 @@ class HouseholdTest {
         Id<Person> p1 = Id.create("p1", Person.class);
         Id<Person> p2 = Id.create("p2", Person.class);
 
-        household.getMemberIds().add(p1);
-        household.getMemberIds().add(p2);
+        household.addMemberId(p1);
+        household.addMemberId(p2);
 
         assertEquals(2, household.getMemberIds().size());
     }

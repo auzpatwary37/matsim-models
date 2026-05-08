@@ -92,12 +92,16 @@ public final class PopulationXmlReader {
     }
 
     private Activity readActivity(Element activityElement) {
-        Id<ActivityFacility> facilityId = Id.create(XmlSupport.attr(activityElement, "facility"), ActivityFacility.class);
         String type = XmlSupport.attr(activityElement, "type");
         double x = XmlSupport.optionalDouble(activityElement, "x", Double.NaN);
         double y = XmlSupport.optionalDouble(activityElement, "y", Double.NaN);
 
-        Activity activity = new Activity(facilityId, type, null, 0.0, 0.0);
+        Activity activity = new Activity(type);
+
+        String facility = XmlSupport.attr(activityElement, "facility");
+        if (facility != null && !facility.isBlank()) {
+            activity.setFacilityId(Id.create(facility, ActivityFacility.class));
+        }
 
         if (!Double.isNaN(x) && !Double.isNaN(y)) {
             activity.setCoord(new com.citymodeler.matsim.models.api.Coord(x, y));

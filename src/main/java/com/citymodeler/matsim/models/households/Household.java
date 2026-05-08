@@ -37,6 +37,10 @@ public final class Household {
         return Collections.unmodifiableList(memberIds);
     }
 
+    public void addMemberId(Id<Person> memberId) {
+        memberIds.add(Objects.requireNonNull(memberId, "memberId"));
+    }
+
     public Attributes getAttributes() {
         return attributes;
     }

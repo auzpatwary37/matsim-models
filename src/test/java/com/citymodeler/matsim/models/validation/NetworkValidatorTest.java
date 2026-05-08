@@ -89,7 +89,7 @@ class NetworkValidatorTest {
         network.addNode(n1);
         network.addNode(n2);
         Link l1 = new Link(Id.create("l1", Link.class), Id.create("n1", Node.class),
-                Id.create("n2", Node.class), 100, 0, 13.9, 1);
+                Id.create("n2", Node.class), 100, 3600, 0, 1);
         network.addLink(l1);
 
         ValidationReport report = NetworkValidator.validate(network);
