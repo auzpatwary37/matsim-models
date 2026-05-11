@@ -1,7 +1,12 @@
 package com.citymodeler.matsim.models.validation;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.Set;
+
+import org.junit.jupiter.api.Test;
 
 import com.citymodeler.matsim.models.api.Coord;
 import com.citymodeler.matsim.models.api.Id;
@@ -9,122 +14,83 @@ import com.citymodeler.matsim.models.network.Link;
 import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.network.Node;
 
-import org.junit.jupiter.api.Test;
-
 class NetworkValidatorTest {
 
-    @Test
-    void validNetwork_noIssues() {
-        Network network = new Network();
-        Node n1 = new Node(Id.create("n1", Node.class), new Coord(0, 0));
-        Node n2 = new Node(Id.create("n2", Node.class), new Coord(100, 0));
-        network.addNode(n1);
-        network.addNode(n2);
-        Link l1 = new Link(Id.create("l1", Link.class), Id.create("n1", Node.class),
-                Id.create("n2", Node.class), 100, 3600, 13.9, 1);
-        network.addLink(l1);
+    private final NetworkValidator validator = new NetworkValidator();
+
+    private Network createValidNetwork() {
+        Network network = new Network("test");
+        Node n1 = network.createNode("n1", 0, 0);
+        Node n2 = network.createNode("n2", 100, 0);
+        network.createLink("l1", "n1", "n2", 100, 1000, 13.89, 1, Set.of("car"));
         network.postProcess();
-
-        ValidationReport report = NetworkValidator.validate(network);
-
-        assertFalse(report.hasErrors());
-        assertFalse(report.hasWarnings());
+        return network;
     }
 
     @Test
-    void linkMissingFromNode_reportsError() {
-        Network network = new Network();
-        Node n2 = new Node(Id.create("n2", Node.class), new Coord(100, 0));
-        network.addNode(n2);
-        Link l1 = new Link(Id.create("l1", Link.class), Id.create("n1", Node.class),
-                Id.create("n2", Node.class), 100, 3600, 13.9, 1);
-        network.addLink(l1);
-
-        ValidationReport report = NetworkValidator.validate(network);
-
-        assertTrue(report.hasErrors());
-        assertEquals(1, report.getErrors().size());
-        assertEquals("link-missing-from-node", report.getErrors().get(0).getCode());
-        assertEquals("l1", report.getErrors().get(0).getObjectId());
+    void validNetworkHasNoIssues() {
+        Network network = createValidNetwork();
+        ValidationReport report = validator.validate(network);
+        assertTrue(report.isEmpty(), report.toString());
     }
 
     @Test
-    void linkMissingToNode_reportsError() {
-        Network network = new Network();
-        Node n1 = new Node(Id.create("n1", Node.class), new Coord(0, 0));
-        network.addNode(n1);
-        Link l1 = new Link(Id.create("l1", Link.class), Id.create("n1", Node.class),
-                Id.create("n2", Node.class), 100, 3600, 13.9, 1);
-        network.addLink(l1);
-
-        ValidationReport report = NetworkValidator.validate(network);
-
-        assertTrue(report.hasErrors());
-        assertEquals(1, report.getErrors().size());
-        assertEquals("link-missing-to-node", report.getErrors().get(0).getCode());
-    }
-
-    @Test
-    void linkNonPositiveLength_reportsError() {
-        Network network = new Network();
-        Node n1 = new Node(Id.create("n1", Node.class), new Coord(0, 0));
-        Node n2 = new Node(Id.create("n2", Node.class), new Coord(100, 0));
-        network.addNode(n1);
-        network.addNode(n2);
-        Link l1 = new Link(Id.create("l1", Link.class), Id.create("n1", Node.class),
-                Id.create("n2", Node.class), -1, 3600, 13.9, 1);
-        network.addLink(l1);
-
-        ValidationReport report = NetworkValidator.validate(network);
-
-        assertTrue(report.hasErrors());
-        assertEquals("link-invalid-length", report.getErrors().get(0).getCode());
-    }
-
-    @Test
-    void linkNonPositiveFreespeed_reportsError() {
-        Network network = new Network();
-        Node n1 = new Node(Id.create("n1", Node.class), new Coord(0, 0));
-        Node n2 = new Node(Id.create("n2", Node.class), new Coord(100, 0));
-        network.addNode(n1);
-        network.addNode(n2);
-        Link l1 = new Link(Id.create("l1", Link.class), Id.create("n1", Node.class),
-                Id.create("n2", Node.class), 100, 3600, 0, 1);
-        network.addLink(l1);
-
-        ValidationReport report = NetworkValidator.validate(network);
-
-        assertTrue(report.hasErrors());
-        assertEquals("link-invalid-freespeed", report.getErrors().get(0).getCode());
-    }
-
-    @Test
-    void linkNegativeCapacity_reportsError() {
-        Network network = new Network();
-        Node n1 = new Node(Id.create("n1", Node.class), new Coord(0, 0));
-        Node n2 = new Node(Id.create("n2", Node.class), new Coord(100, 0));
-        network.addNode(n1);
-        network.addNode(n2);
-        Link l1 = new Link(Id.create("l1", Link.class), Id.create("n1", Node.class),
-                Id.create("n2", Node.class), 100, -1, 13.9, 1);
-        network.addLink(l1);
-
-        ValidationReport report = NetworkValidator.validate(network);
-
-        assertTrue(report.hasErrors());
-        assertEquals("link-negative-capacity", report.getErrors().get(0).getCode());
-    }
-
-    @Test
-    void nodeMissingCoord_reportsWarning() {
+    void missingCoordReportsError() {
         Network network = new Network();
         Node n1 = new Node(Id.create("n1", Node.class), null);
         network.addNode(n1);
+        network.postProcess();
 
-        ValidationReport report = NetworkValidator.validate(network);
+        ValidationReport report = validator.validate(network);
+        assertTrue(report.hasErrors());
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("missing_coord")));
+    }
 
-        assertFalse(report.hasErrors());
+    @Test
+    void selfLoopReportsWarning() {
+        Network network = new Network();
+        Node n1 = network.createNode("n1", 0, 0);
+        Link link = new Link(Id.createLinkId("l1"), n1.getId(), n1.getId(), 100, 1000, 13.89, 1, Set.of("car"));
+        network.addLink(link);
+        network.postProcess();
+
+        ValidationReport report = validator.validate(network);
         assertTrue(report.hasWarnings());
-        assertEquals("node-missing-coord", report.getWarnings().get(0).getCode());
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("self_loop")));
+    }
+
+    @Test
+    void nonpositiveLengthReportsWarning() {
+        Network network = createValidNetwork();
+        Link link = network.getLinks().values().iterator().next();
+        link.setLength(-5);
+
+        ValidationReport report = validator.validate(network);
+        assertTrue(report.hasWarnings());
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("nonpositive_length")));
+    }
+
+    @Test
+    void unresolvedNodesReportsError() {
+        Network network = new Network();
+        Node n1 = network.createNode("n1", 0, 0);
+        Link link = new Link(Id.createLinkId("l1"), n1.getId(), Id.create("missing", Node.class), 100, 1000, 13.89, 1, Set.of("car"));
+        network.addLink(link);
+        // postProcess skipped intentionally to leave nodes unresolved
+
+        ValidationReport report = validator.validate(network);
+        assertTrue(report.hasErrors());
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("unresolved_nodes")));
+    }
+
+    @Test
+    void isolatedNodeReportsInfo() {
+        Network network = new Network();
+        network.createNode("n1", 0, 0);
+        network.postProcess();
+
+        ValidationReport report = validator.validate(network);
+        assertFalse(report.isEmpty());
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("isolated_node")));
     }
 }
