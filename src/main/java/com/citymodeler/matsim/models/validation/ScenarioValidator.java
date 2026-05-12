@@ -33,9 +33,8 @@ public final class ScenarioValidator {
         }
 
         if (scenario.getNetwork() != null) {
-            NetworkValidator networkValidator = new NetworkValidator(scenario.getNetwork());
-            networkValidator.validate();
-            report.addIssues(networkValidator.getReport().getIssues());
+            ValidationReport networkReport = NetworkValidator.validate(scenario.getNetwork());
+            report.addIssues(networkReport.getIssues());
         }
 
         if (scenario.getPopulation() != null && !scenario.getPopulation().isEmpty()) {

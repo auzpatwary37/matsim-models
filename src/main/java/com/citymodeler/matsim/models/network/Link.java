@@ -14,11 +14,11 @@ public final class Link {
     private final Id<Node> toNodeId;
     private Node fromNode;
     private Node toNode;
-    private final double length;
-    private final double capacity;
-    private final double freespeed;
-    private final double numberOfLanes;
-    private final Set<String> allowedModes;
+    private double length;
+    private double capacity;
+    private double freespeed;
+    private double numberOfLanes;
+    private Set<String> allowedModes;
     private final Attributes attributes = new Attributes();
 
     public Link(
@@ -103,6 +103,28 @@ public final class Link {
 
     void setToNode(Node toNode) {
         this.toNode = toNode;
+    }
+
+    public void setLength(double length) {
+        this.length = length;
+    }
+
+    public void setCapacity(double capacity) {
+        this.capacity = capacity;
+    }
+
+    public void setFreespeed(double freespeed) {
+        this.freespeed = freespeed;
+    }
+
+    public void setNumberOfLanes(double numberOfLanes) {
+        this.numberOfLanes = numberOfLanes;
+    }
+
+    public void setAllowedModes(Set<String> allowedModes) {
+        this.allowedModes = allowedModes == null || allowedModes.isEmpty()
+                ? new LinkedHashSet<>(Set.of("car"))
+                : new LinkedHashSet<>(allowedModes);
     }
 
     @Override

@@ -143,8 +143,125 @@ class NetworkModelTest {
     }
 
     @Test
-    void networkAddLinkRejectsNull() {
+    void networkCreateNodeCreatesAndAddsNode() {
         Network network = new Network();
-        assertThrows(NullPointerException.class, () -> network.addLink(null));
+        Node node = network.createNode("n1", 10.0, 20.0);
+
+        assertEquals("n1", node.getId().toString());
+        assertEquals(10.0, node.getCoord().getX());
+        assertEquals(20.0, node.getCoord().getY());
+        assertSame(node, network.getNodes().get(node.getId()));
+    }
+
+    @Test
+    void networkCreateLinkCreatesAndAddsLink() {
+        Network network = new Network();
+        network.createNode("n1", 0, 0);
+        network.createNode("n2", 100, 0);
+        Link link = network.createLink("l1", "n1", "n2", 100, 1000, 13.89, 1, Set.of("car"));
+
+        assertEquals("l1", link.getId().toString());
+        assertSame(link, network.getLinks().get(link.getId()));
+    }
+
+    @Test
+    void networkRemoveLinkRemovesFromNetworkAndNodeRefs() {
+        Network network = new Network();
+        Node n1 = network.createNode("n1", 0, 0);
+        Node n2 = network.createNode("n2", 100, 0);
+        Link link = network.createLink("l1", "n1", "n2", 100, 1000, 13.89, 1, Set.of("car"));
+        network.postProcess();
+
+        assertEquals(1, n1.getOutLinks().size());
+        network.removeLink(link.getId());
+
+        assertNull(network.getLinks().get(link.getId()));
+        assertEquals(0, n1.getOutLinks().size());
+        assertEquals(0, n2.getInLinks().size());
+    }
+
+    @Test
+    void networkRemoveNodeRemovesNodeAndIncidentLinks() {
+        Network network = new Network();
+        network.createNode("n1", 0, 0);
+        network.createNode("n2", 100, 0);
+        network.createLink("l1", "n1", "n2", 100, 1000, 13.89, 1, Set.of("car"));
+        network.postProcess();
+
+        assertEquals(1, network.getLinks().size());
+        network.removeNode(Id.create("n1", Node.class));
+
+        assertNull(network.getNodes().get(Id.create("n1", Node.class)));
+        assertEquals(0, network.getLinks().size());
+    }
+
+    @Test
+    void linkSettersUpdateAttributes() {
+        Link link = new Link(Id.createLinkId("l1"), Id.create("n1", Node.class), Id.create("n2", Node.class), 100, 1000, 13.89, 1, Set.of("car"));
+
+        link.setLength(200);
+        link.setCapacity(2000);
+        link.setFreespeed(20.0);
+        link.setNumberOfLanes(2);
+        link.setAllowedModes(Set.of("car", "bus"));
+
+        assertEquals(200, link.getLength());
+        assertEquals(2000, link.getCapacity());
+        assertEquals(20.0, link.getFreespeed());
+        assertEquals(2, link.getNumberOfLanes());
+        assertEquals(Set.of("car", "bus"), link.getAllowedModes());
+    }
+
+    @Test
+    void createLinkWiresTopologyImmediatelyWithoutPostProcess() {
+        Network network = new Network("test");
+        Node n1 = network.createNode("n1", 0, 0);
+        Node n2 = network.createNode("n2", 100, 0);
+        Link link = network.createLink("l1", "n1", "n2", 100, 1000, 13.89, 1, Set.of("car"));
+
+        assertSame(n1, link.getFromNode());
+        assertSame(n2, link.getToNode());
+        assertSame(link, n1.getOutLinks().get(link.getId()));
+        assertSame(link, n2.getInLinks().get(link.getId()));
+    }
+
+    @Test
+    void removeNodeRemovesIncidentLinksWithoutPostProcess() {
+        Network network = new Network();
+        network.createNode("n1", 0, 0);
+        network.createNode("n2", 100, 0);
+        network.createLink("l1", "n1", "n2", 100, 1000, 13.89, 1, Set.of("car"));
+
+        network.removeNode(Id.create("n1", Node.class));
+        assertNull(network.getNodes().get(Id.create("n1", Node.class)));
+        assertEquals(0, network.getLinks().size());
+        assertNull(network.getLinks().get(Id.create("l1", Link.class)));
+    }
+
+    @Test
+    void createNodeRejectsDuplicateId() {
+        Network network = new Network();
+        network.createNode("n1", 0, 0);
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> network.createNode("n1", 10, 20));
+        assertTrue(ex.getMessage().contains("n1"));
+    }
+
+    @Test
+    void addNodeRejectsDuplicateId() {
+        Network network = new Network();
+        Node n1 = new Node(Id.create("n1", Node.class), new Coord(0, 0));
+        network.addNode(n1);
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> network.addNode(new Node(Id.create("n1", Node.class), new Coord(10, 20))));
+        assertTrue(ex.getMessage().contains("n1"));
+    }
+
+    @Test
+    void addLinkRejectsDuplicateId() {
+        Network network = new Network();
+        network.createNode("n1", 0, 0);
+        network.createNode("n2", 100, 0);
+        network.createLink("l1", "n1", "n2", 100, 1000, 13.89, 1, Set.of("car"));
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> network.createLink("l1", "n1", "n2", 200, 2000, 13.89, 2, Set.of("bus")));
+        assertTrue(ex.getMessage().contains("l1"));
     }
 }
