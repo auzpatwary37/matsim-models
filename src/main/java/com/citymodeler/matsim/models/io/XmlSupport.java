@@ -65,7 +65,7 @@ final class XmlSupport {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setXIncludeAware(false);
             requireFeature(factory, XMLConstants.FEATURE_SECURE_PROCESSING, true);
-            requireFeature(factory, "http://apache.org/xml/features/disallow-doctype-decl", true);
+            requireFeature(factory, "http://apache.org/xml/features/disallow-doctype-decl", false);
             requireFeature(factory, "http://xml.org/sax/features/external-general-entities", false);
             requireFeature(factory, "http://xml.org/sax/features/external-parameter-entities", false);
             requireFeature(factory, "http://apache.org/xml/features/nonvalidating/load-external-dtd", false);

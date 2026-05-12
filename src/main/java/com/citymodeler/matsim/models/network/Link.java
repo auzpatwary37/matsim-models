@@ -26,10 +26,10 @@ public final class Link {
             Id<Node> fromNodeId,
             Id<Node> toNodeId,
             double length,
-            double capacity,
             double freespeed,
+            double capacity,
             double numberOfLanes) {
-        this(id, fromNodeId, toNodeId, length, capacity, freespeed, numberOfLanes, null);
+        this(id, fromNodeId, toNodeId, length, freespeed, capacity, numberOfLanes, null);
     }
 
     public Link(
@@ -37,16 +37,16 @@ public final class Link {
             Id<Node> fromNodeId,
             Id<Node> toNodeId,
             double length,
-            double capacity,
             double freespeed,
+            double capacity,
             double numberOfLanes,
             Set<String> allowedModes) {
         this.id = Objects.requireNonNull(id, "id");
         this.fromNodeId = Objects.requireNonNull(fromNodeId, "fromNodeId");
         this.toNodeId = Objects.requireNonNull(toNodeId, "toNodeId");
         this.length = length;
-        this.capacity = capacity;
         this.freespeed = freespeed;
+        this.capacity = capacity;
         this.numberOfLanes = numberOfLanes;
         this.allowedModes = allowedModes == null || allowedModes.isEmpty()
                 ? new LinkedHashSet<>(Set.of("car"))

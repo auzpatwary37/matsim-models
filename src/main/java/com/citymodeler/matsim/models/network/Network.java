@@ -66,11 +66,11 @@ public final class Network {
 
     public Link createLink(
             String linkId, String fromNodeId, String toNodeId,
-            double length, double capacity, double freespeed, double numberOfLanes, Set<String> allowedModes) {
+            double length, double freespeed, double capacity, double numberOfLanes, Set<String> allowedModes) {
         Id<Link> lid = Id.create(linkId, Link.class);
         Id<Node> fromId = Id.create(fromNodeId, Node.class);
         Id<Node> toId = Id.create(toNodeId, Node.class);
-        Link link = new Link(lid, fromId, toId, length, capacity, freespeed, numberOfLanes, allowedModes);
+        Link link = new Link(lid, fromId, toId, length, freespeed, capacity, numberOfLanes, allowedModes);
         addLink(link);
         wireLink(link);
         return link;

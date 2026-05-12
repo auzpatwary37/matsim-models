@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -81,7 +82,7 @@ class NetworkXmlTest {
     }
 
     @Test
-    void rejectsDoctypeDeclarations() {
+    void allowsDoctypeDeclarationsWithoutResolvingExternalEntities() {
         String xml = """
                 <!DOCTYPE network [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
                 <network>
@@ -92,7 +93,7 @@ class NetworkXmlTest {
                 </network>
                 """;
 
-        assertThrows(MatsimModelException.class, () -> new NetworkXmlReader().read(xml));
+        assertDoesNotThrow(() -> new NetworkXmlReader().read(xml));
     }
 
     @Test
