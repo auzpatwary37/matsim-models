@@ -12,7 +12,6 @@ MATSim Models is a pure Java 17 library providing POJOs and XML I/O for MATSim f
 
 - **MATSim-compatible domain models**: Pure Java POJOs for network, population, transit, config, and events
 - **XML readers and writers**: Read/write MATSim 2025.0 XML format; unknown route types and attributes are preserved round-trip
-- **No MATSim dependency**: Zero runtime dependencies on MATSim
 - **Apache 2.0 licensed**: Reusable by any project
 - **Streaming support**: Efficient processing of large event files
 - **Modern Java**: Built on Java 17 with records and pattern matching
@@ -244,10 +243,9 @@ network.postProcess();
 
 ## Design Principles
 
-1. **No MATSim dependency**: This library has zero runtime dependencies on MATSim.
-2. **Apache 2.0 licensed**: Reusable by any project.
-3. **Java 17**: Uses modern Java features (records, sealed classes, pattern matching).
-4. **Streaming support**: Efficient processing of large files.
+1. **Apache 2.0 licensed**: Reusable by any project.
+2. **Java 17**: Uses modern Java features (records, sealed classes, pattern matching).
+3. **Streaming support**: Efficient processing of large files.
 
 ## Integration
 
