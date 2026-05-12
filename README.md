@@ -243,10 +243,9 @@ network.postProcess();
 
 ## Design Principles
 
-1. **No MATSim dependency**: This library has zero runtime dependencies on MATSim.
-2. **Apache 2.0 licensed**: Reusable by any project.
-3. **Java 17**: Uses modern Java features (records, sealed classes, pattern matching).
-4. **Streaming support**: Efficient processing of large files.
+1. **Apache 2.0 licensed**: Reusable by any project.
+2. **Java 17**: Uses modern Java features (records, sealed classes, pattern matching).
+3. **Streaming support**: Efficient processing of large files.
 
 ## Integration
 
