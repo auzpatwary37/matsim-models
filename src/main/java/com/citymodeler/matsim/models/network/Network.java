@@ -44,11 +44,17 @@ public final class Network {
 
     public void addNode(Node node) {
         Objects.requireNonNull(node, "node");
+        if (nodes.containsKey(node.getId())) {
+            throw new IllegalArgumentException("Node " + node.getId() + " already exists in network");
+        }
         nodes.put(node.getId(), node);
     }
 
     public void addLink(Link link) {
         Objects.requireNonNull(link, "link");
+        if (links.containsKey(link.getId())) {
+            throw new IllegalArgumentException("Link " + link.getId() + " already exists in network");
+        }
         links.put(link.getId(), link);
     }
 
@@ -61,12 +67,12 @@ public final class Network {
     public Link createLink(
             String linkId, String fromNodeId, String toNodeId,
             double length, double capacity, double freespeed, double numberOfLanes, Set<String> allowedModes) {
-        Link link = new Link(
-            Id.create(linkId, Link.class),
-            Id.create(fromNodeId, Node.class),
-            Id.create(toNodeId, Node.class),
-            length, capacity, freespeed, numberOfLanes, allowedModes);
+        Id<Link> lid = Id.create(linkId, Link.class);
+        Id<Node> fromId = Id.create(fromNodeId, Node.class);
+        Id<Node> toId = Id.create(toNodeId, Node.class);
+        Link link = new Link(lid, fromId, toId, length, capacity, freespeed, numberOfLanes, allowedModes);
         addLink(link);
+        wireLink(link);
         return link;
     }
 
@@ -78,6 +84,12 @@ public final class Network {
             }
             for (Link outLink : new LinkedHashMap<>(node.outLinks()).values()) {
                 removeLink(outLink.getId());
+            }
+        }
+        // Fallback: remove any links that still reference this node by endpoint ID
+        for (Link link : new LinkedHashMap<>(links).values()) {
+            if (link.getFromNodeId().equals(nodeId) || link.getToNodeId().equals(nodeId)) {
+                removeLink(link.getId());
             }
         }
     }
@@ -93,6 +105,19 @@ public final class Network {
             if (toNode != null) {
                 toNode.inLinks().remove(linkId);
             }
+        }
+    }
+
+    private void wireLink(Link link) {
+        Node fromNode = nodes.get(link.getFromNodeId());
+        Node toNode = nodes.get(link.getToNodeId());
+        if (fromNode != null) {
+            link.setFromNode(fromNode);
+            fromNode.outLinks().put(link.getId(), link);
+        }
+        if (toNode != null) {
+            link.setToNode(toNode);
+            toNode.inLinks().put(link.getId(), link);
         }
     }
 

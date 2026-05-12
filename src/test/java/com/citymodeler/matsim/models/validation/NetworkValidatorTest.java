@@ -60,14 +60,88 @@ class NetworkValidatorTest {
     }
 
     @Test
-    void nonpositiveLengthReportsWarning() {
+    void staticValidateConvenienceApiStillWorks() {
+        Network network = createValidNetwork();
+        ValidationReport report = NetworkValidator.validate(network);
+        assertTrue(report.isEmpty(), report.toString());
+    }
+
+    @Test
+    void instanceValidateWithConstructorNetworkStillWorks() {
+        Network network = createValidNetwork();
+        NetworkValidator validator = new NetworkValidator(network);
+        validator.validate();
+        assertFalse(validator.getReport().hasErrors());
+    }
+
+    @Test
+    void missingFromNodeByIdReportsErrorBeforePostProcess() {
+        Network network = new Network();
+        Node toNode = network.createNode("n2", 0, 0);
+        Link link = new Link(Id.createLinkId("l1"), Id.create("missing", Node.class), toNode.getId(), 100, 1000, 13.89, 1, Set.of("car"));
+        network.addLink(link);
+        // Do NOT call postProcess — we want to validate raw endpoint IDs
+
+        ValidationReport report = validator.validate(network);
+        assertTrue(report.hasErrors());
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("link-missing-from-node")));
+    }
+
+    @Test
+    void missingToNodeByIdReportsErrorBeforePostProcess() {
+        Network network = new Network();
+        Node n1 = network.createNode("n1", 0, 0);
+        Link link = new Link(Id.createLinkId("l1"), n1.getId(), Id.create("n2", Node.class), 100, 1000, 13.89, 1, Set.of("car"));
+        network.addLink(link);
+        // Missing "n2" in network; do NOT call postProcess
+
+        ValidationReport report = validator.validate(network);
+        assertTrue(report.hasErrors());
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("link-missing-to-node")));
+    }
+
+    @Test
+    void nonpositiveLengthReportsError() {
         Network network = createValidNetwork();
         Link link = network.getLinks().values().iterator().next();
         link.setLength(-5);
 
         ValidationReport report = validator.validate(network);
-        assertTrue(report.hasWarnings());
+        assertTrue(report.hasErrors());
         assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("nonpositive_length")));
+    }
+
+    @Test
+    void nonpositiveFreespeedReportsError() {
+        Network network = createValidNetwork();
+        Link link = network.getLinks().values().iterator().next();
+        link.setFreespeed(-1);
+
+        ValidationReport report = validator.validate(network);
+        assertTrue(report.hasErrors());
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("nonpositive_freespeed")));
+    }
+
+    @Test
+    void nonpositiveCapacityReportsError() {
+        Network network = createValidNetwork();
+        Link link = network.getLinks().values().iterator().next();
+        link.setCapacity(-1);
+
+        ValidationReport report = validator.validate(network);
+        assertTrue(report.hasErrors());
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("nonpositive_capacity")));
+    }
+
+    @Test
+    void nonpositiveLanesReportsError() {
+        Network network = createValidNetwork();
+        Link link = network.getLinks().values().iterator().next();
+        link.setNumberOfLanes(-1);
+
+        ValidationReport report = validator.validate(network);
+        assertTrue(report.hasErrors());
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("nonpositive_lanes")));
     }
 
     @Test
