@@ -61,12 +61,6 @@ final class XmlSupport {
     }
 
     static Document parse(InputStream inputStream) {
-        final byte[] xml;
-        try {
-            xml = inputStream.readAllBytes();
-        } catch (IOException exception) {
-            throw new MatsimParseException("Could not read XML", exception);
-        }
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setXIncludeAware(false);
@@ -79,7 +73,7 @@ final class XmlSupport {
             requireAttribute(factory, XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
             factory.setExpandEntityReferences(false);
             Document document = factory.newDocumentBuilder()
-                    .parse(new ByteArrayInputStream(stripLegacyDoctype(xml)));
+                    .parse(LegacyDoctypeStripper.open(inputStream));
             document.getDocumentElement().normalize();
             return document;
         } catch (IOException | ParserConfigurationException | SAXException exception) {
@@ -97,158 +91,6 @@ final class XmlSupport {
         }
     }
 
-    /**
-     * Removes a legacy MATSIM {@code <!DOCTYPE ...>} declaration before the
-     * hardened parser sees the document. The declaration is scanned
-     * structurally and excised; the referenced DTD is never fetched and
-     * external entity resolution stays disabled in the parser. Internal DTD
-     * subsets are refused explicitly rather than stripped, because rewriting
-     * them would require resolving entities.
-     */
-    static byte[] stripLegacyDoctype(byte[] xml) {
-        int n = xml.length;
-        int i = 0;
-        if (n >= 3 && (xml[0] & 0xFF) == 0xEF && (xml[1] & 0xFF) == 0xBB && (xml[2] & 0xFF) == 0xBF) {
-            i = 3;
-        }
-        while (i < n) {
-            int b = xml[i] & 0xFF;
-            if (isXmlWhitespace(b)) {
-                i++;
-                continue;
-            }
-            if (b != '<') {
-                return xml;
-            }
-            if (startsWith(xml, i, "<!--")) {
-                int close = indexOfAscii(xml, i + 4, "-->");
-                if (close < 0) {
-                    return xml;
-                }
-                i = close + 3;
-                continue;
-            }
-            if (startsWith(xml, i, "<?")) {
-                int close = indexOfAscii(xml, i + 2, "?>");
-                if (close < 0) {
-                    return xml;
-                }
-                i = close + 2;
-                continue;
-            }
-            if (startsWithCaseInsensitive(xml, i, "<!DOCTYPE")) {
-                int end = scanLegacyDoctypeEnd(xml, i + "<!DOCTYPE".length());
-                byte[] stripped = new byte[n - (end - i)];
-                System.arraycopy(xml, 0, stripped, 0, i);
-                System.arraycopy(xml, end, stripped, i, n - end);
-                return stripped;
-            }
-            return xml;
-        }
-        return xml;
-    }
-
-    private static int scanLegacyDoctypeEnd(byte[] xml, int i) {
-        int n = xml.length;
-        while (i < n && isXmlWhitespace(xml[i] & 0xFF)) {
-            i++;
-        }
-        if (i >= n || !isNameStart(xml[i] & 0xFF)) {
-            throw new MatsimParseException(
-                    "Malformed legacy DOCTYPE declaration: missing document element name.");
-        }
-        i++;
-        while (i < n && isNameChar(xml[i] & 0xFF)) {
-            i++;
-        }
-        while (i < n) {
-            int b = xml[i] & 0xFF;
-            if (isXmlWhitespace(b)) {
-                i++;
-            } else if (b == '>') {
-                return i + 1;
-            } else if (b == '"' || b == '\'') {
-                int close = i + 1;
-                while (close < n && (xml[close] & 0xFF) != b) {
-                    close++;
-                }
-                if (close >= n) {
-                    throw new MatsimParseException(
-                            "Malformed legacy DOCTYPE declaration: unterminated quoted string.");
-                }
-                i = close + 1;
-            } else if (b == '[') {
-                throw new MatsimParseException(
-                        "Unsupported legacy DOCTYPE declaration: internal DTD subset found. "
-                                + "Remove the DTD block from the file; external DTDs are never loaded.");
-            } else if (b == ']') {
-                throw new MatsimParseException(
-                        "Malformed legacy DOCTYPE declaration: unexpected ']' outside an internal subset.");
-            } else if (isNameStart(b)) {
-                i++;
-                while (i < n && isNameChar(xml[i] & 0xFF)) {
-                    i++;
-                }
-            } else {
-                throw new MatsimParseException(
-                        "Malformed legacy DOCTYPE declaration: unexpected character.");
-            }
-        }
-        throw new MatsimParseException("Malformed legacy DOCTYPE declaration: missing closing '>'.");
-    }
-
-    private static boolean isXmlWhitespace(int b) {
-        return b == ' ' || b == '\t' || b == '\r' || b == '\n';
-    }
-
-    private static boolean isNameStart(int b) {
-        return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || b == '_';
-    }
-
-    private static boolean isNameChar(int b) {
-        return isNameStart(b) || (b >= '0' && b <= '9') || b == '.' || b == '-' || b == ':';
-    }
-
-    private static boolean startsWith(byte[] xml, int at, String token) {
-        if (at + token.length() > xml.length) {
-            return false;
-        }
-        for (int k = 0; k < token.length(); k++) {
-            if ((xml[at + k] & 0xFF) != (byte) token.charAt(k)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static boolean startsWithCaseInsensitive(byte[] xml, int at, String asciiToken) {
-        if (at + asciiToken.length() > xml.length) {
-            return false;
-        }
-        for (int k = 0; k < asciiToken.length(); k++) {
-            if (Character.toUpperCase(xml[at + k] & 0xFF) != asciiToken.charAt(k)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static int indexOfAscii(byte[] xml, int from, String token) {
-        for (int i = from; i <= xml.length - token.length(); i++) {
-            boolean matched = true;
-            for (int k = 0; k < token.length(); k++) {
-                if ((xml[i + k] & 0xFF) != (byte) token.charAt(k)) {
-                    matched = false;
-                    break;
-                }
-            }
-            if (matched) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     static void validate(Path path, String schemaResource) {
         try (InputStream inputStream = openInputStream(path)) {
             validate(inputStream, schemaResource);
@@ -258,15 +100,15 @@ final class XmlSupport {
     }
 
     static void validate(InputStream inputStream, String schemaResource) {
+        final InputStream stripped;
+        try {
+            stripped = LegacyDoctypeStripper.open(inputStream);
+        } catch (IOException exception) {
+            throw new MatsimValidationException("Could not read XML", exception);
+        }
         try (InputStream schemaStream = XmlSupport.class.getResourceAsStream(schemaResource)) {
             if (schemaStream == null) {
                 throw new MatsimValidationException("Schema resource not found: " + schemaResource);
-            }
-            final byte[] xml;
-            try {
-                xml = inputStream.readAllBytes();
-            } catch (IOException exception) {
-                throw new MatsimValidationException("Could not read XML", exception);
             }
             var schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
             schemaFactory.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
@@ -275,7 +117,7 @@ final class XmlSupport {
             var validator = schema.newValidator();
             validator.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
             validator.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
-            validator.validate(new StreamSource(new ByteArrayInputStream(stripLegacyDoctype(xml))));
+            validator.validate(new StreamSource(stripped));
         } catch (MatsimValidationException exception) {
             throw exception;
         } catch (Exception exception) {
