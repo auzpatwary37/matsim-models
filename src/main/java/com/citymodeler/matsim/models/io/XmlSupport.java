@@ -72,7 +72,8 @@ final class XmlSupport {
             requireAttribute(factory, XMLConstants.ACCESS_EXTERNAL_DTD, "");
             requireAttribute(factory, XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
             factory.setExpandEntityReferences(false);
-            Document document = factory.newDocumentBuilder().parse(inputStream);
+            Document document = factory.newDocumentBuilder()
+                    .parse(LegacyDoctypeStripper.open(inputStream));
             document.getDocumentElement().normalize();
             return document;
         } catch (IOException | ParserConfigurationException | SAXException exception) {
@@ -99,6 +100,12 @@ final class XmlSupport {
     }
 
     static void validate(InputStream inputStream, String schemaResource) {
+        final InputStream stripped;
+        try {
+            stripped = LegacyDoctypeStripper.open(inputStream);
+        } catch (IOException exception) {
+            throw new MatsimValidationException("Could not read XML", exception);
+        }
         try (InputStream schemaStream = XmlSupport.class.getResourceAsStream(schemaResource)) {
             if (schemaStream == null) {
                 throw new MatsimValidationException("Schema resource not found: " + schemaResource);
@@ -110,7 +117,7 @@ final class XmlSupport {
             var validator = schema.newValidator();
             validator.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
             validator.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
-            validator.validate(new StreamSource(inputStream));
+            validator.validate(new StreamSource(stripped));
         } catch (MatsimValidationException exception) {
             throw exception;
         } catch (Exception exception) {
