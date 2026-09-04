@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -222,21 +224,47 @@ final class XmlSupport {
     }
 
     /**
-     * Accepts plain seconds (e.g. "3600.0") or MATSim clock time "HH:MM:SS[.sss]"
-     * (hours may exceed 24 for services running past midnight) and returns seconds.
+     * Strict MATSim clock-time grammar: {@code H+:MM[:SS[.fraction]]}. Hours are
+     * an unbounded non-negative integer (services may run past midnight or span
+     * multi-day horizons); minutes and seconds are exactly two digits in 00..59;
+     * the fraction, when present, attaches to the seconds field only.
+     */
+    private static final Pattern CLOCK_TIME_PATTERN =
+            Pattern.compile("^(\\d+):([0-5]\\d)(?::([0-5]\\d)(\\.\\d+)?)?$");
+
+    /**
+     * Accepts plain seconds (e.g. "3600.0", as serialized by this library's
+     * writers) or a strict MATSim clock time "HH:MM:SS[.fraction]" and returns
+     * seconds. Malformed clock values (out-of-range minutes/seconds, signed or
+     * non-numeric fields, internal whitespace, trailing fields) are rejected
+     * with a {@link MatsimModelException}.
      */
     static double parseClockTimeOrSeconds(String value) {
         String trimmed = value.trim();
         if (trimmed.indexOf(':') < 0) {
-            return Double.parseDouble(trimmed);
+            double seconds;
+            try {
+                seconds = Double.parseDouble(trimmed);
+            } catch (NumberFormatException e) {
+                throw new MatsimModelException("Unsupported time value '" + value
+                        + "'; expected seconds or HH:MM:SS");
+            }
+            if (Double.isNaN(seconds) || Double.isInfinite(seconds)) {
+                throw new MatsimModelException("Unsupported time value '" + value
+                        + "'; expected seconds or HH:MM:SS");
+            }
+            return seconds;
         }
-        String[] parts = trimmed.split(":");
-        if (parts.length < 2 || parts.length > 3) {
-            throw new MatsimModelException("Unsupported time value '" + value + "'; expected seconds or HH:MM:SS");
+        Matcher matcher = CLOCK_TIME_PATTERN.matcher(trimmed);
+        if (!matcher.matches()) {
+            throw new MatsimModelException("Unsupported time value '" + value
+                    + "'; expected seconds or HH:MM:SS with minutes and seconds in 00..59");
         }
-        double hours = Double.parseDouble(parts[0]);
-        double minutes = Double.parseDouble(parts[1]);
-        double seconds = parts.length == 3 ? Double.parseDouble(parts[2]) : 0.0;
+        long hours = Long.parseLong(matcher.group(1));
+        int minutes = Integer.parseInt(matcher.group(2));
+        double seconds = matcher.group(3) == null
+                ? 0.0
+                : Double.parseDouble(matcher.group(3) + (matcher.group(4) == null ? "" : matcher.group(4)));
         return hours * 3600.0 + minutes * 60.0 + seconds;
     }
 

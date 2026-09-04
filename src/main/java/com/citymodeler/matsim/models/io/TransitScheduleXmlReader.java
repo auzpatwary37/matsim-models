@@ -87,7 +87,7 @@ public final class TransitScheduleXmlReader {
                 Element profileElement = XmlSupport.child(routeElement, "routeProfile");
                 if (profileElement != null) {
                     for (Element stopElement : XmlSupport.children(profileElement, "stop")) {
-                        route.addStop(                        new TransitRouteStop(
+                        route.addStop(new TransitRouteStop(
                                 Id.create(XmlSupport.attr(stopElement, "refId"), TransitStopFacility.class),
                                 XmlSupport.optionalClockTimeOrSeconds(stopElement, "arrivalOffset", 0.0),
                                 XmlSupport.optionalClockTimeOrSeconds(stopElement, "departureOffset", 0.0),
