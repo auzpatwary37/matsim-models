@@ -208,6 +208,38 @@ final class XmlSupport {
         return value == null || value.isBlank() ? defaultValue : Double.parseDouble(value);
     }
 
+    static double clockTimeOrSeconds(Element element, String name) {
+        String value = attr(element, name);
+        if (value == null || value.isBlank()) {
+            throw new MatsimModelException("Missing required numeric attribute: " + name);
+        }
+        return parseClockTimeOrSeconds(value);
+    }
+
+    static double optionalClockTimeOrSeconds(Element element, String name, double defaultValue) {
+        String value = attr(element, name);
+        return value == null || value.isBlank() ? defaultValue : parseClockTimeOrSeconds(value);
+    }
+
+    /**
+     * Accepts plain seconds (e.g. "3600.0") or MATSim clock time "HH:MM:SS[.sss]"
+     * (hours may exceed 24 for services running past midnight) and returns seconds.
+     */
+    static double parseClockTimeOrSeconds(String value) {
+        String trimmed = value.trim();
+        if (trimmed.indexOf(':') < 0) {
+            return Double.parseDouble(trimmed);
+        }
+        String[] parts = trimmed.split(":");
+        if (parts.length < 2 || parts.length > 3) {
+            throw new MatsimModelException("Unsupported time value '" + value + "'; expected seconds or HH:MM:SS");
+        }
+        double hours = Double.parseDouble(parts[0]);
+        double minutes = Double.parseDouble(parts[1]);
+        double seconds = parts.length == 3 ? Double.parseDouble(parts[2]) : 0.0;
+        return hours * 3600.0 + minutes * 60.0 + seconds;
+    }
+
     static boolean optionalBoolean(Element element, String name, boolean defaultValue) {
         String value = attr(element, name);
         return value == null || value.isBlank() ? defaultValue : Boolean.parseBoolean(value);
