@@ -51,6 +51,9 @@ public final class TransitScheduleXmlReader {
                         new Coord(XmlSupport.requiredDouble(stopElement, "x"), XmlSupport.requiredDouble(stopElement, "y")),
                         XmlSupport.optionalBoolean(stopElement, "isBlocking", false));
                 String linkId = XmlSupport.attr(stopElement, "linkId");
+                if (linkId == null || linkId.isBlank()) {
+                    linkId = XmlSupport.attr(stopElement, "linkRefId");
+                }
                 if (linkId != null && !linkId.isBlank()) {
                     facility.setLinkId(Id.create(linkId, Link.class));
                 }
@@ -84,10 +87,10 @@ public final class TransitScheduleXmlReader {
                 Element profileElement = XmlSupport.child(routeElement, "routeProfile");
                 if (profileElement != null) {
                     for (Element stopElement : XmlSupport.children(profileElement, "stop")) {
-                        route.addStop(new TransitRouteStop(
+                        route.addStop(                        new TransitRouteStop(
                                 Id.create(XmlSupport.attr(stopElement, "refId"), TransitStopFacility.class),
-                                XmlSupport.optionalDouble(stopElement, "arrivalOffset", 0.0),
-                                XmlSupport.optionalDouble(stopElement, "departureOffset", 0.0),
+                                XmlSupport.optionalClockTimeOrSeconds(stopElement, "arrivalOffset", 0.0),
+                                XmlSupport.optionalClockTimeOrSeconds(stopElement, "departureOffset", 0.0),
                                 XmlSupport.optionalBoolean(stopElement, "awaitDeparture", false)));
                     }
                 }
@@ -96,7 +99,7 @@ public final class TransitScheduleXmlReader {
                     for (Element departureElement : XmlSupport.children(departuresElement, "departure")) {
                         Departure departure = new Departure(
                                 Id.create(XmlSupport.attr(departureElement, "id"), Departure.class),
-                                XmlSupport.requiredDouble(departureElement, "departureTime"));
+                                XmlSupport.clockTimeOrSeconds(departureElement, "departureTime"));
                         departure.setVehicleId(XmlSupport.attr(departureElement, "vehicleRefId"));
                         route.addDeparture(departure);
                     }
