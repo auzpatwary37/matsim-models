@@ -132,6 +132,34 @@ class LegacyDoctypeStripperTest {
     }
 
     @Test
+    void doctypeKeywordSplitAcrossChunkBoundaryIsStillRemoved() throws IOException {
+        // The '<' of the DOCTYPE lands three bytes before the end of the first
+        // read chunk, so the first read contains only "<!D" of the keyword.
+        int doctypeOffset = LegacyDoctypeStripper.READ_CHUNK - 3;
+        String pad = "\n".repeat(doctypeOffset);
+        byte[] raw = (pad + BARE_DOCTYPE + BODY).getBytes(StandardCharsets.UTF_8);
+        assertTrue(new String(raw, doctypeOffset, 3, StandardCharsets.UTF_8).equals("<!D"),
+                "test must place a partial DOCTYPE keyword at the chunk boundary");
+
+        String result = drain(LegacyDoctypeStripper.open(new ByteArrayInputStream(raw)));
+
+        assertEquals(pad + BODY, result, "partial keyword at chunk boundary must not abort the scan");
+    }
+
+    @Test
+    void loneOpeningBraceAtChunkBoundaryIsNotAMisread() throws IOException {
+        // The root element's '<' is the very last byte of the first chunk; the
+        // scanner must wait for the next byte instead of deciding either way.
+        int braceOffset = LegacyDoctypeStripper.READ_CHUNK - 1;
+        String pad = " ".repeat(braceOffset);
+        byte[] raw = (pad + BODY).getBytes(StandardCharsets.UTF_8);
+
+        byte[] result = drainBytes(LegacyDoctypeStripper.open(new ByteArrayInputStream(raw)));
+
+        assertArrayEquals(raw, result, "a '<' at the chunk boundary must pass through unchanged");
+    }
+
+    @Test
     void doctypeAtEndOfStreamIsHandled() throws IOException {
         byte[] raw = BARE_DOCTYPE.getBytes(StandardCharsets.UTF_8);
         assertEquals("", drain(LegacyDoctypeStripper.open(new ByteArrayInputStream(raw))));

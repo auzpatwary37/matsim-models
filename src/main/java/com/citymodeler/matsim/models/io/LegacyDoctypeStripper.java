@@ -24,7 +24,7 @@ import java.io.SequenceInputStream;
 final class LegacyDoctypeStripper {
 
     static final int MAX_PREFIX_BYTES = 64 * 1024;
-    private static final int READ_CHUNK = 4096;
+    static final int READ_CHUNK = 4096;
 
     private LegacyDoctypeStripper() {
     }
@@ -167,9 +167,44 @@ final class LegacyDoctypeStripper {
             if (startsWithCaseInsensitive(prefix, i, "<!DOCTYPE")) {
                 return scanDeclarationSpan(prefix, i);
             }
+            if (couldBePrologTokenPrefix(prefix, i)) {
+                // A prolog token may start here but the prefix ends before the
+                // token is complete (e.g. the DOCTYPE keyword is split across
+                // read chunks). Need more bytes before deciding.
+                return Verdict.none();
+            }
             return Verdict.noDoctype();
         }
         return Verdict.none();
+    }
+
+    /**
+     * True when the bytes from {@code at} to the end of the prefix form a
+     * proper prefix of one of the prolog token starts ({@code <!--},
+     * {@code <?}, {@code <!DOCTYPE}), i.e. more bytes are needed before the
+     * token can be classified.
+     */
+    private static boolean couldBePrologTokenPrefix(byte[] data, int at) {
+        int rem = data.length - at;
+        return isProperPrefixOf(data, at, rem, "<!--", false)
+                || isProperPrefixOf(data, at, rem, "<?", false)
+                || isProperPrefixOf(data, at, rem, "<!DOCTYPE", true);
+    }
+
+    private static boolean isProperPrefixOf(byte[] data, int at, int rem, String token, boolean caseInsensitive) {
+        if (rem <= 0 || rem >= token.length()) {
+            return false;
+        }
+        for (int k = 0; k < rem; k++) {
+            if (caseInsensitive) {
+                if (Character.toUpperCase(data[at + k] & 0xFF) != Character.toUpperCase(token.charAt(k))) {
+                    return false;
+                }
+            } else if ((data[at + k] & 0xFF) != (byte) token.charAt(k)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static Verdict scanDeclarationSpan(byte[] prefix, int start) {
