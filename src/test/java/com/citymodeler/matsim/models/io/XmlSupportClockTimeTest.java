@@ -77,6 +77,17 @@ class XmlSupportClockTimeTest {
     }
 
     @Test
+    void clockTimeRejectsOverflowingHours() {
+        // Syntactically valid grammar but beyond the representable range:
+        // must fail with MatsimModelException, not a leaked NumberFormatException.
+        MatsimModelException ex = assertThrows(
+                MatsimModelException.class,
+                () -> XmlSupport.parseClockTimeOrSeconds("123456789012345678901:00:00"));
+        assertTrue(ex.getMessage().contains("123456789012345678901:00:00"),
+                "error message should echo the offending value: " + ex.getMessage());
+    }
+
+    @Test
     void errorMentionsExpectedGrammar() {
         MatsimModelException ex = assertThrows(
                 MatsimModelException.class, () -> XmlSupport.parseClockTimeOrSeconds("12:75:00"));

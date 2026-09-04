@@ -224,20 +224,24 @@ final class XmlSupport {
     }
 
     /**
-     * Strict MATSim clock-time grammar: {@code H+:MM[:SS[.fraction]]}. Hours are
-     * an unbounded non-negative integer (services may run past midnight or span
-     * multi-day horizons); minutes and seconds are exactly two digits in 00..59;
-     * the fraction, when present, attaches to the seconds field only.
+     * MATSim clock-time grammar: {@code H+:MM[:SS[.fraction]]}. Hours are a
+     * non-negative integer within the representable range (past-midnight and
+     * multi-day horizons are common); minutes and seconds are exactly two
+     * digits in 00..59; the fraction, when present, attaches to the seconds
+     * field only. The seconds-less {@code H+:MM} form is an accepted
+     * compatibility extension (MATSim transit schedules canonically write
+     * zero-padded {@code HH:MM:SS}).
      */
     private static final Pattern CLOCK_TIME_PATTERN =
             Pattern.compile("^(\\d+):([0-5]\\d)(?::([0-5]\\d)(\\.\\d+)?)?$");
 
     /**
      * Accepts plain seconds (e.g. "3600.0", as serialized by this library's
-     * writers) or a strict MATSim clock time "HH:MM:SS[.fraction]" and returns
+     * writers) or a MATSim clock time "HH:MM:SS[.fraction]" and returns
      * seconds. Malformed clock values (out-of-range minutes/seconds, signed or
-     * non-numeric fields, internal whitespace, trailing fields) are rejected
-     * with a {@link MatsimModelException}.
+     * non-numeric fields, internal whitespace, trailing fields, or an hour
+     * field whose magnitude exceeds the representable range) are rejected with
+     * a {@link MatsimModelException}.
      */
     static double parseClockTimeOrSeconds(String value) {
         String trimmed = value.trim();
@@ -260,7 +264,15 @@ final class XmlSupport {
             throw new MatsimModelException("Unsupported time value '" + value
                     + "'; expected seconds or HH:MM:SS with minutes and seconds in 00..59");
         }
-        long hours = Long.parseLong(matcher.group(1));
+        long hours;
+        try {
+            hours = Long.parseLong(matcher.group(1));
+        } catch (NumberFormatException e) {
+            // Syntactically valid hours field whose magnitude exceeds the
+            // representable range; fail with the contract exception.
+            throw new MatsimModelException("Unsupported time value '" + value
+                    + "'; hours exceed the representable range");
+        }
         int minutes = Integer.parseInt(matcher.group(2));
         double seconds = matcher.group(3) == null
                 ? 0.0
