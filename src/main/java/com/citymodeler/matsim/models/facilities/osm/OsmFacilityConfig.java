@@ -24,11 +24,11 @@ public record OsmFacilityConfig(
     }
 
     public boolean isHouseholdBuilding(String buildingValue) {
-        return householdBuildingTypes.contains(buildingValue);
+        return buildingValue != null && householdBuildingTypes.contains(buildingValue);
     }
 
     public boolean isBusinessKey(String key) {
-        return businessKeys.contains(key);
+        return key != null && businessKeys.contains(key);
     }
 
     public static OsmFacilityConfig defaults(String targetCrs) {

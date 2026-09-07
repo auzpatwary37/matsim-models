@@ -27,4 +27,11 @@ class OsmFacilityConfigTest {
         assertTrue(cfg.isBusinessKey("shop"));
         assertFalse(cfg.isBusinessKey("building"));
     }
+
+    @Test
+    void predicatesAreNullTolerant() {
+        OsmFacilityConfig cfg = OsmFacilityConfig.defaults("EPSG:32617");
+        assertFalse(cfg.isHouseholdBuilding(null));
+        assertFalse(cfg.isBusinessKey(null));
+    }
 }
