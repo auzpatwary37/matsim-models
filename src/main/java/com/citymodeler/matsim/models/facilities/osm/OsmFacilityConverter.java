@@ -36,10 +36,7 @@ public final class OsmFacilityConverter {
     public ActivityFacilities convert(List<OsmFacility> facilities) {
         ActivityFacilities result = new ActivityFacilities("osm-facilities");
         for (OsmFacility osm : facilities) {
-            ActivityFacility facility = toActivityFacility(osm);
-            if (facility != null) {
-                result.addFacility(facility);
-            }
+            result.addFacility(toActivityFacility(osm));
         }
         return result;
     }
@@ -47,7 +44,11 @@ public final class OsmFacilityConverter {
     private ActivityFacility toActivityFacility(OsmFacility osm) {
         ProjCoordinate src = new ProjCoordinate(osm.lon(), osm.lat());
         ProjCoordinate dst = new ProjCoordinate();
-        transform.transform(src, dst);
+        if (transform.transform(src, dst) == null) {
+            throw new IllegalStateException(
+                "Failed to transform coordinate (" + osm.lon() + ", " + osm.lat()
+                    + ") of facility " + osm.id() + " into " + config.targetCrs());
+        }
 
         ActivityFacility facility = new ActivityFacility(
             Id.create(osm.id(), ActivityFacility.class),

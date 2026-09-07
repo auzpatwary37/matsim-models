@@ -6,7 +6,8 @@ import java.util.Map;
  * A single facility parsed from OSM, before conversion to a MATSim
  * {@link com.citymodeler.matsim.models.facilities.ActivityFacility}.
  *
- * @param id            OSM element id (node or way id).
+ * @param id            facility id: the OSM element id prefixed with {@code "n"} (node)
+ *                      or {@code "w"} (way) so colliding node/way ids stay distinct.
  * @param lon           longitude in WGS84 decimal degrees.
  * @param lat           latitude in WGS84 decimal degrees.
  * @param name          OSM {@code name} tag, may be null.
