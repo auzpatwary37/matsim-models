@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+  <node id="1" lat="43.6" lon="-79.4">
+    <tag k="amenity" v="restaurant"/>
+    <tag k="name" v="Test Cafe"/>
+    <tag k="opening_hours" v="Mo-Fr 09:00-17:00"/>
+    <tag k="addr:street" v="Bathurst Street"/>
+    <tag k="addr:housenumber" v="100"/>
+  </node>
+  <node id="2" lat="43.7" lon="-79.5">
+    <tag k="shop" v="bakery"/>
+  </node>
+  <!-- OSM files always emit all nodes before any ways; the single-pass
+        parser relies on that invariant to resolve a way's node refs. -->
+  <node id="100" lat="43.60" lon="-79.40"/>
+  <node id="101" lat="43.60" lon="-79.39"/>
+  <node id="102" lat="43.61" lon="-79.40"/>
+  <way id="10">
+    <nd ref="100"/>
+    <nd ref="101"/>
+    <nd ref="102"/>
+    <nd ref="100"/>
+    <tag k="building" v="house"/>
+    <tag k="building:levels" v="2"/>
+  </way>
+</osm>

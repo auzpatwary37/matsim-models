@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+  <!-- use-tag POIs that must classify by key, not just by value -->
+  <node id="11" lat="43.6" lon="-79.4">
+    <tag k="tourism" v="hotel"/>
+    <tag k="name" v="Grand Hotel"/>
+  </node>
+  <node id="12" lat="43.61" lon="-79.4">
+    <tag k="leisure" v="fitness_centre"/>
+  </node>
+  <!-- closed commercial triangle; corner 400 is repeated as the closing ref -->
+  <node id="400" lat="43.60" lon="-79.40"/>
+  <node id="401" lat="43.60" lon="-79.39"/>
+  <node id="402" lat="43.61" lon="-79.40"/>
+  <!-- shared rectangular corners for the remaining building ways -->
+  <node id="300" lat="43.62" lon="-79.42"/>
+  <node id="301" lat="43.62" lon="-79.41"/>
+  <node id="302" lat="43.63" lon="-79.41"/>
+  <node id="303" lat="43.63" lon="-79.42"/>
+  <way id="200">
+    <nd ref="400"/><nd ref="401"/><nd ref="402"/><nd ref="400"/>
+    <tag k="building" v="commercial"/>
+  </way>
+  <way id="201">
+    <nd ref="300"/><nd ref="301"/><nd ref="302"/><nd ref="303"/><nd ref="300"/>
+    <tag k="building" v="retail"/>
+  </way>
+  <way id="202">
+    <nd ref="300"/><nd ref="301"/><nd ref="302"/><nd ref="303"/><nd ref="300"/>
+    <tag k="building" v="industrial"/>
+  </way>
+  <way id="203">
+    <nd ref="300"/><nd ref="301"/><nd ref="302"/><nd ref="303"/><nd ref="300"/>
+    <tag k="building" v="office"/>
+  </way>
+  <way id="204">
+    <nd ref="300"/><nd ref="301"/><nd ref="302"/><nd ref="303"/><nd ref="300"/>
+    <tag k="building" v="school"/>
+  </way>
+  <way id="205">
+    <nd ref="300"/><nd ref="301"/><nd ref="302"/><nd ref="303"/><nd ref="300"/>
+    <tag k="building" v="university"/>
+  </way>
+</osm>

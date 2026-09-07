@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+  <!-- node id=5 (business) and way id=5 (household) deliberately share the SAME
+       numeric OSM id, exercising the n/w id-prefix disambiguation. The way uses
+       its own distinct nodes 50/51/52. -->
+  <node id="5" lat="43.65" lon="-79.45">
+    <tag k="amenity" v="restaurant"/>
+    <tag k="name" v="Collision Cafe"/>
+  </node>
+  <node id="50" lat="43.60" lon="-79.40"/>
+  <node id="51" lat="43.60" lon="-79.39"/>
+  <node id="52" lat="43.61" lon="-79.40"/>
+  <way id="5">
+    <nd ref="50"/>
+    <nd ref="51"/>
+    <nd ref="52"/>
+    <nd ref="50"/>
+    <tag k="building" v="house"/>
+    <tag k="building:levels" v="2"/>
+  </way>
+</osm>

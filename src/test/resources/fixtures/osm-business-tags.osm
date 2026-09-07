@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+  <!-- A node carrying two business tags. Keys are sorted alphabetically
+       (amenity < shop), so the deterministic selected type is the amenity value
+       "restaurant", regardless of tag order in the file. -->
+  <node id="7" lat="43.62" lon="-79.42">
+    <tag k="shop" v="bakery"/>
+    <tag k="amenity" v="restaurant"/>
+  </node>
+</osm>
