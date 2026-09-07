@@ -11,8 +11,12 @@ import java.util.Map;
  * @param lon           longitude in WGS84 decimal degrees.
  * @param lat           latitude in WGS84 decimal degrees.
  * @param name          OSM {@code name} tag, may be null.
- * @param type          OSM tag value that classifies the facility (e.g. {@code restaurant},
- *                      {@code house}, {@code school}).
+ * @param osmKey        OSM tag key that classified the facility: a business key
+ *                      ({@code amenity}/{@code shop}/{@code office}/{@code tourism}/{@code
+ *                      leisure}) or {@code building}.
+ * @param osmValue      value of that key (e.g. {@code restaurant}, {@code hotel},
+ *                      {@code commercial}, {@code house}). Together with {@code osmKey} it
+ *                      drives the MATSim activity classification.
  * @param openingHours  OSM {@code opening_hours} tag, may be null.
  * @param address       map of {@code addr:*} tags (street, housenumber, city, postcode).
  * @param areaM2        building footprint area in square metres (0 if unknown).
@@ -24,7 +28,8 @@ public record OsmFacility(
         double lon,
         double lat,
         String name,
-        String type,
+        String osmKey,
+        String osmValue,
         String openingHours,
         Map<String, String> address,
         double areaM2,

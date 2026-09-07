@@ -8,21 +8,49 @@ import org.junit.jupiter.api.Test;
 
 class OsmFacilityConfigTest {
     @Test
-    void defaultsMapBusinessTagsToActivities() {
+    void buildingValuesClassifyToExpectedActivities() {
         OsmFacilityConfig cfg = OsmFacilityConfig.defaults("EPSG:32617");
-        assertEquals("work", cfg.activityForType("office"));
-        assertEquals("leisure", cfg.activityForType("restaurant"));
-        assertEquals("education", cfg.activityForType("school"));
-        assertEquals("health", cfg.activityForType("hospital"));
-        assertEquals("work", cfg.activityForType("unknown_thing"));
+        // commercial / educational / residential building values
+        assertEquals("work", cfg.activityFor("building", "commercial"));
+        assertEquals("work", cfg.activityFor("building", "retail"));
+        assertEquals("work", cfg.activityFor("building", "industrial"));
+        assertEquals("work", cfg.activityFor("building", "office"));
+        assertEquals("education", cfg.activityFor("building", "school"));
+        assertEquals("education", cfg.activityFor("building", "university"));
+        assertEquals("home", cfg.activityFor("building", "house"));
+        assertEquals("home", cfg.activityFor("building", "apartments"));
     }
 
     @Test
-    void defaultsIdentifyHouseholdsAndBusinesses() {
+    void useTagCategoriesAreKeyAware() {
         OsmFacilityConfig cfg = OsmFacilityConfig.defaults("EPSG:32617");
-        assertTrue(cfg.isHouseholdBuilding("house"));
-        assertTrue(cfg.isHouseholdBuilding("apartments"));
-        assertFalse(cfg.isHouseholdBuilding("retail"));
+        // key-driven defaults (the value is a subtype, not a top-level category)
+        assertEquals("leisure", cfg.activityFor("tourism", "hotel"));
+        assertEquals("leisure", cfg.activityFor("tourism", "museum"));
+        assertEquals("leisure", cfg.activityFor("leisure", "fitness_centre"));
+        assertEquals("work", cfg.activityFor("shop", "bakery"));
+        assertEquals("work", cfg.activityFor("office", "company"));
+        // value-level overrides on a work-default key
+        assertEquals("leisure", cfg.activityFor("amenity", "restaurant"));
+        assertEquals("education", cfg.activityFor("amenity", "school"));
+        assertEquals("health", cfg.activityFor("amenity", "hospital"));
+        assertEquals("work", cfg.activityFor("amenity", "bank"));
+        // unknown (key, value) falls back to the key default, then to work
+        assertEquals("work", cfg.activityFor("amenity", "unknown_thing"));
+    }
+
+    @Test
+    void identifiesHouseholdBusinessEducationAndHealthBuildings() {
+        OsmFacilityConfig cfg = OsmFacilityConfig.defaults("EPSG:32617");
+        assertTrue(cfg.isResidentialBuilding("house"));
+        assertTrue(cfg.isResidentialBuilding("apartments"));
+        assertTrue(cfg.isBusinessBuilding("commercial"));
+        assertTrue(cfg.isBusinessBuilding("retail"));
+        assertTrue(cfg.isEducationBuilding("university"));
+        assertTrue(cfg.isHealthBuilding("hospital"));
+        assertTrue(cfg.isQualifyingBuilding("commercial"));
+        assertTrue(cfg.isQualifyingBuilding("house"));
+        assertFalse(cfg.isQualifyingBuilding("shed"));
         assertTrue(cfg.isBusinessKey("amenity"));
         assertTrue(cfg.isBusinessKey("shop"));
         assertFalse(cfg.isBusinessKey("building"));
@@ -31,7 +59,14 @@ class OsmFacilityConfigTest {
     @Test
     void predicatesAreNullTolerant() {
         OsmFacilityConfig cfg = OsmFacilityConfig.defaults("EPSG:32617");
-        assertFalse(cfg.isHouseholdBuilding(null));
+        assertFalse(cfg.isResidentialBuilding(null));
+        assertFalse(cfg.isBusinessBuilding(null));
+        assertFalse(cfg.isEducationBuilding(null));
+        assertFalse(cfg.isHealthBuilding(null));
+        assertFalse(cfg.isQualifyingBuilding(null));
         assertFalse(cfg.isBusinessKey(null));
+        // unknown building key value falls back to work rather than throwing
+        assertEquals("work", cfg.activityFor("building", null));
+        assertEquals("work", cfg.activityFor(null, null));
     }
 }

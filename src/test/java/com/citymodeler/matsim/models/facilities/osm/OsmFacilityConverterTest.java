@@ -17,7 +17,7 @@ class OsmFacilityConverterTest {
         OsmFacilityConfig cfg = OsmFacilityConfig.defaults("EPSG:32617");
         OsmFacilityConverter converter = new OsmFacilityConverter(cfg);
         OsmFacility cafe = new OsmFacility(
-            "1", -79.4, 43.6, "Test Cafe", "restaurant",
+            "1", -79.4, 43.6, "Test Cafe", "amenity", "restaurant",
             "Mo-Fr 09:00-17:00",
             Map.of("addr:street", "Bathurst Street", "addr:housenumber", "100"),
             0.0, 0, false);
@@ -34,11 +34,37 @@ class OsmFacilityConverterTest {
     }
 
     @Test
+    void convertsHotelToLeisureByBusinessKey() {
+        OsmFacilityConfig cfg = OsmFacilityConfig.defaults("EPSG:32617");
+        OsmFacilityConverter converter = new OsmFacilityConverter(cfg);
+        OsmFacility hotel = new OsmFacility(
+            "11", -79.4, 43.6, "Grand Hotel", "tourism", "hotel",
+            null, Map.of(), 0.0, 0, false);
+
+        ActivityFacility f = converter.convert(List.of(hotel))
+            .getFacilities().values().iterator().next();
+        assertEquals("leisure", f.getActivityOptions().get("leisure").getType());
+    }
+
+    @Test
+    void convertsCommercialBuildingToWork() {
+        OsmFacilityConfig cfg = OsmFacilityConfig.defaults("EPSG:32617");
+        OsmFacilityConverter converter = new OsmFacilityConverter(cfg);
+        OsmFacility commercial = new OsmFacility(
+            "w200", -79.396, 43.603, null, "building", "commercial",
+            null, Map.of(), 1200.0, 3, false);
+
+        ActivityFacility f = converter.convert(List.of(commercial))
+            .getFacilities().values().iterator().next();
+        assertEquals("work", f.getActivityOptions().get("work").getType());
+    }
+
+    @Test
     void convertsHouseholdToHomeFacilityWithCapacity() {
         OsmFacilityConfig cfg = OsmFacilityConfig.defaults("EPSG:32617");
         OsmFacilityConverter converter = new OsmFacilityConverter(cfg);
         OsmFacility house = new OsmFacility(
-            "10", -79.4, 43.6, null, "house", null,
+            "10", -79.4, 43.6, null, "building", "house", null,
             Map.of(), 300.0, 2, true);
 
         ActivityFacilities facilities = converter.convert(List.of(house));

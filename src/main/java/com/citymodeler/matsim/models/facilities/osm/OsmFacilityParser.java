@@ -20,8 +20,9 @@ import javax.xml.stream.XMLStreamReader;
 
 /**
  * Two-pass StAX parser that reads an OSM {@code .osm} XML file and produces
- * {@link OsmFacility} records for businesses (nodes/ways with business tags)
- * and households (residential building ways).
+ * {@link OsmFacility} records for businesses (use-tagged POIs and ways, plus
+ * commercial/educational/health buildings) and households (residential
+ * buildings).
  *
  * <p>The file is streamed twice. Pass 1 walks every node (emitting qualifying
  * node facilities using the node's own coordinates) and records which node ids
@@ -32,10 +33,12 @@ import javax.xml.stream.XMLStreamReader;
  * qualifying ways, not by the total node count, which keeps the parser usable on
  * multi-gigabyte city extracts without holding a global coordinate map.
  *
- * <p>Business and household detection (and the deterministic business-tag
- * selection) is delegated to {@link OsmFacilityConfig}; a business wins over a
- * household when both apply. Facility ids are prefixed with {@code "n"} or
- * {@code "w"} so that a colliding OSM node id and way id never clash.
+ * <p>Qualification, the deterministic business-tag selection, and building-type
+ * classification are delegated to {@link OsmFacilityConfig}; a use-tag business
+ * wins over a building classification when both apply. Way facilities are placed
+ * at the area-weighted polygon centroid of their (deduplicated) footprint.
+ * Facility ids are prefixed with {@code "n"} or {@code "w"} so that a colliding
+ * OSM node id and way id never clash.
  */
 public final class OsmFacilityParser {
 
@@ -122,26 +125,18 @@ public final class OsmFacilityParser {
                     if (!qualifies(way.tags)) {
                         continue;
                     }
-                    double sumLon = 0, sumLat = 0;
-                    int n = 0;
-                    for (String ref : way.nodeRefs) {
-                        double[] c = nodeCoords.get(ref);
-                        if (c != null) {
-                            sumLon += c[0];
-                            sumLat += c[1];
-                            n++;
-                        }
-                    }
-                    if (n == 0) {
+                    List<double[]> ring = resolveRing(way.nodeRefs, nodeCoords);
+                    if (ring.isEmpty()) {
                         continue;
                     }
-                    double lon = sumLon / n;
-                    double lat = sumLat / n;
+                    double[] centroid = polygonCentroid(ring);
+                    double lon = centroid[0];
+                    double lat = centroid[1];
 
                     double area = 0.0;
                     int levels = 0;
-                    if (config.isHouseholdBuilding(way.tags.get("building"))) {
-                        area = polygonAreaM2(way.nodeRefs, nodeCoords);
+                    if (config.isResidentialBuilding(way.tags.get("building"))) {
+                        area = polygonAreaM2(ring);
                         levels = parseInt(way.tags.get("building:levels"));
                     }
 
@@ -227,37 +222,54 @@ public final class OsmFacilityParser {
 
     /**
      * A node or way element qualifies as a facility if it carries any business
-     * tag or a recognized household {@code building} value.
+     * tag or a qualifying {@code building} value (residential, commercial,
+     * educational, or health).
      */
     private boolean qualifies(Map<String, String> tags) {
-        return selectBusinessType(tags) != null
-            || config.isHouseholdBuilding(tags.get("building"));
+        return selectBusinessKey(tags) != null
+            || config.isQualifyingBuilding(tags.get("building"));
     }
 
     /**
-     * Selects the business tag value deterministically by iterating
+     * Selects the business tag key deterministically by iterating
      * {@code config.businessKeys()} in sorted (natural) order and returning the
-     * value of the first key present. Returns {@code null} if no business key is
-     * present.
+     * first key present. Returns {@code null} if no business key is present.
      */
-    private String selectBusinessType(Map<String, String> tags) {
+    private String selectBusinessKey(Map<String, String> tags) {
         List<String> keys = new ArrayList<>(config.businessKeys());
         Collections.sort(keys);
         for (String key : keys) {
             if (tags.containsKey(key)) {
-                return tags.get(key);
+                return key;
             }
         }
         return null;
     }
 
+    /**
+     * Classifies an element into its {@code (osmKey, osmValue, isHousehold)}
+     * triple. A use-tag business takes precedence; otherwise a qualifying
+     * {@code building} value is used (residential values become households).
+     * Returns {@code null} if the element is not a facility.
+     */
     private OsmFacility toFacility(String id, double lon, double lat, Map<String, String> tags,
                                    double area, int levels) {
-        String type = selectBusinessType(tags);
-        boolean isBusiness = type != null;
-        boolean isHousehold = !isBusiness && config.isHouseholdBuilding(tags.get("building"));
-        if (!isBusiness && !isHousehold) {
-            return null;
+        String businessKey = selectBusinessKey(tags);
+        String osmKey;
+        String osmValue;
+        boolean isHousehold;
+        if (businessKey != null) {
+            osmKey = businessKey;
+            osmValue = tags.get(businessKey);
+            isHousehold = false;
+        } else {
+            String building = tags.get("building");
+            if (!config.isQualifyingBuilding(building)) {
+                return null;
+            }
+            osmKey = "building";
+            osmValue = building;
+            isHousehold = config.isResidentialBuilding(building);
         }
 
         Map<String, String> address = new LinkedHashMap<>();
@@ -270,12 +282,32 @@ public final class OsmFacilityParser {
         return new OsmFacility(
             id, lon, lat,
             tags.get("name"),
-            type,
+            osmKey,
+            osmValue,
             tags.get("opening_hours"),
             address,
             area,
             levels,
             isHousehold);
+    }
+
+    /**
+     * Resolves a way's node refs to their coordinates, dropping the repeated
+     * closing node of a closed polygon (OSM repeats the first ref as the last).
+     */
+    private List<double[]> resolveRing(List<String> nodeRefs, Map<String, double[]> nodeCoords) {
+        List<String> refs = nodeRefs;
+        if (refs.size() >= 2 && refs.get(0).equals(refs.get(refs.size() - 1))) {
+            refs = refs.subList(0, refs.size() - 1);
+        }
+        List<double[]> ring = new ArrayList<>();
+        for (String ref : refs) {
+            double[] c = nodeCoords.get(ref);
+            if (c != null) {
+                ring.add(c);
+            }
+        }
+        return ring;
     }
 
     private static int parseInt(String s) {
@@ -291,21 +323,15 @@ public final class OsmFacilityParser {
 
     /**
      * Approximate area (m²) of a closed ring of lon/lat points using the
-     * spherical excess formula. Returns 0 if the ring is degenerate.
+     * spherical excess formula. The ring must be the deduplicated polygon outline.
+     * Returns 0 if the ring is degenerate.
      */
-    static double polygonAreaM2(List<String> nodeRefs, Map<String, double[]> nodeCoords) {
-        List<double[]> ring = new ArrayList<>();
-        for (String ref : nodeRefs) {
-            double[] c = nodeCoords.get(ref);
-            if (c != null) {
-                ring.add(c);
-            }
-        }
-        if (ring.size() < 3) {
+    static double polygonAreaM2(List<double[]> ring) {
+        int n = ring.size();
+        if (n < 3) {
             return 0.0;
         }
         double area = 0.0;
-        int n = ring.size();
         for (int i = 0; i < n; i++) {
             double[] a = ring.get(i);
             double[] b = ring.get((i + 1) % n);
@@ -315,6 +341,63 @@ public final class OsmFacilityParser {
         }
         area = Math.abs(area * EARTH_RADIUS_M * EARTH_RADIUS_M / 2.0);
         return area;
+    }
+
+    /**
+     * Computes the area-weighted (shoelace) centroid of a polygon ring of lon/lat
+     * points, which represents a building footprint far better than the plain
+     * vertex average (which shifts toward the dense side of an irregular polygon
+     * and can even fall outside it).
+     *
+     * <p>The centroid is evaluated in a local equirectangular frame centred on the
+     * ring's mean — an excellent planar approximation for building-sized polygons —
+     * then converted back to lon/lat so target-CRS reprojection stays the
+     * converter's responsibility.
+     *
+     * <p>If the ring is degenerate (fewer than three points, or ~zero area such as an
+     * open way or a collapsed footprint) it falls back to the vertex average.
+     *
+     * @return a {@code {lon, lat}} array, or {@code null} for an empty ring
+     */
+    static double[] polygonCentroid(List<double[]> ring) {
+        int n = ring.size();
+        if (n == 0) {
+            return null;
+        }
+        double lon0 = 0, lat0 = 0;
+        for (double[] c : ring) {
+            lon0 += c[0];
+            lat0 += c[1];
+        }
+        lon0 /= n;
+        lat0 /= n;
+        if (n < 3) {
+            return new double[]{lon0, lat0};
+        }
+        double cosLat = Math.cos(Math.toRadians(lat0));
+        double[] xs = new double[n];
+        double[] ys = new double[n];
+        for (int i = 0; i < n; i++) {
+            xs[i] = (ring.get(i)[0] - lon0) * cosLat * EARTH_RADIUS_M;
+            ys[i] = (ring.get(i)[1] - lat0) * EARTH_RADIUS_M;
+        }
+        double area2 = 0, cxNum = 0, cyNum = 0;
+        for (int i = 0; i < n; i++) {
+            int j = (i + 1) % n;
+            double cross = xs[i] * ys[j] - xs[j] * ys[i];
+            area2 += cross;
+            cxNum += (xs[i] + xs[j]) * cross;
+            cyNum += (ys[i] + ys[j]) * cross;
+        }
+        double area = area2 / 2.0;
+        if (Math.abs(area) < 1e-6) {
+            return new double[]{lon0, lat0};
+        }
+        double cx = cxNum / (6.0 * area);
+        double cy = cyNum / (6.0 * area);
+        double clon = lon0 + cx / (cosLat * EARTH_RADIUS_M);
+        double clat = lat0 + cy / EARTH_RADIUS_M;
+        return new double[]{clon, clat};
     }
 
     private static final class NodeData {

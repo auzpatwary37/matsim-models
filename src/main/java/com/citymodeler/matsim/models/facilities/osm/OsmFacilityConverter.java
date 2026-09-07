@@ -60,7 +60,7 @@ public final class OsmFacilityConverter {
                 osm.areaM2(), osm.levels(), config.personsPerSqm()));
             facility.addActivityOption(home);
         } else {
-            String activityType = config.activityForType(osm.type());
+            String activityType = config.activityFor(osm.osmKey(), osm.osmValue());
             facility.addActivityOption(new ActivityOption(activityType));
         }
 
