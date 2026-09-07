@@ -45,6 +45,7 @@
         <spotbugs.version>4.8.6.4</spotbugs.version>
         <checkstyle.version>3.3.1</checkstyle.version>
         <jacoco.version>0.8.12</jacoco.version>
+        <proj4j.version>1.4.3</proj4j.version>
     </properties>
 
     <dependencies>
@@ -63,6 +64,16 @@
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.locationtech.proj4j</groupId>
+            <artifactId>proj4j</artifactId>
+            <version>${proj4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.locationtech.proj4j</groupId>
+            <artifactId>proj4j-epsg</artifactId>
+            <version>${proj4j.version}</version>
         </dependency>
     </dependencies>
 
