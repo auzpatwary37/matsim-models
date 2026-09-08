@@ -233,13 +233,14 @@ public final class OsmFacilityParser {
     /**
      * Selects the business tag key deterministically by iterating
      * {@code config.businessKeys()} in sorted (natural) order and returning the
-     * first key present. Returns {@code null} if no business key is present.
+     * first key present whose value is not an excluded (transit-infrastructure)
+     * amenity. Returns {@code null} if no qualifying business key is present.
      */
     private String selectBusinessKey(Map<String, String> tags) {
         List<String> keys = new ArrayList<>(config.businessKeys());
         Collections.sort(keys);
         for (String key : keys) {
-            if (tags.containsKey(key)) {
+            if (tags.containsKey(key) && !config.isExcludedFacility(key, tags.get(key))) {
                 return key;
             }
         }

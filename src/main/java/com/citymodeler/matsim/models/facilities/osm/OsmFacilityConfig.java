@@ -22,6 +22,9 @@ import java.util.Set;
  * @param educationBuildingTypes OSM {@code building} values that are educational ({@code education}).
  * @param healthBuildingTypes    OSM {@code building} values that are health-related ({@code health}).
  * @param businessKeys          OSM tag keys that mark a facility as a business/POI.
+ * @param excludedAmenityValues {@code amenity} values that are transit/traffic
+ *                              infrastructure rather than facilities (e.g.
+ *                              {@code bus_station}); these are skipped on qualification.
  */
 public record OsmFacilityConfig(
         String targetCrs,
@@ -32,7 +35,8 @@ public record OsmFacilityConfig(
         Set<String> businessBuildingTypes,
         Set<String> educationBuildingTypes,
         Set<String> healthBuildingTypes,
-        Set<String> businessKeys) {
+        Set<String> businessKeys,
+        Set<String> excludedAmenityValues) {
 
     /**
      * Maps the OSM {@code (key, value)} pair that classified a facility to a MATSim
@@ -90,6 +94,18 @@ public record OsmFacilityConfig(
         return key != null && businessKeys.contains(key);
     }
 
+    /**
+     * True if a business POI is transit/traffic infrastructure rather than a
+     * facility and should be skipped. Applies only to a set of {@code amenity}
+     * values (bus/train/ferry stations, taxi stands); other keys are never
+     * excluded.
+     */
+    public boolean isExcludedFacility(String key, String value) {
+        return "amenity".equals(key)
+            && value != null
+            && excludedAmenityValues.contains(value);
+    }
+
     /** Alias for {@link #isResidentialBuilding(String)} retained for clarity. */
     public boolean isHouseholdBuilding(String buildingValue) {
         return isResidentialBuilding(buildingValue);
@@ -126,6 +142,8 @@ public record OsmFacilityConfig(
             Set.of("commercial", "retail", "industrial", "office"),
             Set.of("school", "university", "college"),
             Set.of("hospital", "clinic", "healthcare"),
-            Set.of("amenity", "shop", "office", "tourism", "leisure"));
+            Set.of("amenity", "shop", "office", "tourism", "leisure"),
+            Set.of("bus_station", "bus_stop", "tram_station", "railway_station",
+                   "ferry_terminal", "taxi"));
     }
 }
