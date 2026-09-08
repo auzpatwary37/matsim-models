@@ -72,7 +72,8 @@ class OsmFacilityParserTest {
         OsmFacilityConfig cfg = OsmFacilityConfig.defaults("EPSG:32617");
         List<OsmFacility> facilities = new OsmFacilityParser(cfg).parse(fixture);
 
-        // 2 POI nodes + 6 building ways all survive
+        // 2 POI nodes + 6 building ways all survive; the 2 transit-infrastructure
+        // amenity nodes (bus_station, taxi) are excluded, so the count is unchanged
         assertEquals(8, facilities.size());
 
         assertEquals("leisure", activity(cfg, byOsMValue(facilities, "hotel")));
@@ -88,6 +89,9 @@ class OsmFacilityParserTest {
         assertEquals("building", byOsMValue(facilities, "commercial").osmKey());
         assertEquals("tourism", byOsMValue(facilities, "hotel").osmKey());
         assertTrue(facilities.stream().noneMatch(OsmFacility::isHousehold));
+        // transit/traffic infrastructure is dropped, not emitted as a facility
+        assertTrue(facilities.stream().noneMatch(f -> "bus_station".equals(f.osmValue())));
+        assertTrue(facilities.stream().noneMatch(f -> "taxi".equals(f.osmValue())));
     }
 
     @Test

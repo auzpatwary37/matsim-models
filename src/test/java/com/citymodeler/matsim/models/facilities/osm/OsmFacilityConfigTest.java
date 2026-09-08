@@ -69,4 +69,17 @@ class OsmFacilityConfigTest {
         assertEquals("work", cfg.activityFor("building", null));
         assertEquals("work", cfg.activityFor(null, null));
     }
+
+    @Test
+    void excludesTransitInfrastructureAmenities() {
+        OsmFacilityConfig cfg = OsmFacilityConfig.defaults("EPSG:32617");
+        assertTrue(cfg.isExcludedFacility("amenity", "bus_station"));
+        assertTrue(cfg.isExcludedFacility("amenity", "taxi"));
+        assertTrue(cfg.isExcludedFacility("amenity", "railway_station"));
+        // other amenity values are real facilities
+        assertFalse(cfg.isExcludedFacility("amenity", "restaurant"));
+        // exclusion only applies to the amenity key
+        assertFalse(cfg.isExcludedFacility("shop", "bus_station"));
+        assertFalse(cfg.isExcludedFacility(null, null));
+    }
 }
