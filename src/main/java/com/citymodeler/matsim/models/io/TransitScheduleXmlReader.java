@@ -59,6 +59,10 @@ public final class TransitScheduleXmlReader {
                 if (linkId != null && !linkId.isBlank()) {
                     facility.setLinkId(Id.create(linkId, Link.class));
                 }
+                String parentId = XmlSupport.attr(stopElement, "parentId");
+                if (parentId != null && !parentId.isBlank()) {
+                    facility.setParentId(Id.create(parentId, TransitStopFacility.class));
+                }
                 facility.setName(XmlSupport.attr(stopElement, "name"));
                 XmlSupport.readAttributes(stopElement, facility.getAttributes());
                 schedule.addStopFacility(facility);

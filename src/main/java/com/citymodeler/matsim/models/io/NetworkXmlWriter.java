@@ -53,11 +53,9 @@ public final class NetworkXmlWriter {
             linkElement.setAttribute("capacity", Double.toString(link.getCapacity()));
             linkElement.setAttribute("freespeed", Double.toString(link.getFreespeed()));
             linkElement.setAttribute("permlanes", Double.toString(link.getNumberOfLanes()));
-            if (!link.getAllowedModes().isEmpty()) {
-                StringJoiner joiner = new StringJoiner(",");
-                link.getAllowedModes().forEach(joiner::add);
-                linkElement.setAttribute("modes", joiner.toString());
-            }
+            StringJoiner joiner = new StringJoiner(",");
+            link.getAllowedModes().forEach(joiner::add);
+            linkElement.setAttribute("modes", joiner.toString());
             XmlSupport.appendAttributes(document, linkElement, link.getAttributes());
             links.appendChild(linkElement);
         }

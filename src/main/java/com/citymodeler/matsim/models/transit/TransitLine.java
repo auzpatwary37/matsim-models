@@ -40,6 +40,9 @@ public final class TransitLine {
 
     public void addRoute(TransitRoute route) {
         Objects.requireNonNull(route, "route");
+        if (routes.containsKey(route.getId())) {
+            throw new IllegalArgumentException("Duplicate route id: " + route.getId());
+        }
         routes.put(route.getId(), route);
     }
 

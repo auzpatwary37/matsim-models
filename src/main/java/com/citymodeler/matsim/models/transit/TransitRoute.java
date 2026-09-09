@@ -84,6 +84,9 @@ public final class TransitRoute {
 
     public void addDeparture(Departure departure) {
         Objects.requireNonNull(departure, "departure");
+        if (departures.containsKey(departure.getId())) {
+            throw new IllegalArgumentException("Duplicate departure id: " + departure.getId());
+        }
         departures.put(departure.getId(), departure);
     }
 

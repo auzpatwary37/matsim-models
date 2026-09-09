@@ -27,11 +27,17 @@ public final class TransitSchedule {
 
     public void addStopFacility(TransitStopFacility stopFacility) {
         Objects.requireNonNull(stopFacility, "stopFacility");
+        if (facilities.containsKey(stopFacility.getId())) {
+            throw new IllegalArgumentException("Duplicate stop facility id: " + stopFacility.getId());
+        }
         facilities.put(stopFacility.getId(), stopFacility);
     }
 
     public void addTransitLine(TransitLine transitLine) {
         Objects.requireNonNull(transitLine, "transitLine");
+        if (transitLines.containsKey(transitLine.getId())) {
+            throw new IllegalArgumentException("Duplicate transit line id: " + transitLine.getId());
+        }
         transitLines.put(transitLine.getId(), transitLine);
     }
 

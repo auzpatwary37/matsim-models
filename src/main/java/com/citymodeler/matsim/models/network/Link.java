@@ -48,8 +48,8 @@ public final class Link {
         this.capacity = capacity;
         this.freespeed = freespeed;
         this.numberOfLanes = numberOfLanes;
-        this.allowedModes = allowedModes == null || allowedModes.isEmpty()
-                ? new LinkedHashSet<>(Set.of("car"))
+        this.allowedModes = allowedModes == null
+                ? new LinkedHashSet<>()
                 : new LinkedHashSet<>(allowedModes);
     }
 
@@ -122,8 +122,8 @@ public final class Link {
     }
 
     public void setAllowedModes(Set<String> allowedModes) {
-        this.allowedModes = allowedModes == null || allowedModes.isEmpty()
-                ? new LinkedHashSet<>(Set.of("car"))
+        this.allowedModes = allowedModes == null
+                ? new LinkedHashSet<>()
                 : new LinkedHashSet<>(allowedModes);
     }
 

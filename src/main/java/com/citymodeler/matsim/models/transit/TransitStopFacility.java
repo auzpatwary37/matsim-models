@@ -11,6 +11,7 @@ public final class TransitStopFacility {
     private final Id<TransitStopFacility> id;
     private Coord coord;
     private Id<Link> linkId;
+    private Id<TransitStopFacility> parentId;
     private String name;
     private boolean blockingLane;
     private final Attributes attributes = new Attributes();
@@ -39,6 +40,14 @@ public final class TransitStopFacility {
 
     public void setLinkId(Id<Link> linkId) {
         this.linkId = linkId;
+    }
+
+    public Id<TransitStopFacility> getParentId() {
+        return parentId;
+    }
+
+    public void setParentId(Id<TransitStopFacility> parentId) {
+        this.parentId = parentId;
     }
 
     public String getName() {
