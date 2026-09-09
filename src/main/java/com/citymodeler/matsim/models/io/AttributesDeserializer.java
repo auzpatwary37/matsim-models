@@ -3,6 +3,7 @@ package com.citymodeler.matsim.models.io;
 import java.io.IOException;
 
 import com.citymodeler.matsim.models.api.Attributes;
+import com.citymodeler.matsim.models.network.turnrestrictions.DisallowedNextLinks;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
@@ -34,9 +35,10 @@ public final class AttributesDeserializer extends JsonDeserializer<Attributes> {
             return;
         }
 
+        String name = nameNode.asText();
         String className = text(attributeNode.get("class"));
         String value = attributeValue(attributeNode);
-        attributes.putAttribute(nameNode.asText(), convertValue(value, className));
+        attributes.putAttribute(name, convertValue(name, value, className));
     }
 
     private static String attributeValue(JsonNode attributeNode) {
@@ -56,7 +58,16 @@ public final class AttributesDeserializer extends JsonDeserializer<Attributes> {
         return node == null || node.isNull() ? null : node.asText();
     }
 
-    private static Object convertValue(String value, String className) {
+    private static Object convertValue(String name, String value, String className) {
+        if (XmlSupport.ATTR_DISALLOWED_NEXT_LINKS.equals(name)
+                || XmlSupport.MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT.equals(className)
+                || XmlSupport.LEGACY_MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT.equals(className)) {
+            try {
+                return DisallowedNextLinks.fromJson(value);
+            } catch (MatsimModelException exception) {
+                return value;
+            }
+        }
         if (Double.class.getName().equals(className)) {
             return Double.valueOf(value);
         }

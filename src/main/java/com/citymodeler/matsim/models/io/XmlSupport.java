@@ -34,8 +34,23 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 import com.citymodeler.matsim.models.api.Attributes;
+import com.citymodeler.matsim.models.network.turnrestrictions.DisallowedNextLinks;
 
 final class XmlSupport {
+    /**
+     * Allowlisted {@code org.matsim.*} string constant. Wire-format
+     * compatibility only: written into MATSim network files as the attribute
+     * class hint so MATSim can rehydrate the value; no MATSim code is imported.
+     */
+    public static final String MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT =
+            "org.matsim.core.network.turnRestrictions.DisallowedNextLinks";
+
+    /** Historic class hint written by older MATSim versions; accepted on read only. */
+    public static final String LEGACY_MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT =
+            "org.matsim.core.network.DisallowedNextLinks";
+
+    public static final String ATTR_DISALLOWED_NEXT_LINKS = "disallowedNextLinks";
+
     private XmlSupport() {
     }
 
@@ -295,7 +310,7 @@ final class XmlSupport {
             if (name == null || name.isBlank()) {
                 continue;
             }
-            attributes.putAttribute(name, convert(attributeElement.getTextContent(), attr(attributeElement, "class")));
+            attributes.putAttribute(name, convert(name, attributeElement.getTextContent(), attr(attributeElement, "class")));
         }
     }
 
@@ -311,7 +326,7 @@ final class XmlSupport {
             Element attributeElement = document.createElement("attribute");
             attributeElement.setAttribute("name", entry.getKey());
             attributeElement.setAttribute("class", classHint(entry.getValue()));
-            attributeElement.setTextContent(entry.getValue().toString());
+            attributeElement.setTextContent(textContent(entry.getValue()));
             attributesElement.appendChild(attributeElement);
         }
         parent.appendChild(attributesElement);
@@ -349,7 +364,16 @@ final class XmlSupport {
         return outputStream;
     }
 
-    private static Object convert(String value, String className) {
+    private static Object convert(String name, String value, String className) {
+        if (isDisallowedNextLinksAttribute(name, className)) {
+            try {
+                return DisallowedNextLinks.fromJson(value);
+            } catch (MatsimModelException exception) {
+                System.err.println("WARNING: matsim-models: malformed disallowedNextLinks payload, keeping raw string: "
+                        + exception.getMessage());
+                return value;
+            }
+        }
         if (Double.class.getName().equals(className)) {
             return Double.valueOf(value);
         }
@@ -365,7 +389,23 @@ final class XmlSupport {
         return value;
     }
 
+    private static String textContent(Object value) {
+        if (value instanceof DisallowedNextLinks links) {
+            return links.toJson();
+        }
+        return value.toString();
+    }
+
+    private static boolean isDisallowedNextLinksAttribute(String name, String className) {
+        return MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT.equals(className)
+                || LEGACY_MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT.equals(className)
+                || ATTR_DISALLOWED_NEXT_LINKS.equals(name);
+    }
+
     private static String classHint(Object value) {
+        if (value instanceof DisallowedNextLinks) {
+            return MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT;
+        }
         if (value instanceof Double) {
             return Double.class.getName();
         }

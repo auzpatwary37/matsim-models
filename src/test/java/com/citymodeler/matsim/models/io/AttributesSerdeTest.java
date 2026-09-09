@@ -5,9 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 import com.citymodeler.matsim.models.api.Attributes;
+import com.citymodeler.matsim.models.network.turnrestrictions.DisallowedNextLinks;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 
 class AttributesSerdeTest {
@@ -93,6 +96,27 @@ class AttributesSerdeTest {
 
         assertTrue(xml.equals("<attributes/>") || xml.equals("<attributes></attributes>"));
         assertTrue(attributes.getAsMap().isEmpty());
+    }
+
+    @Test
+    void serializesAndDeserializesDisallowedNextLinksAttribute() throws Exception {
+        DisallowedNextLinks restriction = DisallowedNextLinks.empty()
+                .plus("car", List.of("lA", "lB"))
+                .plus("bus", List.of("lC"));
+
+        Attributes attributes = new Attributes();
+        attributes.putAttribute(XmlSupport.ATTR_DISALLOWED_NEXT_LINKS, restriction);
+
+        XmlMapper mapper = MatsimXmlMapperFactory.createXmlMapper();
+        String xml = mapper.writeValueAsString(attributes);
+
+        assertTrue(xml.contains("class=\"" + XmlSupport.MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT + "\""), xml);
+        assertTrue(xml.contains("{&quot;bus&quot;:[[&quot;lC&quot;]],&quot;car&quot;:[[&quot;lA&quot;,&quot;lB&quot;]]}"), xml);
+
+        Attributes deserialized = mapper.readValue(xml, Attributes.class);
+        Object value = deserialized.getAttribute(XmlSupport.ATTR_DISALLOWED_NEXT_LINKS);
+        assertInstanceOf(DisallowedNextLinks.class, value);
+        assertEquals(restriction, value);
     }
 
     @Test
