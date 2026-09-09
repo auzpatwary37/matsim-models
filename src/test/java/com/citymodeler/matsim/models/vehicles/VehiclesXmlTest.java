@@ -88,8 +88,8 @@ class VehiclesXmlTest {
     void roundTripsVehicleTypesWithCapacitiesAndDimensions() {
         VehicleDefinitions definitions = new VehicleDefinitions();
         VehicleType car = new VehicleType(Id.create("car", VehicleType.class));
-        car.setSeatingCapacity(1.0);
-        car.setStandingCapacity(3.0);
+        car.setSeatingCapacity(1);
+        car.setStandingCapacity(3);
         car.setLengthMeters(4.5);
         car.setWidthMeters(1.8);
         car.setAccessTimeSeconds(0.5);
@@ -99,18 +99,22 @@ class VehiclesXmlTest {
 
         String xml = new VehiclesXmlWriter().writeToString(definitions);
 
+        // Canonical MATSim vehicleDefinitions v2.0 wire form.
+        assertTrue(xml.contains("<vehicleDefinitions"), xml);
+        assertTrue(xml.contains("vehicleDefinitions_v2.0.xsd"), xml);
         assertTrue(xml.contains("<vehicleType id=\"car\">"), xml);
-        assertTrue(xml.contains("seats=\"1.0\""), xml);
-        assertTrue(xml.contains("standingRoom=\"3.0\""), xml);
-        assertTrue(xml.contains("persons=\"4.0\""), xml);
-        assertTrue(xml.contains("<accessTime seconds=\"0.5\"/>"), xml);
-        assertTrue(xml.contains("<length meters=\"4.5\"/>"), xml);
+        assertTrue(xml.contains("seats=\"1\""), xml);
+        assertTrue(xml.contains("standingRoomInPersons=\"3\""), xml);
+        assertTrue(xml.contains("<length meter=\"4.5\"/>"), xml);
+        assertTrue(xml.contains("<width meter=\"1.8\"/>"), xml);
+        assertTrue(xml.contains("accessTimeInSecondsPerPerson"), xml);
+        assertTrue(xml.contains("egressTimeInSecondsPerPerson"), xml);
         assertTrue(xml.indexOf("<vehicleType") < xml.indexOf("<vehicle "), xml);
 
         VehicleDefinitions reparsed = new VehiclesXmlReader().read(xml);
         VehicleType reparsedCar = reparsed.getVehicleTypes().get(Id.create("car", VehicleType.class));
-        assertEquals(1.0, reparsedCar.getSeatingCapacity());
-        assertEquals(3.0, reparsedCar.getStandingCapacity());
+        assertEquals(1, reparsedCar.getSeatingCapacity());
+        assertEquals(3, reparsedCar.getStandingCapacity());
         assertEquals(4.5, reparsedCar.getLengthMeters());
         assertEquals(1.8, reparsedCar.getWidthMeters());
         assertEquals(0.5, reparsedCar.getAccessTimeSeconds());
@@ -127,11 +131,38 @@ class VehiclesXmlTest {
 
         String xml = new VehiclesXmlWriter().writeToString(definitions);
 
-        assertTrue(xml.contains("<vehicleType id=\"bike\">"), xml);
-        assertTrue(xml.contains("seats=\"0.0\""), xml);
-        assertTrue(xml.contains("standingRoom=\"0.0\""), xml);
-        assertTrue(!xml.contains("<accessTime"), xml);
+        assertTrue(xml.contains("<vehicleType id=\"bike\""), xml);
+        assertTrue(!xml.contains("<capacity"), xml);
+        assertTrue(!xml.contains("accessTimeInSecondsPerPerson"), xml);
         assertTrue(!xml.contains("<length"), xml);
+        assertTrue(!xml.contains("<width"), xml);
+    }
+
+    @Test
+    void readerStillParsesHistoricVehiclesDialect() {
+        String xml = """
+                <vehicles>
+                    <vehicleType id="bus">
+                        <capacity seats="40" standingRoom="60" persons="100"/>
+                        <accessTime seconds="1.5"/>
+                        <egressTime seconds="0.75"/>
+                        <length meters="12.0"/>
+                        <width meters="2.5"/>
+                    </vehicleType>
+                    <vehicle id="v1" type="bus"/>
+                </vehicles>
+                """;
+
+        VehicleDefinitions definitions = new VehiclesXmlReader().read(xml);
+
+        VehicleType bus = definitions.getVehicleTypes().get(Id.create("bus", VehicleType.class));
+        assertEquals(40, bus.getSeatingCapacity());
+        assertEquals(60, bus.getStandingCapacity());
+        assertEquals(1.5, bus.getAccessTimeSeconds());
+        assertEquals(0.75, bus.getEgressTimeSeconds());
+        assertEquals(12.0, bus.getLengthMeters());
+        assertEquals(2.5, bus.getWidthMeters());
+        assertEquals("bus", definitions.getVehicles().get(Id.create("v1", Vehicle.class)).getType());
     }
 
     @Test

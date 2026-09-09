@@ -10,6 +10,13 @@ import com.citymodeler.matsim.models.vehicles.Vehicle;
 import com.citymodeler.matsim.models.vehicles.VehicleDefinitions;
 import com.citymodeler.matsim.models.vehicles.VehicleType;
 
+/**
+ * Reads vehicle definitions. The canonical input is the current MATSim
+ * vehicleDefinitions v2.0 format ({@code vehicleDefinitions} root); the
+ * historic repo-local {@code <vehicles>} dialect remains readable, including
+ * its {@code standingRoom}/{@code persons} capacity spelling, {@code meters}
+ * dimension unit, and {@code accessTime}/{@code egressTime} element form.
+ */
 public final class VehiclesXmlReader {
     private static final String SCHEMA = "/schemas/vehicles.xsd";
     private final boolean validateSchema;
@@ -38,27 +45,55 @@ public final class VehiclesXmlReader {
         VehicleDefinitions definitions = new VehicleDefinitions();
         for (Element typeElement : XmlSupport.children(root, "vehicleType")) {
             VehicleType type = new VehicleType(Id.create(XmlSupport.attr(typeElement, "id"), VehicleType.class));
-            Element capacityElement = XmlSupport.child(typeElement, "capacity");
-            if (capacityElement != null) {
-                type.setSeatingCapacity(XmlSupport.optionalDouble(capacityElement, "seats", 0.0));
-                type.setStandingCapacity(XmlSupport.optionalDouble(capacityElement, "standingRoom", 0.0));
+
+            Element attributesElement = XmlSupport.child(typeElement, "attributes");
+            if (attributesElement != null) {
+                for (Element attributeElement : XmlSupport.children(attributesElement, "attribute")) {
+                    String name = XmlSupport.attr(attributeElement, "name");
+                    String text = attributeElement.getTextContent();
+                    if (text == null || text.isBlank()) {
+                        continue;
+                    }
+                    if (VehiclesXmlWriter.ACCESS_TIME_IN_SECONDS_PER_PERSON.equals(name)) {
+                        type.setAccessTimeSeconds(Double.parseDouble(text.trim()));
+                    } else if (VehiclesXmlWriter.EGRESS_TIME_IN_SECONDS_PER_PERSON.equals(name)) {
+                        type.setEgressTimeSeconds(Double.parseDouble(text.trim()));
+                    }
+                }
             }
             Element accessTimeElement = XmlSupport.child(typeElement, "accessTime");
-            if (accessTimeElement != null) {
+            if (accessTimeElement != null && type.getAccessTimeSeconds() == 0.0) {
                 type.setAccessTimeSeconds(XmlSupport.optionalDouble(accessTimeElement, "seconds", 0.0));
             }
             Element egressTimeElement = XmlSupport.child(typeElement, "egressTime");
-            if (egressTimeElement != null) {
+            if (egressTimeElement != null && type.getEgressTimeSeconds() == 0.0) {
                 type.setEgressTimeSeconds(XmlSupport.optionalDouble(egressTimeElement, "seconds", 0.0));
             }
+
+            Element capacityElement = XmlSupport.child(typeElement, "capacity");
+            if (capacityElement != null) {
+                String seats = XmlSupport.attr(capacityElement, "seats");
+                if (seats != null && !seats.isBlank()) {
+                    type.setSeatingCapacity(Integer.parseInt(seats.trim()));
+                }
+                String standing = XmlSupport.attr(capacityElement, "standingRoomInPersons");
+                if (standing == null || standing.isBlank()) {
+                    standing = XmlSupport.attr(capacityElement, "standingRoom");
+                }
+                if (standing != null && !standing.isBlank()) {
+                    type.setStandingCapacity(Integer.parseInt(standing.trim()));
+                }
+            }
+
             Element lengthElement = XmlSupport.child(typeElement, "length");
             if (lengthElement != null) {
-                type.setLengthMeters(XmlSupport.optionalDouble(lengthElement, "meters", 0.0));
+                type.setLengthMeters(optionalDimension(lengthElement));
             }
             Element widthElement = XmlSupport.child(typeElement, "width");
             if (widthElement != null) {
-                type.setWidthMeters(XmlSupport.optionalDouble(widthElement, "meters", 0.0));
+                type.setWidthMeters(optionalDimension(widthElement));
             }
+
             definitions.addVehicleType(type);
         }
         for (Element vehicleElement : XmlSupport.children(root, "vehicle")) {
@@ -69,5 +104,18 @@ public final class VehiclesXmlReader {
             definitions.addVehicle(vehicle);
         }
         return definitions;
+    }
+
+    /** Accepts the canonical {@code meter} unit as well as the historic {@code meters} spelling. */
+    private static double optionalDimension(Element element) {
+        String meter = XmlSupport.attr(element, "meter");
+        if (meter != null && !meter.isBlank()) {
+            return Double.parseDouble(meter.trim());
+        }
+        String legacyMeters = XmlSupport.attr(element, "meters");
+        if (legacyMeters != null && !legacyMeters.isBlank()) {
+            return Double.parseDouble(legacyMeters.trim());
+        }
+        return 0.0;
     }
 }

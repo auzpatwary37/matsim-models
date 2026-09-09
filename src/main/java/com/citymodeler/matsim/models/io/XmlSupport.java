@@ -315,15 +315,29 @@ final class XmlSupport {
     }
 
     static void appendAttributes(Document document, Element parent, Attributes attributes) {
+        appendAttributes(document, parent, attributes, null);
+    }
+
+    /**
+     * Appends an {@code <attributes>} container. When {@code namespaceUri} is
+     * non-null the container and its entries are created in that namespace
+     * (required for documents whose root declares a default namespace, e.g.
+     * the MATSim vehicleDefinitions v2.0 root element).
+     */
+    static void appendAttributes(Document document, Element parent, Attributes attributes, String namespaceUri) {
         if (attributes.getAsMap().isEmpty()) {
             return;
         }
-        Element attributesElement = document.createElement("attributes");
+        Element attributesElement = namespaceUri == null
+                ? document.createElement("attributes")
+                : document.createElementNS(namespaceUri, "attributes");
         for (Map.Entry<String, Object> entry : new TreeMap<>(attributes.getAsMap()).entrySet()) {
             if (entry.getValue() == null) {
                 continue;
             }
-            Element attributeElement = document.createElement("attribute");
+            Element attributeElement = namespaceUri == null
+                    ? document.createElement("attribute")
+                    : document.createElementNS(namespaceUri, "attribute");
             attributeElement.setAttribute("name", entry.getKey());
             attributeElement.setAttribute("class", classHint(entry.getValue()));
             attributeElement.setTextContent(textContent(entry.getValue()));

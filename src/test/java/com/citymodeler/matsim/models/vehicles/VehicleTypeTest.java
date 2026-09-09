@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.vehicles;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
@@ -12,10 +13,10 @@ import com.citymodeler.matsim.models.api.Id;
 class VehicleTypeTest {
 
     @Test
-    void defaultsAreZero() {
+    void capacitiesDefaultToUnsetAndDimensionsToZero() {
         VehicleType type = new VehicleType(Id.create("car", VehicleType.class));
-        assertEquals(0.0, type.getSeatingCapacity());
-        assertEquals(0.0, type.getStandingCapacity());
+        assertNull(type.getSeatingCapacity());
+        assertNull(type.getStandingCapacity());
         assertEquals(0.0, type.getLengthMeters());
         assertEquals(0.0, type.getWidthMeters());
         assertEquals(0.0, type.getAccessTimeSeconds());
@@ -25,15 +26,15 @@ class VehicleTypeTest {
     @Test
     void settersAcceptValidValues() {
         VehicleType type = new VehicleType(Id.create("bus", VehicleType.class));
-        type.setSeatingCapacity(40.0);
-        type.setStandingCapacity(60.0);
+        type.setSeatingCapacity(40);
+        type.setStandingCapacity(60);
         type.setLengthMeters(12.0);
         type.setWidthMeters(2.5);
         type.setAccessTimeSeconds(1.5);
         type.setEgressTimeSeconds(0.75);
 
-        assertEquals(40.0, type.getSeatingCapacity());
-        assertEquals(60.0, type.getStandingCapacity());
+        assertEquals(40, type.getSeatingCapacity());
+        assertEquals(60, type.getStandingCapacity());
         assertEquals(12.0, type.getLengthMeters());
         assertEquals(2.5, type.getWidthMeters());
         assertEquals(1.5, type.getAccessTimeSeconds());
@@ -43,8 +44,17 @@ class VehicleTypeTest {
     @Test
     void rejectsNegativeCapacities() {
         VehicleType type = new VehicleType(Id.create("car", VehicleType.class));
-        assertThrows(IllegalArgumentException.class, () -> type.setSeatingCapacity(-0.1));
-        assertThrows(IllegalArgumentException.class, () -> type.setStandingCapacity(-1.0));
+        assertThrows(IllegalArgumentException.class, () -> type.setSeatingCapacity(-1));
+        assertThrows(IllegalArgumentException.class, () -> type.setStandingCapacity(-5));
+    }
+
+    @Test
+    void rejectsNonFiniteDimensionAndTimeValues() {
+        VehicleType type = new VehicleType(Id.create("car", VehicleType.class));
+        assertThrows(IllegalArgumentException.class, () -> type.setLengthMeters(Double.NaN));
+        assertThrows(IllegalArgumentException.class, () -> type.setWidthMeters(Double.POSITIVE_INFINITY));
+        assertThrows(IllegalArgumentException.class, () -> type.setAccessTimeSeconds(Double.NEGATIVE_INFINITY));
+        assertThrows(IllegalArgumentException.class, () -> type.setEgressTimeSeconds(Double.NaN));
     }
 
     @Test

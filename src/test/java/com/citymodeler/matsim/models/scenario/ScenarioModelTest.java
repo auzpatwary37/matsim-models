@@ -178,14 +178,17 @@ class ScenarioModelTest {
     @Test
     void scenarioXmlReaderLoadsVehiclesModule() throws Exception {
         Files.writeString(tempDir.resolve("vehicles.xml"), """
-                <vehicles>
+                <vehicleDefinitions xmlns="http://www.matsim.org/files/dtd"
+                                    xsi:schemaLocation="http://www.matsim.org/files/dtd http://www.matsim.org/files/dtd/vehicleDefinitions_v2.0.xsd">
                     <vehicleType id="bus">
-                        <capacity seats="40.0" standingRoom="60.0" persons="100.0"/>
-                        <accessTime seconds="1.5"/>
-                        <egressTime seconds="0.75"/>
+                        <attributes>
+                            <attribute name="accessTimeInSecondsPerPerson" class="java.lang.Double">1.5</attribute>
+                            <attribute name="egressTimeInSecondsPerPerson" class="java.lang.Double">0.75</attribute>
+                        </attributes>
+                        <capacity seats="40" standingRoomInPersons="60"/>
                     </vehicleType>
                     <vehicle id="v1" type="bus"/>
-                </vehicles>
+                </vehicleDefinitions>
                 """);
         String configXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
                 "<config>" +
@@ -198,9 +201,10 @@ class ScenarioModelTest {
 
         assertNotNull(scenario.getVehicleDefinitions());
         VehicleType bus = scenario.getVehicleDefinitions().getVehicleTypes().get(Id.create("bus", VehicleType.class));
-        assertEquals(40.0, bus.getSeatingCapacity());
-        assertEquals(60.0, bus.getStandingCapacity());
+        assertEquals(40, bus.getSeatingCapacity());
+        assertEquals(60, bus.getStandingCapacity());
         assertEquals(1.5, bus.getAccessTimeSeconds());
+        assertEquals(0.75, bus.getEgressTimeSeconds());
         assertEquals("bus", scenario.getVehicleDefinitions().getVehicles().get(Id.create("v1", Vehicle.class)).getType());
     }
 
