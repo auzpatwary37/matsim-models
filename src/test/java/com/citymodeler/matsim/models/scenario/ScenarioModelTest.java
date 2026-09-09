@@ -275,6 +275,26 @@ class ScenarioModelTest {
     }
 
     @Test
+    void validatorFlagsDepartureVehicleReferencesWhenVehicleModuleMissing() {
+        Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
+
+        TransitSchedule transitSchedule = new TransitSchedule();
+        TransitLine line = new TransitLine(Id.create("line-1", TransitLine.class));
+        TransitRoute route = new TransitRoute(Id.create("route-1", TransitRoute.class));
+        Departure departure = new Departure(Id.create("dep-1", Departure.class), 0.0);
+        departure.setVehicleId("ghost-vehicle");
+        route.addDeparture(departure);
+        line.addRoute(route);
+        transitSchedule.addTransitLine(line);
+        scenario.setTransitSchedule(transitSchedule);
+
+        ValidationReport report = ScenarioValidator.validate(scenario);
+
+        assertTrue(report.getIssues().stream().anyMatch(issue -> "departure-vehicle-missing".equals(issue.getCode())),
+                String.valueOf(report.getIssues()));
+    }
+
+    @Test
     void validatorAcceptsResolvableVehicleReferences() {
         Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
         VehicleDefinitions definitions = new VehicleDefinitions();

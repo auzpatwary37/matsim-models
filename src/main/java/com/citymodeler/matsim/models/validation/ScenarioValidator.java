@@ -1,5 +1,7 @@
 package com.citymodeler.matsim.models.validation;
 
+import java.util.Map;
+
 import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.facilities.ActivityFacilities;
 import com.citymodeler.matsim.models.network.Network;
@@ -109,21 +111,27 @@ public final class ScenarioValidator {
                             "Define the vehicle type or fix the vehicle type reference"));
                 }
             }
-            if (transitSchedule != null) {
-                for (var line : transitSchedule.getTransitLines().values()) {
-                    for (var route : line.getRoutes().values()) {
-                        for (var departure : route.getDepartures().values()) {
-                            String vehicleId = departure.getVehicleId();
-                            if (vehicleId != null && !vehicleId.isBlank()
-                                    && !vehicleDefinitions.getVehicles().containsKey(Id.create(vehicleId, Vehicle.class))) {
-                                report.addIssue(new ValidationIssue(
-                                        ValidationSeverity.WARNING,
-                                        "scenario",
-                                        "departure-vehicle-missing",
-                                        "Departure " + departure.getId() + " references undefined vehicle: " + vehicleId,
-                                        departure.getId().toString(),
-                                        "Define the vehicle or fix the departure vehicle reference"));
-                            }
+        }
+
+        if (transitSchedule != null) {
+            // A missing vehicle-definitions module means NO vehicle is resolvable;
+            // every referenced departure vehicle must be reported.
+            Map<Id<Vehicle>, Vehicle> vehicles = vehicleDefinitions == null
+                    ? Map.of()
+                    : vehicleDefinitions.getVehicles();
+            for (var line : transitSchedule.getTransitLines().values()) {
+                for (var route : line.getRoutes().values()) {
+                    for (var departure : route.getDepartures().values()) {
+                        String vehicleId = departure.getVehicleId();
+                        if (vehicleId != null && !vehicleId.isBlank()
+                                && !vehicles.containsKey(Id.create(vehicleId, Vehicle.class))) {
+                            report.addIssue(new ValidationIssue(
+                                    ValidationSeverity.WARNING,
+                                    "scenario",
+                                    "departure-vehicle-missing",
+                                    "Departure " + departure.getId() + " references undefined vehicle: " + vehicleId,
+                                    departure.getId().toString(),
+                                    "Define the vehicle or fix the departure vehicle reference"));
                         }
                     }
                 }
