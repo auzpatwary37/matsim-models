@@ -1,5 +1,8 @@
 package com.citymodeler.matsim.models.vehicles;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 import com.citymodeler.matsim.models.api.Attributes;
@@ -29,6 +32,7 @@ public final class VehicleType {
     private Double accessTimeSeconds;
     private Double egressTimeSeconds;
     private final Attributes extraAttributes = new Attributes();
+    private final List<String> extensionElements = new ArrayList<>();
 
     public VehicleType(Id<VehicleType> id) {
         this.id = Objects.requireNonNull(id, "id");
@@ -114,6 +118,14 @@ public final class VehicleType {
 
     public Attributes getExtraAttributes() {
         return extraAttributes;
+    }
+
+    public void addExtensionElement(String serializedXml) {
+        extensionElements.add(serializedXml);
+    }
+
+    public List<String> getExtensionElements() {
+        return Collections.unmodifiableList(extensionElements);
     }
 
     private static void requireFiniteNonNegative(String field, double value) {

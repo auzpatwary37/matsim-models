@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.io;
 
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.util.Set;
 
 import org.w3c.dom.Element;
 
@@ -18,7 +19,8 @@ import com.citymodeler.matsim.models.vehicles.VehicleType;
  * dimension unit, and {@code accessTime}/{@code egressTime} element form.
  */
 public final class VehiclesXmlReader {
-    private static final String SCHEMA = "/schemas/vehicles.xsd";
+    private static final String SCHEMA = "/schemas/v2/vehicleDefinitions_v2.0.xsd";
+    private static final String LEGACY_SCHEMA = "/schemas/vehicles.xsd";
     private final boolean validateSchema;
 
     public VehiclesXmlReader() {
@@ -30,15 +32,22 @@ public final class VehiclesXmlReader {
     }
 
     public VehicleDefinitions read(Path path) {
-        return read((validateSchema ? XmlSupport.parse(path, SCHEMA) : XmlSupport.parse(path)).getDocumentElement());
+        String schema = resolveSchema();
+        return read((validateSchema ? XmlSupport.parse(path, schema) : XmlSupport.parse(path)).getDocumentElement());
     }
 
     public VehicleDefinitions read(InputStream inputStream) {
-        return read((validateSchema ? XmlSupport.parse(inputStream, SCHEMA) : XmlSupport.parse(inputStream)).getDocumentElement());
+        String schema = resolveSchema();
+        return read((validateSchema ? XmlSupport.parse(inputStream, schema) : XmlSupport.parse(inputStream)).getDocumentElement());
     }
 
     public VehicleDefinitions read(String xml) {
-        return read((validateSchema ? XmlSupport.parse(xml, SCHEMA) : XmlSupport.parse(xml)).getDocumentElement());
+        String schema = resolveSchema();
+        return read((validateSchema ? XmlSupport.parse(xml, schema) : XmlSupport.parse(xml)).getDocumentElement());
+    }
+
+    private String resolveSchema() {
+        return SCHEMA;
     }
 
     private VehicleDefinitions read(Element root) {
@@ -96,6 +105,15 @@ public final class VehiclesXmlReader {
             Element widthElement = XmlSupport.child(typeElement, "width");
             if (widthElement != null) {
                 type.setWidthMeters(optionalDimension(widthElement));
+            }
+
+            // Preserve unrecognized v2.0 vehicleType child elements losslessly.
+            var knownElements = Set.of("attributes", "capacity", "length", "width", "accessTime", "egressTime");
+            org.w3c.dom.NodeList childNodes = typeElement.getChildNodes();
+            for (int ci = 0; ci < childNodes.getLength(); ci++) {
+                if (childNodes.item(ci) instanceof Element childEl && !knownElements.contains(childEl.getTagName())) {
+                    type.addExtensionElement(XmlSupport.writeElementToString(childEl));
+                }
             }
 
             definitions.addVehicleType(type);

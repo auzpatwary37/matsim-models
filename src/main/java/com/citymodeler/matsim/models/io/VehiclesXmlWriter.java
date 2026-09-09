@@ -90,6 +90,9 @@ public final class VehiclesXmlWriter {
                 widthElement.setAttribute("meter", Double.toString(type.getWidthMeters()));
                 typeElement.appendChild(widthElement);
             }
+            for (String fragment : type.getExtensionElements()) {
+                XmlSupport.appendRawXmlFragment(document, typeElement, fragment);
+            }
             root.appendChild(typeElement);
         }
 
