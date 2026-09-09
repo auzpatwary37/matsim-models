@@ -1,21 +1,31 @@
 package com.citymodeler.matsim.models.scenario;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import com.citymodeler.matsim.models.api.Coord;
 import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.config.Config;
 import com.citymodeler.matsim.models.config.ConfigGroup;
 import com.citymodeler.matsim.models.config.ConfigUtils;
+import com.citymodeler.matsim.models.io.NetworkXmlReader;
+import com.citymodeler.matsim.models.io.ScenarioXmlReader;
+import com.citymodeler.matsim.models.io.TransitScheduleXmlReader;
+import com.citymodeler.matsim.models.io.VehiclesXmlReader;
 import com.citymodeler.matsim.models.network.Link;
 import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.network.Node;
@@ -24,13 +34,22 @@ import com.citymodeler.matsim.models.population.Leg;
 import com.citymodeler.matsim.models.population.Person;
 import com.citymodeler.matsim.models.population.Plan;
 import com.citymodeler.matsim.models.population.TransitPassengerRoute;
+import com.citymodeler.matsim.models.transit.Departure;
 import com.citymodeler.matsim.models.transit.TransitLine;
 import com.citymodeler.matsim.models.transit.TransitRoute;
 import com.citymodeler.matsim.models.transit.TransitRouteStop;
 import com.citymodeler.matsim.models.transit.TransitSchedule;
 import com.citymodeler.matsim.models.transit.TransitStopFacility;
+import com.citymodeler.matsim.models.vehicles.Vehicle;
+import com.citymodeler.matsim.models.vehicles.VehicleDefinitions;
+import com.citymodeler.matsim.models.vehicles.VehicleType;
+import com.citymodeler.matsim.models.validation.ScenarioValidator;
+import com.citymodeler.matsim.models.validation.ValidationReport;
 
 class ScenarioModelTest {
+
+    @TempDir
+    Path tempDir;
     @Test
     void planElementsPreserveOrderAndPersonPostProcessWiresPlanBackrefAndDefaultSelectedPlan() {
         Person person = new Person(Id.create("person-1", Person.class));
@@ -145,5 +164,135 @@ class ScenarioModelTest {
         Plan plan = new Plan();
         plan.addPlanElement(new Activity("home"));
         assertThrows(UnsupportedOperationException.class, () -> plan.getPlanElements().clear());
+    }
+
+    @Test
+    void scenarioStoresVehicleDefinitions() {
+        Scenario scenario = new Scenario();
+        assertNull(scenario.getVehicleDefinitions());
+        VehicleDefinitions definitions = new VehicleDefinitions();
+        scenario.setVehicleDefinitions(definitions);
+        assertSame(definitions, scenario.getVehicleDefinitions());
+    }
+
+    @Test
+    void scenarioXmlReaderLoadsVehiclesModule() throws Exception {
+        Files.writeString(tempDir.resolve("vehicles.xml"), """
+                <vehicles>
+                    <vehicleType id="bus">
+                        <capacity seats="40.0" standingRoom="60.0" persons="100.0"/>
+                        <accessTime seconds="1.5"/>
+                        <egressTime seconds="0.75"/>
+                    </vehicleType>
+                    <vehicle id="v1" type="bus"/>
+                </vehicles>
+                """);
+        String configXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                "<config>" +
+                "  <module name=\"vehicles\">" +
+                "    <param name=\"inputFile\" value=\"vehicles.xml\"/>" +
+                "  </module>" +
+                "</config>";
+
+        Scenario scenario = new ScenarioXmlReader().readString(configXml, tempDir);
+
+        assertNotNull(scenario.getVehicleDefinitions());
+        VehicleType bus = scenario.getVehicleDefinitions().getVehicleTypes().get(Id.create("bus", VehicleType.class));
+        assertEquals(40.0, bus.getSeatingCapacity());
+        assertEquals(60.0, bus.getStandingCapacity());
+        assertEquals(1.5, bus.getAccessTimeSeconds());
+        assertEquals("bus", scenario.getVehicleDefinitions().getVehicles().get(Id.create("v1", Vehicle.class)).getType());
+    }
+
+    @Test
+    void saveScenarioWritesNetworkTransitAndVehiclesFiles() throws Exception {
+        Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
+        Network network = new Network();
+        Id<Node> fromNodeId = Id.create("n1", Node.class);
+        Id<Node> toNodeId = Id.create("n2", Node.class);
+        network.addNode(new Node(fromNodeId, new Coord(0.0, 0.0)));
+        network.addNode(new Node(toNodeId, new Coord(100.0, 0.0)));
+        network.addLink(new Link(Id.createLinkId("l1"), fromNodeId, toNodeId, 100.0, 1000.0, 13.9, 1.0, Set.of("car")));
+        scenario.setNetwork(network);
+
+        TransitSchedule transitSchedule = new TransitSchedule();
+        Id<TransitStopFacility> stopId = Id.create("stop-1", TransitStopFacility.class);
+        transitSchedule.addStopFacility(new TransitStopFacility(stopId, new Coord(0.0, 0.0), false));
+        scenario.setTransitSchedule(transitSchedule);
+
+        VehicleDefinitions definitions = new VehicleDefinitions();
+        definitions.addVehicle(new Vehicle(Id.create("v1", Vehicle.class), "car"));
+        scenario.setVehicleDefinitions(definitions);
+
+        ScenarioUtils.saveScenario(scenario, tempDir);
+
+        assertEquals(1, new NetworkXmlReader().read(tempDir.resolve("network.xml")).getLinks().size());
+        assertEquals(1, new TransitScheduleXmlReader().read(tempDir.resolve("transitSchedule.xml")).getFacilities().size());
+        assertEquals(1, new VehiclesXmlReader().read(tempDir.resolve("vehicles.xml")).getVehicles().size());
+    }
+
+    @Test
+    void saveScenarioSkipsNullModules() throws Exception {
+        Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
+        VehicleDefinitions definitions = new VehicleDefinitions();
+        definitions.addVehicle(new Vehicle(Id.create("v1", Vehicle.class), "car"));
+        scenario.setVehicleDefinitions(definitions);
+
+        ScenarioUtils.saveScenario(scenario, tempDir);
+
+        assertFalse(Files.exists(tempDir.resolve("network.xml")));
+        assertFalse(Files.exists(tempDir.resolve("transitSchedule.xml")));
+        assertTrue(Files.exists(tempDir.resolve("vehicles.xml")));
+    }
+
+    @Test
+    void validatorFlagsMissingVehicleReferences() {
+        Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
+        VehicleDefinitions definitions = new VehicleDefinitions();
+        definitions.addVehicle(new Vehicle(Id.create("v1", Vehicle.class), "missing-type"));
+        scenario.setVehicleDefinitions(definitions);
+
+        TransitSchedule transitSchedule = new TransitSchedule();
+        TransitLine line = new TransitLine(Id.create("line-1", TransitLine.class));
+        TransitRoute route = new TransitRoute(Id.create("route-1", TransitRoute.class));
+        Departure departure = new Departure(Id.create("dep-1", Departure.class), 0.0);
+        departure.setVehicleId("ghost-vehicle");
+        route.addDeparture(departure);
+        line.addRoute(route);
+        transitSchedule.addTransitLine(line);
+        scenario.setTransitSchedule(transitSchedule);
+
+        ValidationReport report = ScenarioValidator.validate(scenario);
+
+        assertTrue(report.getIssues().stream().anyMatch(issue -> "vehicle-type-missing".equals(issue.getCode())),
+                String.valueOf(report.getIssues()));
+        assertTrue(report.getIssues().stream().anyMatch(issue -> "departure-vehicle-missing".equals(issue.getCode())),
+                String.valueOf(report.getIssues()));
+    }
+
+    @Test
+    void validatorAcceptsResolvableVehicleReferences() {
+        Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
+        VehicleDefinitions definitions = new VehicleDefinitions();
+        definitions.addVehicleType(new VehicleType(Id.create("bus", VehicleType.class)));
+        definitions.addVehicle(new Vehicle(Id.create("v1", Vehicle.class), "bus"));
+        scenario.setVehicleDefinitions(definitions);
+
+        TransitSchedule transitSchedule = new TransitSchedule();
+        TransitLine line = new TransitLine(Id.create("line-1", TransitLine.class));
+        TransitRoute route = new TransitRoute(Id.create("route-1", TransitRoute.class));
+        Departure departure = new Departure(Id.create("dep-1", Departure.class), 0.0);
+        departure.setVehicleId("v1");
+        route.addDeparture(departure);
+        line.addRoute(route);
+        transitSchedule.addTransitLine(line);
+        scenario.setTransitSchedule(transitSchedule);
+
+        ValidationReport report = ScenarioValidator.validate(scenario);
+
+        assertFalse(report.getIssues().stream().anyMatch(issue -> "vehicle-type-missing".equals(issue.getCode())),
+                String.valueOf(report.getIssues()));
+        assertFalse(report.getIssues().stream().anyMatch(issue -> "departure-vehicle-missing".equals(issue.getCode())),
+                String.valueOf(report.getIssues()));
     }
 }

@@ -1,10 +1,14 @@
 package com.citymodeler.matsim.models.validation;
 
+import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.facilities.ActivityFacilities;
 import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.population.Population;
 import com.citymodeler.matsim.models.scenario.Scenario;
 import com.citymodeler.matsim.models.transit.TransitSchedule;
+import com.citymodeler.matsim.models.vehicles.Vehicle;
+import com.citymodeler.matsim.models.vehicles.VehicleDefinitions;
+import com.citymodeler.matsim.models.vehicles.VehicleType;
 
 public final class ScenarioValidator {
     private final Scenario scenario;
@@ -54,6 +58,7 @@ public final class ScenarioValidator {
         Network network = scenario.getNetwork();
         ActivityFacilities facilities = scenario.getActivityFacilities();
         TransitSchedule transitSchedule = scenario.getTransitSchedule();
+        VehicleDefinitions vehicleDefinitions = scenario.getVehicleDefinitions();
 
         if (network != null && facilities != null) {
             for (var entry : facilities.getFacilities().entrySet()) {
@@ -85,7 +90,40 @@ public final class ScenarioValidator {
                                     "transit-stop-link-not-in-network",
                                     "Transit stop " + stopFacility.getId() + " references link not in network: " + stopFacility.getLinkId(),
                                     stopFacility.getId().toString(),
-                                    "Ensure transit stop link exists in network"));
+                            "Ensure transit stop link exists in network"));
+                    }
+                }
+            }
+        }
+        }
+
+        if (vehicleDefinitions != null) {
+            for (Vehicle vehicle : vehicleDefinitions.getVehicles().values()) {
+                if (!vehicleDefinitions.getVehicleTypes().containsKey(Id.create(vehicle.getType(), VehicleType.class))) {
+                    report.addIssue(new ValidationIssue(
+                            ValidationSeverity.WARNING,
+                            "scenario",
+                            "vehicle-type-missing",
+                            "Vehicle " + vehicle.getId() + " references undefined vehicle type: " + vehicle.getType(),
+                            vehicle.getId().toString(),
+                            "Define the vehicle type or fix the vehicle type reference"));
+                }
+            }
+            if (transitSchedule != null) {
+                for (var line : transitSchedule.getTransitLines().values()) {
+                    for (var route : line.getRoutes().values()) {
+                        for (var departure : route.getDepartures().values()) {
+                            String vehicleId = departure.getVehicleId();
+                            if (vehicleId != null && !vehicleId.isBlank()
+                                    && !vehicleDefinitions.getVehicles().containsKey(Id.create(vehicleId, Vehicle.class))) {
+                                report.addIssue(new ValidationIssue(
+                                        ValidationSeverity.WARNING,
+                                        "scenario",
+                                        "departure-vehicle-missing",
+                                        "Departure " + departure.getId() + " references undefined vehicle: " + vehicleId,
+                                        departure.getId().toString(),
+                                        "Define the vehicle or fix the departure vehicle reference"));
+                            }
                         }
                     }
                 }
