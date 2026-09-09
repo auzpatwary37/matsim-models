@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.osm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -82,7 +83,7 @@ final class OsmNetworkImporterTest {
     }
 
     @Test
-    void keepRawTagsFalseStillParsesRecordsWithEmptyTags() throws Exception {
+    void keepRawTagsFalseStillParsesAllTagsIntoRecords() throws Exception {
         OsmImportConfig config = new OsmImportConfig(
                 Path.of("src/test/resources/osm/minimal-network.osm"),
                 "EPSG:3857",
@@ -93,8 +94,10 @@ final class OsmNetworkImporterTest {
                 "\u00A9 OpenStreetMap contributors");
         OsmImportResult result = new OsmNetworkImporter().read(config);
 
+        // Tags are always parsed into records regardless of keepRawTags;
+        // the flag only controls provenance and link-attribute output.
         assertEquals(1, result.ways().size());
-        assertTrue(result.ways().get("10").tags().isEmpty());
-        assertTrue(result.nodes().get("1").tags().isEmpty());
+        assertEquals("primary", result.ways().get("10").tags().get("highway"));
+        assertFalse(result.provenance().rawTagsKept());
     }
 }

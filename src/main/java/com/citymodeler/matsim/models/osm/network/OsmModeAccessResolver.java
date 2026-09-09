@@ -19,9 +19,9 @@ public final class OsmModeAccessResolver {
         }
     }
 
-    public List<DirectionDecision> resolve(OsmWayRecord way) {
+    public List<DirectionDecision> resolve(OsmWayRecord way, Set<String> ruleAllowedModes) {
         List<DirectionDecision> decisions = new ArrayList<>();
-        Set<String> baseModes = baseAllowedModes(way.tags());
+        Set<String> baseModes = applyAccessRestrictions(way.tags(), ruleAllowedModes);
 
         boolean forwardOnly = resolveOneway(way.tags());
         boolean backwardOnly = resolveOnewayReverse(way.tags());
@@ -36,32 +36,46 @@ public final class OsmModeAccessResolver {
         return decisions;
     }
 
-    private Set<String> baseAllowedModes(com.citymodeler.matsim.models.osm.OsmTagSet tags) {
+    private Set<String> applyAccessRestrictions(com.citymodeler.matsim.models.osm.OsmTagSet tags, Set<String> ruleModes) {
         String access = tags.get("access");
         if (isForbidden(access)) {
-            return resolveAccessExceptions(tags);
+            Set<String> surviving = new LinkedHashSet<>();
+            for (String mode : ruleModes) {
+                if (isModeAllowed(tags, mode)) {
+                    surviving.add(mode);
+                }
+            }
+            return surviving;
         }
-        Set<String> modes = new LinkedHashSet<>();
-        if (allowsCars(tags)) {
-            modes.add("car");
+        Set<String> result = new LinkedHashSet<>(ruleModes);
+        for (String mode : result) {
+            if (isModeForbidden(tags, mode)) {
+                result.remove(mode);
+            }
         }
-        if (allowsBus(tags)) {
-            modes.add("bus");
-            modes.add("pt");
-        }
-        if (modes.isEmpty()) {
-            modes.add("car");
-        }
-        return modes;
+        return result;
     }
 
-    private Set<String> resolveAccessExceptions(com.citymodeler.matsim.models.osm.OsmTagSet tags) {
-        Set<String> modes = new LinkedHashSet<>();
-        if (allowsBus(tags)) {
-            modes.add("bus");
-            modes.add("pt");
+    private static boolean isModeAllowed(com.citymodeler.matsim.models.osm.OsmTagSet tags, String mode) {
+        String modeTag = tags.get(mode);
+        if (modeTag != null && !isForbidden(modeTag)) {
+            return true;
         }
-        return modes;
+        if (("bus".equals(mode) || "pt".equals(mode)) && allowsBus(tags)) {
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean isModeForbidden(com.citymodeler.matsim.models.osm.OsmTagSet tags, String mode) {
+        String modeTag = tags.get(mode);
+        if (isForbidden(modeTag)) {
+            return true;
+        }
+        if ("car".equals(mode) && (isForbidden(tags.get("motor_vehicle")) || isForbidden(tags.get("vehicle")))) {
+            return true;
+        }
+        return false;
     }
 
     private Set<String> filterByDirectionalAccess(com.citymodeler.matsim.models.osm.OsmTagSet tags, Set<String> baseModes, String direction) {

@@ -9,12 +9,13 @@ public final class OsmLaneResolver {
 
         String directionalKey = forward ? "lanes:forward" : "lanes:backward";
         Double directionalLanes = parseDouble(tags.get(directionalKey));
+        Double total = parseDouble(tags.get("lanes"));
+        Double bothWays = parseDouble(tags.get("lanes:both_ways"));
 
         if (oneway) {
             if (directionalLanes != null) {
                 return directionalLanes;
             }
-            Double total = parseDouble(tags.get("lanes"));
             if (total != null) {
                 return total;
             }
@@ -23,20 +24,17 @@ public final class OsmLaneResolver {
 
         Double forwardLanes = parseDouble(tags.get("lanes:forward"));
         Double backwardLanes = parseDouble(tags.get("lanes:backward"));
-        Double bothWays = parseDouble(tags.get("lanes:both_ways"));
-        Double total = parseDouble(tags.get("lanes"));
 
         if (forwardLanes != null && backwardLanes != null) {
-            double base = forward ? forwardLanes : backwardLanes;
-            return base + (bothWays != null ? bothWays : 0.0);
+            return forward ? forwardLanes : backwardLanes;
         }
 
         if (total != null) {
-            double perDirection = total / 2.0;
-            return perDirection + (bothWays != null ? bothWays : 0.0);
+            double effectiveTotal = bothWays != null ? total - bothWays : total;
+            return effectiveTotal / 2.0;
         }
 
-        return rule.lanesPerDirection() + (bothWays != null ? bothWays : 0.0);
+        return rule.lanesPerDirection();
     }
 
     private static Double parseDouble(String value) {

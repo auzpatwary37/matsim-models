@@ -177,9 +177,6 @@ public final class OsmNetworkImporter {
     }
 
     private OsmTagSet buildTagSet(OsmImportConfig config, Map<String, String> parsedTags) {
-        if (!config.keepRawTags()) {
-            return OsmTagSet.empty();
-        }
         return OsmTagSet.of(parsedTags);
     }
 

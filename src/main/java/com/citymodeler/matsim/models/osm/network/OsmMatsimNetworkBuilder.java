@@ -39,7 +39,7 @@ public final class OsmMatsimNetworkBuilder {
                 continue;
             }
 
-            List<OsmModeAccessResolver.DirectionDecision> decisions = accessResolver.resolve(way);
+            List<OsmModeAccessResolver.DirectionDecision> decisions = accessResolver.resolve(way, rule.allowedModes());
             if (decisions.isEmpty()) {
                 continue;
             }
