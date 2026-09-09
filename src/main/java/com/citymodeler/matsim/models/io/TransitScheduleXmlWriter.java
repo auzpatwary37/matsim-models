@@ -39,7 +39,7 @@ public final class TransitScheduleXmlWriter {
             stopElement.setAttribute("id", facility.getId().toString());
             stopElement.setAttribute("x", Double.toString(facility.getCoord().getX()));
             stopElement.setAttribute("y", Double.toString(facility.getCoord().getY()));
-            XmlSupport.setIfPresent(stopElement, "linkId", facility.getLinkId());
+            XmlSupport.setIfPresent(stopElement, "linkRefId", facility.getLinkId());
             XmlSupport.setIfPresent(stopElement, "name", facility.getName());
             stopElement.setAttribute("isBlocking", Boolean.toString(facility.isBlockingLane()));
             XmlSupport.appendAttributes(document, stopElement, facility.getAttributes());
@@ -54,10 +54,8 @@ public final class TransitScheduleXmlWriter {
             for (TransitRoute route : line.getRoutes().values()) {
                 Element routeElement = document.createElement("transitRoute");
                 routeElement.setAttribute("id", route.getId().toString());
-                if (route.getTransportMode() != null) {
-                    routeElement.setAttribute("transportMode", route.getTransportMode());
-                }
                 appendText(document, routeElement, "description", route.getDescription());
+                appendText(document, routeElement, "transportMode", route.getTransportMode());
                 XmlSupport.appendAttributes(document, routeElement, route.getAttributes());
 
                 Element profileElement = document.createElement("routeProfile");
@@ -69,6 +67,16 @@ public final class TransitScheduleXmlWriter {
                     stopElement.setAttribute("departureOffset", Double.toString(stop.getDepartureOffset()));
                     stopElement.setAttribute("awaitDeparture", Boolean.toString(stop.isAwaitDeparture()));
                     profileElement.appendChild(stopElement);
+                }
+
+                if (route.getNetworkRoute() != null) {
+                    Element routeSequenceElement = document.createElement("route");
+                    for (var linkId : route.getNetworkRoute()) {
+                        Element linkElement = document.createElement("link");
+                        linkElement.setAttribute("refId", linkId.toString());
+                        routeSequenceElement.appendChild(linkElement);
+                    }
+                    routeElement.appendChild(routeSequenceElement);
                 }
 
                 Element departuresElement = document.createElement("departures");

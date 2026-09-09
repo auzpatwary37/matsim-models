@@ -9,11 +9,13 @@ import java.util.Objects;
 
 import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Id;
+import com.citymodeler.matsim.models.network.Link;
 
 public final class TransitRoute {
     private final Id<TransitRoute> id;
     private String description;
     private String transportMode;
+    private List<Id<Link>> networkRoute;
     private final List<TransitRouteStop> stops = new ArrayList<>();
     private final Map<Id<Departure>, Departure> departures = new LinkedHashMap<>();
     private final Attributes attributes = new Attributes();
@@ -40,6 +42,27 @@ public final class TransitRoute {
 
     public void setTransportMode(String transportMode) {
         this.transportMode = transportMode;
+    }
+
+    /** Ordered network link sequence; null until mapped. */
+    public List<Id<Link>> getNetworkRoute() {
+        return networkRoute == null ? null : List.copyOf(networkRoute);
+    }
+
+    public void setNetworkRoute(List<Id<Link>> networkRoute) {
+        if (networkRoute == null) {
+            this.networkRoute = null;
+            return;
+        }
+        if (networkRoute.isEmpty()) {
+            throw new IllegalArgumentException("networkRoute must not be empty; pass null to clear");
+        }
+        for (Id<Link> linkId : networkRoute) {
+            if (linkId == null) {
+                throw new IllegalArgumentException("networkRoute must not contain null link ids");
+            }
+        }
+        this.networkRoute = List.copyOf(networkRoute);
     }
 
     public List<TransitRouteStop> getStops() {

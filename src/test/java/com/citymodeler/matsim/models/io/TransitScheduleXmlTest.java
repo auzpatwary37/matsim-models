@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.io.InputStream;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
@@ -206,7 +207,7 @@ class TransitScheduleXmlTest {
     }
 
     @Test
-    void writer_usesTransportModeAttribute() {
+    void writer_usesTransportModeChildElement() {
         String xml = """
                 <transitSchedule>
                     <transitLine id="line-1">
@@ -217,7 +218,92 @@ class TransitScheduleXmlTest {
                 """;
         TransitSchedule schedule = new TransitScheduleXmlReader().read(xml);
         String output = new TransitScheduleXmlWriter().writeToString(schedule);
-        assertTrue(output.contains("transportMode=\"bus\""));
-        assertFalse(output.contains("<transportMode>bus</transportMode>"));
+        assertTrue(output.contains("<transportMode>bus</transportMode>"), output);
+        assertFalse(output.contains("transportMode=\"bus\""), output);
+    }
+
+    @Test
+    void writer_emitsMatsimWireForm_linkRefIdTransportModeAndRoute() {
+        TransitSchedule schedule = new TransitSchedule();
+        TransitStopFacility facility = new TransitStopFacility(
+                Id.create("stop-1", TransitStopFacility.class),
+                new com.citymodeler.matsim.models.api.Coord(1.0, 2.0), false);
+        facility.setLinkId(Id.create("l1", Link.class));
+        schedule.addStopFacility(facility);
+        TransitLine line = new TransitLine(Id.create("line-1", TransitLine.class));
+        TransitRoute route = new TransitRoute(Id.create("route-1", TransitRoute.class));
+        route.setTransportMode("bus");
+        route.addStop(new TransitRouteStop(
+                Id.create("stop-1", TransitStopFacility.class), 0.0, 10.0, true));
+        route.setNetworkRoute(List.of(Id.create("l1", Link.class), Id.create("l2", Link.class)));
+        route.addDeparture(new Departure(Id.create("dep-1", Departure.class), 3600.0));
+        line.addRoute(route);
+        schedule.addTransitLine(line);
+
+        String output = new TransitScheduleXmlWriter().writeToString(schedule);
+
+        assertTrue(output.contains("linkRefId=\"l1\""), output);
+        assertFalse(output.contains("linkId=\"l1\""), output);
+        assertTrue(output.contains("<transportMode>bus</transportMode>"), output);
+        assertTrue(output.contains("<link refId=\"l1\"/>"), output);
+        assertTrue(output.contains("<link refId=\"l2\"/>"), output);
+        assertTrue(output.indexOf("<routeProfile>") < output.indexOf("<route>"), output);
+        assertTrue(output.indexOf("</route>") < output.indexOf("<departures>"), output);
+    }
+
+    @Test
+    void readsMatSimWireForm_routeSequence() {
+        String xml = """
+                <transitSchedule>
+                    <transitStops>
+                        <stopFacility id="stop-1" x="1.0" y="2.0" linkRefId="l1"/>
+                    </transitStops>
+                    <transitLine id="line-1">
+                        <transitRoute id="route-1">
+                            <description>via route</description>
+                            <transportMode>bus</transportMode>
+                            <routeProfile>
+                                <stop refId="stop-1" arrivalOffset="0.0" departureOffset="10.0" awaitDeparture="true"/>
+                            </routeProfile>
+                            <route>
+                                <link refId="l1"/>
+                                <link refId="l2"/>
+                                <link refId="l3"/>
+                            </route>
+                            <departures>
+                                <departure id="dep-1" departureTime="3600.0" vehicleRefId="veh-1"/>
+                            </departures>
+                        </transitRoute>
+                    </transitLine>
+                </transitSchedule>
+                """;
+
+        TransitSchedule schedule = new TransitScheduleXmlReader().read(xml);
+        TransitStopFacility facility = schedule.getFacilities().get(Id.create("stop-1", TransitStopFacility.class));
+        assertEquals(Id.create("l1", Link.class), facility.getLinkId());
+        TransitRoute route = schedule.getTransitLines().get(Id.create("line-1", TransitLine.class))
+                .getRoutes().get(Id.create("route-1", TransitRoute.class));
+        assertEquals("bus", route.getTransportMode());
+        assertEquals(List.of(
+                Id.create("l1", Link.class),
+                Id.create("l2", Link.class),
+                Id.create("l3", Link.class)), route.getNetworkRoute());
+
+        String output = new TransitScheduleXmlWriter().writeToString(schedule);
+        assertTrue(output.contains("<link refId=\"l3\"/>"), output);
+    }
+
+    @Test
+    void readsLegacyLinkIdAttribute() {
+        String xml = """
+                <transitSchedule>
+                    <transitStops>
+                        <stopFacility id="stop-1" x="1.0" y="2.0" linkId="l9"/>
+                    </transitStops>
+                </transitSchedule>
+                """;
+        TransitSchedule schedule = new TransitScheduleXmlReader().read(xml);
+        TransitStopFacility facility = schedule.getFacilities().get(Id.create("stop-1", TransitStopFacility.class));
+        assertEquals(Id.create("l9", Link.class), facility.getLinkId());
     }
 }
