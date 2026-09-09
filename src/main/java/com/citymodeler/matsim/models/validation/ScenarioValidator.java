@@ -92,11 +92,11 @@ public final class ScenarioValidator {
                                     "transit-stop-link-not-in-network",
                                     "Transit stop " + stopFacility.getId() + " references link not in network: " + stopFacility.getLinkId(),
                                     stopFacility.getId().toString(),
-                            "Ensure transit stop link exists in network"));
+                                    "Ensure transit stop link exists in network"));
+                        }
                     }
                 }
             }
-        }
         }
 
         if (vehicleDefinitions != null) {

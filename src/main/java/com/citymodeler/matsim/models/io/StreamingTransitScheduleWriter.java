@@ -91,9 +91,10 @@ public final class StreamingTransitScheduleWriter {
             for (TransitRoute route : line.getRoutes().values()) {
                 writer.writeStartElement("transitRoute");
                 writer.writeAttribute("id", route.getId().toString());
+                // The current MATSim DTD orders the attributes container before description/transportMode.
+                StreamingNetworkWriter.writeAttributes(writer, route.getAttributes());
                 appendText(writer, "description", route.getDescription());
                 appendText(writer, "transportMode", route.getTransportMode());
-                StreamingNetworkWriter.writeAttributes(writer, route.getAttributes());
 
                 writer.writeStartElement("routeProfile");
                 for (TransitRouteStop stop : route.getStops()) {

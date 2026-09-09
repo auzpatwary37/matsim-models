@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE transitSchedule SYSTEM "transitSchedule_v2.dtd">
+<!--
+  Interoperability fixture: a transit schedule in the current MATSim
+  transitSchedule v2 wire format, declared against the published DTD
+  transitSchedule_v2.dtd vendored in this directory. Hand-written strictly
+  from the DTD content model; contains no MATSim or Pt2MATSim code.
+-->
+<transitSchedule>
+  <transitStops>
+    <stopFacility id="stop-1" x="0.0" y="0.0" linkRefId="link-1" name="Main" stopAreaId="area-1" isBlocking="false"/>
+    <stopFacility id="stop-2" x="100.0" y="0.0" linkRefId="link-2" stopAreaId="area-1" isBlocking="false"/>
+    <stopFacility id="stop-3" x="200.0" y="0.0" linkRefId="link-3" isBlocking="false"/>
+  </transitStops>
+  <transitLine id="line-1">
+    <transitRoute id="route-1">
+      <description>Main line</description>
+      <transportMode>bus</transportMode>
+      <routeProfile>
+        <stop refId="stop-1" arrivalOffset="0:00:00" departureOffset="0:00:30"/>
+        <stop refId="stop-2" arrivalOffset="0:01:00" departureOffset="0:01:30"/>
+        <stop refId="stop-3" arrivalOffset="0:02:00" departureOffset="0:02:30" awaitDeparture="false"/>
+      </routeProfile>
+      <route>
+        <link refId="link-1"/>
+        <link refId="link-2"/>
+        <link refId="link-3"/>
+      </route>
+      <departures>
+        <departure id="dep-1" departureTime="8:30:00" vehicleRefId="bus-1"/>
+      </departures>
+    </transitRoute>
+  </transitLine>
+</transitSchedule>
