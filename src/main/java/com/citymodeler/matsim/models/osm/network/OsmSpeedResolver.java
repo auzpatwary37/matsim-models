@@ -4,7 +4,6 @@ import com.citymodeler.matsim.models.osm.model.OsmWayRecord;
 
 public final class OsmSpeedResolver {
 
-    private static final double MAXSPEED_NONE_KPH = 100.0;
     private static final double MAXSPEED_WALK_KPH = 5.0;
 
     public double resolve(OsmWayRecord way, OsmWayRule rule, boolean forward) {
@@ -23,7 +22,7 @@ public final class OsmSpeedResolver {
     private static Double parseSpeed(String value) {
         String trimmed = value.trim();
         if ("none".equals(trimmed)) {
-            return MAXSPEED_NONE_KPH / 3.6;
+            return null;
         }
         if ("walk".equals(trimmed)) {
             return MAXSPEED_WALK_KPH / 3.6;

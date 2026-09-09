@@ -26,7 +26,19 @@ public final class OsmMatsimNetworkBuilder {
         Map<String, OsmLinkRef> linkRefsByLinkId = new LinkedHashMap<>();
         Map<String, List<String>> linkIdsByOsmWayId = new LinkedHashMap<>();
 
+        // Collect node ids referenced by accepted ways to avoid materializing
+        // unrelated POI/building nodes into the network.
+        java.util.Set<String> acceptedNodeIds = new java.util.LinkedHashSet<>();
+        for (OsmWayRecord way : importResult.ways().values()) {
+            if (config.resolveRule(way.tags()) != null && !way.nodeRefs().isEmpty()) {
+                acceptedNodeIds.addAll(way.nodeRefs());
+            }
+        }
+
         for (OsmNodeRecord nodeRecord : importResult.nodes().values()) {
+            if (!acceptedNodeIds.contains(nodeRecord.id())) {
+                continue;
+            }
             String networkNodeId = OsmGeneratedIds.nodeId(nodeRecord.id());
             network.createNode(networkNodeId,
                     nodeRecord.projectedCoord().getX(),
@@ -37,6 +49,15 @@ public final class OsmMatsimNetworkBuilder {
             OsmWayRule rule = config.resolveRule(way.tags());
             if (rule == null) {
                 continue;
+            }
+
+            if (OsmModeAccessResolver.hasDynamicOneway(way.tags())) {
+                issues.add(new OsmImportIssue(
+                        OsmIssueSeverity.WARNING,
+                        "dynamic-oneway",
+                        "Way " + way.id() + " has oneway=" + way.tags().get("oneway")
+                                + "; treating as bidirectional (static importer policy)",
+                        null));
             }
 
             List<OsmModeAccessResolver.DirectionDecision> decisions = accessResolver.resolve(way, rule.allowedModes());
