@@ -57,13 +57,18 @@ public final class VehiclesXmlWriter {
 
             // The v2.0 schema orders the generic attributes container first.
             Attributes vehicleTypeAttributes = new Attributes();
-            if (type.getAccessTimeSeconds() > 0.0) {
+            for (var entry : type.getExtraAttributes().getAsMap().entrySet()) {
+                vehicleTypeAttributes.putAttribute(entry.getKey(), entry.getValue());
+            }
+            if (type.getAccessTimeSeconds() != null) {
                 vehicleTypeAttributes.putAttribute(ACCESS_TIME_IN_SECONDS_PER_PERSON, type.getAccessTimeSeconds());
             }
-            if (type.getEgressTimeSeconds() > 0.0) {
+            if (type.getEgressTimeSeconds() != null) {
                 vehicleTypeAttributes.putAttribute(EGRESS_TIME_IN_SECONDS_PER_PERSON, type.getEgressTimeSeconds());
             }
-            XmlSupport.appendAttributes(document, typeElement, vehicleTypeAttributes, MATSIM_NAMESPACE);
+            if (!vehicleTypeAttributes.getAsMap().isEmpty()) {
+                XmlSupport.appendAttributes(document, typeElement, vehicleTypeAttributes, MATSIM_NAMESPACE);
+            }
 
             if (type.getSeatingCapacity() != null || type.getStandingCapacity() != null) {
                 Element capacityElement = document.createElementNS(MATSIM_NAMESPACE, "capacity");

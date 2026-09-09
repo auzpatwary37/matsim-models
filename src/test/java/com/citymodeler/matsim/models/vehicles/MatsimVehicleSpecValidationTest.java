@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.vehicles;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -72,6 +73,32 @@ class MatsimVehicleSpecValidationTest {
 
         assertEquals(3, definitions.getVehicles().size());
         assertEquals("Bus", definitions.getVehicles().get(Id.create("bus-1", Vehicle.class)).getType());
+
+        assertEquals("serial", bus.getExtraAttributes().getAttribute("doorOperationMode"));
+    }
+
+    @Test
+    void unknownAttributesSurviveReadWriteRoundTrip() throws Exception {
+        String xml = resourceAsString("matsim-spec/vehicleDefinitions-current-v2.xml");
+        VehicleDefinitions definitions = new VehiclesXmlReader().read(xml);
+
+        String rewritten = new VehiclesXmlWriter().writeToString(definitions);
+        validator().validate(new StreamSource(new StringReader(rewritten)));
+
+        VehicleDefinitions reparsed = new VehiclesXmlReader().read(rewritten);
+        VehicleType bus = reparsed.getVehicleTypes().get(Id.create("Bus", VehicleType.class));
+        assertEquals("serial", bus.getExtraAttributes().getAttribute("doorOperationMode"));
+        assertEquals(0.5, bus.getAccessTimeSeconds());
+        assertEquals(1.5, bus.getEgressTimeSeconds());
+    }
+
+    @Test
+    void unsetAccessEgressDefaultsToOneSecond() {
+        VehicleType type = new VehicleType(Id.create("plain", VehicleType.class));
+        assertNull(type.getAccessTimeSeconds());
+        assertNull(type.getEgressTimeSeconds());
+        assertEquals(1.0, type.getEffectiveAccessTimeSeconds());
+        assertEquals(1.0, type.getEffectiveEgressTimeSeconds());
     }
 
     private static Validator validator() throws Exception {

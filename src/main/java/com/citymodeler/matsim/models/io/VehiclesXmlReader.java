@@ -58,15 +58,19 @@ public final class VehiclesXmlReader {
                         type.setAccessTimeSeconds(Double.parseDouble(text.trim()));
                     } else if (VehiclesXmlWriter.EGRESS_TIME_IN_SECONDS_PER_PERSON.equals(name)) {
                         type.setEgressTimeSeconds(Double.parseDouble(text.trim()));
+                    } else {
+                        String classAttr = XmlSupport.attr(attributeElement, "class");
+                        Object value = coerceAttributeValue(classAttr, text.trim());
+                        type.getExtraAttributes().putAttribute(name, value);
                     }
                 }
             }
             Element accessTimeElement = XmlSupport.child(typeElement, "accessTime");
-            if (accessTimeElement != null && type.getAccessTimeSeconds() == 0.0) {
+            if (accessTimeElement != null && type.getAccessTimeSeconds() == null) {
                 type.setAccessTimeSeconds(XmlSupport.optionalDouble(accessTimeElement, "seconds", 0.0));
             }
             Element egressTimeElement = XmlSupport.child(typeElement, "egressTime");
-            if (egressTimeElement != null && type.getEgressTimeSeconds() == 0.0) {
+            if (egressTimeElement != null && type.getEgressTimeSeconds() == null) {
                 type.setEgressTimeSeconds(XmlSupport.optionalDouble(egressTimeElement, "seconds", 0.0));
             }
 
@@ -117,5 +121,25 @@ public final class VehiclesXmlReader {
             return Double.parseDouble(legacyMeters.trim());
         }
         return 0.0;
+    }
+
+    private static Object coerceAttributeValue(String classAttr, String text) {
+        if (classAttr == null || classAttr.isBlank()) {
+            return text;
+        }
+        try {
+            if ("java.lang.Double".equals(classAttr) || "double".equals(classAttr)) {
+                return Double.parseDouble(text);
+            }
+            if ("java.lang.Integer".equals(classAttr) || "int".equals(classAttr)) {
+                return Integer.parseInt(text);
+            }
+            if ("java.lang.Boolean".equals(classAttr) || "boolean".equals(classAttr)) {
+                return Boolean.parseBoolean(text);
+            }
+        } catch (NumberFormatException e) {
+            return text;
+        }
+        return text;
     }
 }

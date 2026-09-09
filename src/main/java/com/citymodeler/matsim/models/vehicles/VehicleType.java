@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.vehicles;
 
 import java.util.Objects;
 
+import com.citymodeler.matsim.models.api.Attributes;
 import com.citymodeler.matsim.models.api.Id;
 
 /**
@@ -10,15 +11,24 @@ import com.citymodeler.matsim.models.api.Id;
  * (the v2.0 schema declares them as {@code xs:nonNegativeInteger}), while
  * dimensions and per-person access/egress times are non-negative finite
  * doubles.
+ *
+ * <p>Access/egress times are nullable to distinguish "unset" from explicit
+ * zero. Current MATSim's {@code VehicleUtils.getAccessTime()} returns
+ * 1.0 s/person when the attribute is absent; {@link #getEffectiveAccessTimeSeconds()}
+ * and {@link #getEffectiveEgressTimeSeconds()} expose that effective default.</p>
  */
 public final class VehicleType {
+    public static final double DEFAULT_ACCESS_TIME_SECONDS = 1.0;
+    public static final double DEFAULT_EGRESS_TIME_SECONDS = 1.0;
+
     private final Id<VehicleType> id;
     private Integer seatingCapacity;
     private Integer standingCapacity;
     private double lengthMeters;
     private double widthMeters;
-    private double accessTimeSeconds;
-    private double egressTimeSeconds;
+    private Double accessTimeSeconds;
+    private Double egressTimeSeconds;
+    private final Attributes extraAttributes = new Attributes();
 
     public VehicleType(Id<VehicleType> id) {
         this.id = Objects.requireNonNull(id, "id");
@@ -68,7 +78,7 @@ public final class VehicleType {
         this.widthMeters = widthMeters;
     }
 
-    public double getAccessTimeSeconds() {
+    public Double getAccessTimeSeconds() {
         return accessTimeSeconds;
     }
 
@@ -77,13 +87,33 @@ public final class VehicleType {
         this.accessTimeSeconds = accessTimeSeconds;
     }
 
-    public double getEgressTimeSeconds() {
+    public void clearAccessTimeSeconds() {
+        this.accessTimeSeconds = null;
+    }
+
+    public Double getEgressTimeSeconds() {
         return egressTimeSeconds;
     }
 
     public void setEgressTimeSeconds(double egressTimeSeconds) {
         requireFiniteNonNegative("egressTimeSeconds", egressTimeSeconds);
         this.egressTimeSeconds = egressTimeSeconds;
+    }
+
+    public void clearEgressTimeSeconds() {
+        this.egressTimeSeconds = null;
+    }
+
+    public double getEffectiveAccessTimeSeconds() {
+        return accessTimeSeconds != null ? accessTimeSeconds : DEFAULT_ACCESS_TIME_SECONDS;
+    }
+
+    public double getEffectiveEgressTimeSeconds() {
+        return egressTimeSeconds != null ? egressTimeSeconds : DEFAULT_EGRESS_TIME_SECONDS;
+    }
+
+    public Attributes getExtraAttributes() {
+        return extraAttributes;
     }
 
     private static void requireFiniteNonNegative(String field, double value) {
