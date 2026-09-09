@@ -40,7 +40,7 @@ public final class TransitScheduleXmlWriter {
             stopElement.setAttribute("x", Double.toString(facility.getCoord().getX()));
             stopElement.setAttribute("y", Double.toString(facility.getCoord().getY()));
             XmlSupport.setIfPresent(stopElement, "linkRefId", facility.getLinkId());
-            XmlSupport.setIfPresent(stopElement, "parentId", facility.getParentId());
+            XmlSupport.setIfPresent(stopElement, "stopAreaId", facility.getStopAreaId());
             XmlSupport.setIfPresent(stopElement, "name", facility.getName());
             stopElement.setAttribute("isBlocking", Boolean.toString(facility.isBlockingLane()));
             XmlSupport.appendAttributes(document, stopElement, facility.getAttributes());

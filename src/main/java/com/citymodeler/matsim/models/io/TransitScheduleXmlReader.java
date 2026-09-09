@@ -15,6 +15,7 @@ import com.citymodeler.matsim.models.transit.TransitLine;
 import com.citymodeler.matsim.models.transit.TransitRoute;
 import com.citymodeler.matsim.models.transit.TransitRouteStop;
 import com.citymodeler.matsim.models.transit.TransitSchedule;
+import com.citymodeler.matsim.models.transit.TransitStopArea;
 import com.citymodeler.matsim.models.transit.TransitStopFacility;
 
 public final class TransitScheduleXmlReader {
@@ -59,9 +60,12 @@ public final class TransitScheduleXmlReader {
                 if (linkId != null && !linkId.isBlank()) {
                     facility.setLinkId(Id.create(linkId, Link.class));
                 }
-                String parentId = XmlSupport.attr(stopElement, "parentId");
-                if (parentId != null && !parentId.isBlank()) {
-                    facility.setParentId(Id.create(parentId, TransitStopFacility.class));
+                String stopAreaId = XmlSupport.attr(stopElement, "stopAreaId");
+                if (stopAreaId == null || stopAreaId.isBlank()) {
+                    stopAreaId = XmlSupport.attr(stopElement, "parentId");
+                }
+                if (stopAreaId != null && !stopAreaId.isBlank()) {
+                    facility.setStopAreaId(Id.create(stopAreaId, TransitStopArea.class));
                 }
                 facility.setName(XmlSupport.attr(stopElement, "name"));
                 XmlSupport.readAttributes(stopElement, facility.getAttributes());

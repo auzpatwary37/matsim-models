@@ -69,8 +69,8 @@ public final class StreamingTransitScheduleWriter {
             if (facility.getLinkId() != null) {
                 writer.writeAttribute("linkRefId", facility.getLinkId().toString());
             }
-            if (facility.getParentId() != null) {
-                writer.writeAttribute("parentId", facility.getParentId().toString());
+            if (facility.getStopAreaId() != null) {
+                writer.writeAttribute("stopAreaId", facility.getStopAreaId().toString());
             }
             if (facility.getName() != null) {
                 writer.writeAttribute("name", facility.getName());
