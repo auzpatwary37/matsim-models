@@ -75,6 +75,11 @@
             <artifactId>proj4j-epsg</artifactId>
             <version>${proj4j.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.openstreetmap.pbf</groupId>
+            <artifactId>osmpbf</artifactId>
+            <version>1.6.0</version>
+        </dependency>
     </dependencies>
 
     <build>

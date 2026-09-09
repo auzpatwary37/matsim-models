@@ -43,12 +43,20 @@ public final class OsmNetworkImporter {
 
     public OsmImportResult read(OsmImportConfig config) {
         try {
+            if (isPbf(config.osmFile())) {
+                return OsmPbfReader.read(config.osmFile(), config);
+            }
             return doParse(config);
         } catch (MatsimParseException e) {
             throw e;
         } catch (Exception e) {
             throw new MatsimParseException("Failed to parse OSM file: " + e.getMessage(), e);
         }
+    }
+
+    private static boolean isPbf(Path path) {
+        String name = path.getFileName().toString().toLowerCase();
+        return name.endsWith(".pbf");
     }
 
     private OsmImportResult doParse(OsmImportConfig config) throws XMLStreamException, IOException {
