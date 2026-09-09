@@ -96,6 +96,25 @@ public final class VehiclesXmlReader {
                 if (standing != null && !standing.isBlank()) {
                     type.setStandingCapacity(Integer.parseInt(standing.trim()));
                 }
+                String volume = XmlSupport.attr(capacityElement, "volumeInCubicMeters");
+                if (volume != null && !volume.isBlank()) {
+                    type.setCapacityVolumeInCubicMeters(volume.trim());
+                }
+                String weight = XmlSupport.attr(capacityElement, "weightInTons");
+                if (weight != null && !weight.isBlank()) {
+                    type.setCapacityWeightInTons(weight.trim());
+                }
+                Element capAttrsEl = XmlSupport.child(capacityElement, "attributes");
+                if (capAttrsEl != null) {
+                    for (Element attrEl : XmlSupport.children(capAttrsEl, "attribute")) {
+                        String name = XmlSupport.attr(attrEl, "name");
+                        String text = attrEl.getTextContent();
+                        String classAttr = XmlSupport.attr(attrEl, "class");
+                        if (name != null && text != null && !text.isBlank()) {
+                            type.getCapacityExtraAttributes().putAttribute(name, coerceAttributeValue(classAttr, text.trim()));
+                        }
+                    }
+                }
             }
 
             Element lengthElement = XmlSupport.child(typeElement, "length");
@@ -112,7 +131,7 @@ public final class VehiclesXmlReader {
             org.w3c.dom.NodeList childNodes = typeElement.getChildNodes();
             for (int ci = 0; ci < childNodes.getLength(); ci++) {
                 if (childNodes.item(ci) instanceof Element childEl && !knownElements.contains(childEl.getTagName())) {
-                    type.addExtensionElement(XmlSupport.writeElementToString(childEl));
+                    type.addExtensionElement(childEl.getTagName(), XmlSupport.writeElementToString(childEl));
                 }
             }
 

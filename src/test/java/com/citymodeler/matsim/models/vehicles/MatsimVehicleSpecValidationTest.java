@@ -101,6 +101,41 @@ class MatsimVehicleSpecValidationTest {
         assertEquals(1.0, type.getEffectiveEgressTimeSeconds());
     }
 
+    @Test
+    void schemaOrderedVehicleTypeRoundTripsThroughValidation() throws Exception {
+        String xml = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <vehicleDefinitions xmlns="http://www.matsim.org/files/dtd"
+                                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                                   xsi:schemaLocation="http://www.matsim.org/files/dtd http://www.matsim.org/files/dtd/vehicleDefinitions_v2.0.xsd">
+                    <vehicleType id="bus">
+                        <description>12 m city bus</description>
+                        <capacity seats="40" standingRoomInPersons="60" volumeInCubicMeters="72.0" weightInTons="12.5"/>
+                        <length meter="12.0"/>
+                        <width meter="2.5"/>
+                        <maximumVelocity meterPerSecond="27.78"/>
+                        <passengerCarEquivalents pce="22.0"/>
+                    </vehicleType>
+                    <vehicle id="bus-1" type="bus"/>
+                </vehicleDefinitions>
+                """;
+        VehicleDefinitions defs = new VehiclesXmlReader().read(xml);
+        VehicleType bus = defs.getVehicleTypes().get(Id.create("bus", VehicleType.class));
+        assertEquals(40, bus.getSeatingCapacity());
+        assertEquals(72.0, Double.parseDouble(bus.getCapacityVolumeInCubicMeters()));
+        assertEquals(12.5, Double.parseDouble(bus.getCapacityWeightInTons()));
+
+        String rewritten = new VehiclesXmlWriter().writeToString(defs);
+        validator().validate(new StreamSource(new StringReader(rewritten)));
+
+        VehicleDefinitions reparsed = new VehiclesXmlReader().read(rewritten);
+        VehicleType reparsedBus = reparsed.getVehicleTypes().get(Id.create("bus", VehicleType.class));
+        assertEquals(40, reparsedBus.getSeatingCapacity());
+        assertEquals(60, reparsedBus.getStandingCapacity());
+        assertEquals("72.0", reparsedBus.getCapacityVolumeInCubicMeters());
+        assertEquals("12.5", reparsedBus.getCapacityWeightInTons());
+    }
+
     private static Validator validator() throws Exception {
         SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
         factory.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");

@@ -32,7 +32,10 @@ public final class VehicleType {
     private Double accessTimeSeconds;
     private Double egressTimeSeconds;
     private final Attributes extraAttributes = new Attributes();
-    private final List<String> extensionElements = new ArrayList<>();
+    private final List<ExtensionElement> extensionElements = new ArrayList<>();
+    private String capacityVolumeInCubicMeters;
+    private String capacityWeightInTons;
+    private final Attributes capacityExtraAttributes = new Attributes();
 
     public VehicleType(Id<VehicleType> id) {
         this.id = Objects.requireNonNull(id, "id");
@@ -120,12 +123,35 @@ public final class VehicleType {
         return extraAttributes;
     }
 
-    public void addExtensionElement(String serializedXml) {
-        extensionElements.add(serializedXml);
+    public void addExtensionElement(String tagName, String serializedXml) {
+        extensionElements.add(new ExtensionElement(tagName, serializedXml));
     }
 
-    public List<String> getExtensionElements() {
+    public List<ExtensionElement> getExtensionElements() {
         return Collections.unmodifiableList(extensionElements);
+    }
+
+    public String getCapacityVolumeInCubicMeters() {
+        return capacityVolumeInCubicMeters;
+    }
+
+    public void setCapacityVolumeInCubicMeters(String value) {
+        this.capacityVolumeInCubicMeters = value;
+    }
+
+    public String getCapacityWeightInTons() {
+        return capacityWeightInTons;
+    }
+
+    public void setCapacityWeightInTons(String value) {
+        this.capacityWeightInTons = value;
+    }
+
+    public Attributes getCapacityExtraAttributes() {
+        return capacityExtraAttributes;
+    }
+
+    public record ExtensionElement(String tagName, String serializedXml) {
     }
 
     private static void requireFiniteNonNegative(String field, double value) {
