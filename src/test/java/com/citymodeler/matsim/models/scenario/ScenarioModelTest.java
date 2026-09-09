@@ -236,6 +236,53 @@ class ScenarioModelTest {
     }
 
     @Test
+    void saveScenarioProducesReloadableBundle() throws Exception {
+        Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
+        Network network = new Network();
+        Id<Node> fromNodeId = Id.create("n1", Node.class);
+        Id<Node> toNodeId = Id.create("n2", Node.class);
+        network.addNode(new Node(fromNodeId, new Coord(0.0, 0.0)));
+        network.addNode(new Node(toNodeId, new Coord(100.0, 0.0)));
+        network.addLink(new Link(Id.createLinkId("l1"), fromNodeId, toNodeId, 100.0, 1000.0, 13.9, 1.0, Set.of("car")));
+        scenario.setNetwork(network);
+
+        TransitSchedule transitSchedule = new TransitSchedule();
+        transitSchedule.addStopFacility(new TransitStopFacility(Id.create("stop-1", TransitStopFacility.class), new Coord(0.0, 0.0), false));
+        scenario.setTransitSchedule(transitSchedule);
+
+        VehicleDefinitions definitions = new VehicleDefinitions();
+        VehicleType car = new VehicleType(Id.create("car", VehicleType.class));
+        car.setSeatingCapacity(4);
+        definitions.addVehicleType(car);
+        definitions.addVehicle(new Vehicle(Id.create("v1", Vehicle.class), "car"));
+        scenario.setVehicleDefinitions(definitions);
+
+        ScenarioUtils.saveScenario(scenario, tempDir);
+
+        assertTrue(Files.exists(tempDir.resolve(ScenarioUtils.CONFIG_FILE)), "bundle must contain config.xml");
+        Scenario reloaded = ScenarioUtils.loadScenario(tempDir.resolve(ScenarioUtils.CONFIG_FILE));
+
+        assertNotNull(reloaded.getConfig());
+        assertNotNull(reloaded.getNetwork());
+        assertEquals(1, reloaded.getNetwork().getLinks().size());
+        assertNotNull(reloaded.getTransitSchedule());
+        assertEquals(1, reloaded.getTransitSchedule().getFacilities().size());
+        assertNotNull(reloaded.getVehicleDefinitions());
+        assertEquals(1, reloaded.getVehicleDefinitions().getVehicleTypes().size());
+        assertEquals(1, reloaded.getVehicleDefinitions().getVehicles().size());
+        assertEquals(4, reloaded.getVehicleDefinitions()
+                .getVehicleTypes().get(Id.create("car", VehicleType.class)).getSeatingCapacity());
+    }
+
+    @Test
+    void saveScenarioRequiresConfigForReloadableBundle() {
+        Scenario scenario = new Scenario();
+        scenario.setVehicleDefinitions(new VehicleDefinitions());
+
+        assertThrows(NullPointerException.class, () -> ScenarioUtils.saveScenario(scenario, tempDir));
+    }
+
+    @Test
     void saveScenarioSkipsNullModules() throws Exception {
         Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
         VehicleDefinitions definitions = new VehicleDefinitions();
