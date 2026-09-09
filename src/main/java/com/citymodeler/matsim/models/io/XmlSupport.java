@@ -389,7 +389,7 @@ final class XmlSupport {
         return value;
     }
 
-    private static String textContent(Object value) {
+    static String textContent(Object value) {
         if (value instanceof DisallowedNextLinks links) {
             return links.toJson();
         }
@@ -402,7 +402,7 @@ final class XmlSupport {
                 || ATTR_DISALLOWED_NEXT_LINKS.equals(name);
     }
 
-    private static String classHint(Object value) {
+    static String classHint(Object value) {
         if (value instanceof DisallowedNextLinks) {
             return MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT;
         }
