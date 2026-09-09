@@ -31,7 +31,18 @@ public final class OsmModeAccessResolver {
         } else if (backwardOnly) {
             decisions.add(new DirectionDecision(filterByDirectionalAccess(way.tags(), baseModes, "backward"), false, true));
         } else {
-            decisions.add(new DirectionDecision(baseModes, true, true));
+            Set<String> forwardModes = filterByDirectionalAccess(way.tags(), baseModes, "forward");
+            Set<String> reverseModes = filterByDirectionalAccess(way.tags(), baseModes, "backward");
+            if (forwardModes.equals(reverseModes)) {
+                decisions.add(new DirectionDecision(forwardModes, true, true));
+            } else {
+                if (!forwardModes.isEmpty()) {
+                    decisions.add(new DirectionDecision(forwardModes, true, false));
+                }
+                if (!reverseModes.isEmpty()) {
+                    decisions.add(new DirectionDecision(reverseModes, false, true));
+                }
+            }
         }
         return decisions;
     }
