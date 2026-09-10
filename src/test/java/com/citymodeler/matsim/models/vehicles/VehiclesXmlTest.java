@@ -178,4 +178,25 @@ class VehiclesXmlTest {
         Vehicle v1 = roundTripped.getVehicles().get(Id.create("v1", Vehicle.class));
         assertEquals("red", v1.getAttributes().getAttribute("color"));
     }
+
+    @Test
+    void capacityOtherRoundTrips() {
+        String xml = """
+                <vehicles>
+                    <vehicleType id="bus">
+                        <capacity seats="40" other="2.5"/>
+                    </vehicleType>
+                    <vehicle id="v1" type="bus"/>
+                </vehicles>
+                """;
+        VehicleDefinitions defs = new VehiclesXmlReader().read(xml);
+        VehicleType bus = defs.getVehicleTypes().get(Id.create("bus", VehicleType.class));
+        assertEquals("2.5", bus.getCapacityOther());
+
+        String out = new VehiclesXmlWriter().writeToString(defs);
+        assertTrue(out.contains("other=\"2.5\""), out);
+
+        VehicleDefinitions reRead = new VehiclesXmlReader().read(out);
+        assertEquals("2.5", reRead.getVehicleTypes().get(Id.create("bus", VehicleType.class)).getCapacityOther());
+    }
 }

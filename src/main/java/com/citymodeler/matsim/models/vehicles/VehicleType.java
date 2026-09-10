@@ -35,6 +35,7 @@ public final class VehicleType {
     private final List<ExtensionElement> extensionElements = new ArrayList<>();
     private String capacityVolumeInCubicMeters;
     private String capacityWeightInTons;
+    private String capacityOther;
     private final Attributes capacityExtraAttributes = new Attributes();
 
     public VehicleType(Id<VehicleType> id) {
@@ -145,6 +146,14 @@ public final class VehicleType {
 
     public void setCapacityWeightInTons(String value) {
         this.capacityWeightInTons = value;
+    }
+
+    public String getCapacityOther() {
+        return capacityOther;
+    }
+
+    public void setCapacityOther(String value) {
+        this.capacityOther = value;
     }
 
     public Attributes getCapacityExtraAttributes() {

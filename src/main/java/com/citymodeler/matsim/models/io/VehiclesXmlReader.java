@@ -104,6 +104,10 @@ public final class VehiclesXmlReader {
                 if (weight != null && !weight.isBlank()) {
                     type.setCapacityWeightInTons(weight.trim());
                 }
+                String other = XmlSupport.attr(capacityElement, "other");
+                if (other != null && !other.isBlank()) {
+                    type.setCapacityOther(other.trim());
+                }
                 Element capAttrsEl = XmlSupport.child(capacityElement, "attributes");
                 if (capAttrsEl != null) {
                     for (Element attrEl : XmlSupport.children(capAttrsEl, "attribute")) {

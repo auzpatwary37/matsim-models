@@ -105,6 +105,7 @@ public final class VehiclesXmlWriter {
         // Position 2: capacity
         if (type.getSeatingCapacity() != null || type.getStandingCapacity() != null
                 || type.getCapacityVolumeInCubicMeters() != null || type.getCapacityWeightInTons() != null
+                || type.getCapacityOther() != null
                 || !type.getCapacityExtraAttributes().getAsMap().isEmpty()) {
             entries.add(new OrderedEntry(2, doc -> {
                 Element capacityElement = doc.createElementNS(MATSIM_NAMESPACE, "capacity");
@@ -119,6 +120,9 @@ public final class VehiclesXmlWriter {
                 }
                 if (type.getCapacityWeightInTons() != null) {
                     capacityElement.setAttribute("weightInTons", type.getCapacityWeightInTons());
+                }
+                if (type.getCapacityOther() != null) {
+                    capacityElement.setAttribute("other", type.getCapacityOther());
                 }
                 if (!type.getCapacityExtraAttributes().getAsMap().isEmpty()) {
                     XmlSupport.appendAttributes(doc, capacityElement, type.getCapacityExtraAttributes(), MATSIM_NAMESPACE);
