@@ -112,8 +112,27 @@ public final class OsmMatsimNetworkBuilder {
         Map<String, OsmIntersectionLaneHint> intersectionHints =
                 OsmLaneHintExtractor.extractIntersectionLaneHints(importResult, network, laneHints);
 
+        // Build geometry store for non-materialize modes
+        OsmGeometryStore geometryStore;
+        if (config.geometryMode() != OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES) {
+            Set<String> stopNodeIds = stopHints.stream()
+                    .filter(h -> h.elementType() == com.citymodeler.matsim.models.osm.OsmElementType.NODE)
+                    .map(OsmStopHint::osmId)
+                    .collect(java.util.stream.Collectors.toSet());
+            var acceptedWays = importResult.ways().values().stream()
+                    .filter(w -> config.resolveRule(w.tags()) != null && !w.nodeRefs().isEmpty())
+                    .toList();
+            Set<String> routingNodes = OsmNetworkSimplifier.computeRoutingNodes(
+                    acceptedWays, importResult.nodes(), config, stopNodeIds);
+            Map<String, OsmPolyline> geometry = OsmNetworkSimplifier.buildGeometry(
+                    acceptedWays, importResult.nodes(), routingNodes, config.geometryMode(), config);
+            geometryStore = new OsmGeometryStore(geometry);
+        } else {
+            geometryStore = OsmGeometryStore.empty();
+        }
+
         return new OsmNetworkBuildResult(network, issues, linkRefsByLinkId, linkIdsByOsmWayId,
-                stopHints, laneHints, intersectionHints);
+                stopHints, laneHints, intersectionHints, geometryStore);
     }
 
     private List<String> createSegments(

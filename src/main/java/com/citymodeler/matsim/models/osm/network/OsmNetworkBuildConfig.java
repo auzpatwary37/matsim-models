@@ -8,23 +8,45 @@ import com.citymodeler.matsim.models.osm.OsmTagSet;
 
 public final class OsmNetworkBuildConfig {
     private final OsmGeometryMode geometryMode;
+    private final boolean preserveTransitStopNodes;
+    private final Set<String> explicitOsmNodeIdsToKeep;
+    private final double sharpBendAngleDegrees;
     private final Map<String, OsmWayRule> rulesByKeyValue;
 
-    private OsmNetworkBuildConfig(OsmGeometryMode geometryMode, Map<String, OsmWayRule> rulesByKeyValue) {
+    private OsmNetworkBuildConfig(OsmGeometryMode geometryMode, boolean preserveTransitStopNodes,
+                                   Set<String> explicitOsmNodeIdsToKeep, double sharpBendAngleDegrees,
+                                   Map<String, OsmWayRule> rulesByKeyValue) {
         this.geometryMode = geometryMode;
+        this.preserveTransitStopNodes = preserveTransitStopNodes;
+        this.explicitOsmNodeIdsToKeep = Set.copyOf(explicitOsmNodeIdsToKeep);
+        this.sharpBendAngleDegrees = sharpBendAngleDegrees;
         this.rulesByKeyValue = rulesByKeyValue;
     }
 
     public static OsmNetworkBuildConfig materializeGeometryConfig() {
-        return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES, defaultRules());
+        return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
+                true, Set.of(), 35.0, defaultRules());
     }
 
     public static OsmNetworkBuildConfig defaultConfig() {
-        return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY, defaultRules());
+        return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
+                true, Set.of(), 35.0, defaultRules());
     }
 
     public OsmGeometryMode geometryMode() {
         return geometryMode;
+    }
+
+    public boolean preserveTransitStopNodes() {
+        return preserveTransitStopNodes;
+    }
+
+    public Set<String> explicitOsmNodeIdsToKeep() {
+        return explicitOsmNodeIdsToKeep;
+    }
+
+    public double sharpBendAngleDegrees() {
+        return sharpBendAngleDegrees;
     }
 
     public OsmWayRule resolveRule(OsmTagSet tags) {
