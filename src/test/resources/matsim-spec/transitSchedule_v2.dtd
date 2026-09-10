@@ -1,8 +1,16 @@
 <!--
-  Published MATSim wire-format DTD for transit schedules, version 2.
-  Retrieved verbatim from https://matsim.org/files/dtd/transitSchedule_v2.dtd
-  and vendored here for OFFLINE INTEROPERABILITY VALIDATION ONLY (test scope).
-  It is a data-format specification, used the same way the GTFS spec is used.
+  MATSim wire-format DTD for transit schedules, version 2 (transitSchedule_v2).
+
+  THIRD-PARTY SPECIFICATION MATERIAL; NOT re-licensed as Apache-2.0.
+  Adapted from the published MATSim DTD:
+      https://matsim.org/files/dtd/transitSchedule_v2.dtd
+  Upstream: MATSim (matsim.org / github.com/matsim-org/matsim); authorship
+  credited to the MATSim contributors.
+  This individual specification file carries no in-file license, and its upstream
+  license has not been independently verified; do not treat it as Apache-2.0 (or as
+  any other license).
+  It is a data-format specification used for offline interoperability validation
+  (test scope only). See THIRD_PARTY_NOTICES.md in the repository root.
 -->
 <!ELEMENT transitSchedule  (attributes?,transitStops?,minimalTransferTimes?,transitLine*)>
 

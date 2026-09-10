@@ -9,8 +9,8 @@
     <version>1.0.3</version>
     <packaging>jar</packaging>
 
-    <name>MATSim Models</name>
-    <description>Pure Java 17 POJOs and XML I/O for MATSim file formats. No MATSim dependency. Apache 2.0 licensed.</description>
+    <name>CityModeler MATSim I/O</name>
+    <description>Independent pure-Java 17 library providing POJOs and XML I/O for MATSim file formats (wire-format interoperability only). No MATSim dependency. The original software is Apache 2.0 licensed; see THIRD_PARTY_NOTICES.md for separately-licensed bundled material.</description>
     <url>https://github.com/auzpatwary37/matsim-models</url>
 
     <licenses>
@@ -29,7 +29,7 @@
 
     <developers>
         <developer>
-            <name>matsim-models Contributors</name>
+            <name>Ashraf Uz Zaman Patwary</name>
             <organization>Urban Systems Technologies</organization>
             <organizationUrl>https://www.citymodeler.com</organizationUrl>
         </developer>

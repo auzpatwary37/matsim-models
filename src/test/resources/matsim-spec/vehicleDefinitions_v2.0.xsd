@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Published MATSim wire-format schema for vehicle definitions, version 2.0.
-  Retrieved verbatim from https://matsim.org/files/dtd/vehicleDefinitions_v2.0.xsd
-  and vendored here for OFFLINE INTEROPERABILITY VALIDATION ONLY (test scope).
-  It is a data-format specification, used the same way the GTFS spec is used.
+  MATSim wire-format schema for vehicle definitions, version 2.0 (vehicleDefinitions_v2.0).
+
+  THIRD-PARTY SPECIFICATION MATERIAL; NOT re-licensed as Apache-2.0.
+  Adapted from the published MATSim schema:
+      https://matsim.org/files/dtd/vehicleDefinitions_v2.0.xsd
+  Upstream: MATSim (matsim.org / github.com/matsim-org/matsim).
+  Original editor, as credited in the published schema:
+      Kai Martins-Turner, VSP, Berlin Institute of Technology.
+  This individual specification file carries no in-file license, and its upstream
+  license has not been independently verified; do not treat it as Apache-2.0 (or as
+  any other license).
+  It is a data-format specification used for offline interoperability validation
+  (test scope only). See THIRD_PARTY_NOTICES.md in the repository root.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="http://www.matsim.org/files/dtd" xmlns="http://www.matsim.org/files/dtd"

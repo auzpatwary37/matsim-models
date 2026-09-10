@@ -6,9 +6,9 @@ This guide explains how applications can integrate `matsim-models` to read, writ
 
 `matsim-models` provides:
 - Pure Java POJOs for MATSim domain models
-- XML readers and writers compatible with MATSim 2025.0 format
+- XML readers and writers for the MATSim XML wire formats (see the compatibility matrix in the README)
 - No runtime dependency on MATSim
-- Apache 2.0 licensed components
+- Apache 2.0 licensed software (bundled MATSim schema/DTD and other third-party material is separately licensed; see `THIRD_PARTY_NOTICES.md`)
 
 ## Use Cases
 
@@ -155,9 +155,9 @@ network.postProcess(); // Call after all modifications
 
 ## Compatibility
 
-| matsim-models | MATSim Release | XML Format |
-|---------------|----------------|------------|
-| 1.0.0 | 2025.0 | Supported |
+Interoperability is asserted against the **published MATSim schema/DTD versions** validated
+in-repo (`vehicleDefinitions_v2.0.xsd` and `transitSchedule_v2.dtd`), not as a blanket
+guarantee across all MATSim releases. See the compatibility matrix in the README.
 
 ## Maven Dependency
 
