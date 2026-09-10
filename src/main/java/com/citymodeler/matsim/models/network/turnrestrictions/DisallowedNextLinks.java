@@ -2,149 +2,214 @@ package com.citymodeler.matsim.models.network.turnrestrictions;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 
 import com.citymodeler.matsim.models.io.MatsimModelException;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * Immutable, mode-keyed collection of link sequences that may not follow the
- * current link. Wire format is the JSON form used by MATSim network files:
- * {@code {"car":[["linkA","linkB"]]}} with modes sorted alphabetically and
- * sequences in insertion order.
+ * Immutable value object storing disallowed next-link sequences per mode.
+ * A "sequence" is an ordered list of link IDs that must appear consecutively
+ * for the restriction to apply.
  */
 public final class DisallowedNextLinks {
-    private static final DisallowedNextLinks EMPTY = new DisallowedNextLinks(Map.of());
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final Map<String, List<List<String>>> byMode;
 
     private DisallowedNextLinks(Map<String, List<List<String>>> byMode) {
-        Map<String, List<List<String>>> copy = new TreeMap<>();
-        byMode.forEach((mode, sequences) ->
-                copy.put(mode, sequences.stream().map(List::copyOf).toList()));
-        this.byMode = Collections.unmodifiableMap(copy);
+        this.byMode = Collections.unmodifiableMap(new TreeMap<>(byMode));
     }
 
     public static DisallowedNextLinks empty() {
-        return EMPTY;
+        return new DisallowedNextLinks(new LinkedHashMap<>());
     }
 
-    public DisallowedNextLinks plus(String mode, List<String> nextLinkSequence) {
+    public DisallowedNextLinks plus(String mode, List<String> sequence) {
         Objects.requireNonNull(mode, "mode");
-        Objects.requireNonNull(nextLinkSequence, "nextLinkSequence");
+        Objects.requireNonNull(sequence, "sequence");
         if (mode.isBlank()) {
             throw new IllegalArgumentException("mode must not be blank");
         }
-        if (nextLinkSequence.isEmpty()) {
-            throw new IllegalArgumentException("nextLinkSequence must not be empty");
+        if (sequence.isEmpty()) {
+            throw new IllegalArgumentException("sequence must not be empty");
         }
-        for (String linkId : nextLinkSequence) {
-            if (linkId == null || linkId.isBlank()) {
-                throw new IllegalArgumentException("nextLinkSequence must not contain null or blank link ids");
+        for (String link : sequence) {
+            if (link == null) {
+                throw new IllegalArgumentException("sequence contains null");
             }
         }
-        Map<String, List<List<String>>> copy = new TreeMap<>();
-        byMode.forEach((existingMode, sequences) -> copy.put(existingMode, new ArrayList<>(sequences)));
-        List<List<String>> sequences = copy.computeIfAbsent(mode, ignored -> new ArrayList<>());
-        List<String> frozen = List.copyOf(nextLinkSequence);
-        if (!sequences.contains(frozen)) {
-            sequences.add(frozen);
+
+        Map<String, List<List<String>>> copy = new LinkedHashMap<>();
+        for (var entry : byMode.entrySet()) {
+            copy.put(entry.getKey(), List.copyOf(entry.getValue()));
         }
+        List<List<String>> existing = copy.getOrDefault(mode, List.of());
+        List<List<String>> newSeqs = new ArrayList<>(existing);
+        if (!newSeqs.contains(sequence)) {
+            newSeqs.add(List.copyOf(sequence));
+        }
+        copy.put(mode, List.copyOf(newSeqs));
         return new DisallowedNextLinks(copy);
     }
 
-    public boolean isDisallowed(String mode, List<String> nextLinkSequence) {
-        if (mode == null || nextLinkSequence == null) {
-            return false;
+    /** Checks if the given sequence is a prefix-matching disallowed sequence for the mode. */
+    public boolean isDisallowed(String mode, List<String> candidate) {
+        List<List<String>> sequences = byMode.get(mode);
+        if (sequences == null) return false;
+        for (List<String> seq : sequences) {
+            if (candidate.size() < seq.size()) continue;
+            boolean match = true;
+            for (int i = 0; i < seq.size(); i++) {
+                if (!candidate.get(i).equals(seq.get(i))) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return true;
         }
-        return byMode.getOrDefault(mode, List.of()).contains(nextLinkSequence);
+        return false;
     }
 
     public Map<String, List<List<String>>> asMap() {
-        Map<String, List<List<String>>> copy = new TreeMap<>();
-        byMode.forEach((mode, sequences) -> copy.put(mode, sequences.stream().map(List::copyOf).toList()));
-        return Collections.unmodifiableMap(copy);
+        Map<String, List<List<String>>> result = new LinkedHashMap<>();
+        byMode.forEach((k, v) -> result.put(k, Collections.unmodifiableList(v.stream()
+                .map(List::copyOf)
+                .toList())));
+        return Collections.unmodifiableMap(result);
     }
 
     public String toJson() {
-        try {
-            return MAPPER.writeValueAsString(byMode);
-        } catch (JsonProcessingException exception) {
-            throw new MatsimModelException("Could not serialize disallowed next links", exception);
+        if (byMode.isEmpty()) return "{}";
+        StringBuilder sb = new StringBuilder("{");
+        boolean first = true;
+        for (var entry : byMode.entrySet()) {
+            if (!first) sb.append(",");
+            first = false;
+            sb.append("\"").append(escape(entry.getKey())).append("\":[");
+            List<List<String>> seqs = entry.getValue();
+            for (int i = 0; i < seqs.size(); i++) {
+                if (i > 0) sb.append(",");
+                sb.append("[");
+                List<String> seq = seqs.get(i);
+                for (int j = 0; j < seq.size(); j++) {
+                    if (j > 0) sb.append(",");
+                    sb.append("\"").append(escape(seq.get(j))).append("\"");
+                }
+                sb.append("]");
+            }
+            sb.append("]");
         }
+        sb.append("}");
+        return sb.toString();
     }
 
     public static DisallowedNextLinks fromJson(String json) {
         if (json == null || json.isBlank()) {
-            throw new MatsimModelException("Disallowed next links JSON must not be blank");
+            throw new MatsimModelException("DisallowedNextLinks JSON must not be null or blank");
         }
-        try {
-            JsonNode root = MAPPER.readTree(json);
-            if (!root.isObject()) {
-                throw new MatsimModelException("Disallowed next links JSON must be an object: " + json);
+        String trimmed = json.trim();
+        if ("{}".equals(trimmed)) {
+            return empty();
+        }
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+            throw new MatsimModelException("DisallowedNextLinks JSON must be an object: " + trimmed);
+        }
+        String body = trimmed.substring(1, trimmed.length() - 1).trim();
+        if (body.isEmpty()) {
+            return empty();
+        }
+
+        Map<String, List<List<String>>> result = new LinkedHashMap<>();
+        int pos = 0;
+        while (pos < body.length()) {
+            // Skip whitespace and commas
+            while (pos < body.length() && (body.charAt(pos) == ' ' || body.charAt(pos) == ',')) pos++;
+            if (pos >= body.length()) break;
+            if (body.charAt(pos) != '"') {
+                throw new MatsimModelException("Expected '\"' at position " + pos + " in: " + trimmed);
             }
-            Map<String, List<List<String>>> parsed = new TreeMap<>();
-            var fields = root.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> entry = fields.next();
-                if (entry.getKey().isBlank()) {
-                    throw new MatsimModelException("Disallowed next links JSON must not contain blank modes: " + json);
+            // Parse mode key
+            int keyEnd = findClosingQuote(body, pos + 1);
+            String mode = body.substring(pos + 1, keyEnd);
+            pos = keyEnd + 1;
+            // Expect ':'
+            while (pos < body.length() && body.charAt(pos) == ' ') pos++;
+            if (pos >= body.length() || body.charAt(pos) != ':') {
+                throw new MatsimModelException("Expected ':' at position " + pos);
+            }
+            pos++;
+            // Expect '['
+            while (pos < body.length() && body.charAt(pos) == ' ') pos++;
+            if (pos >= body.length() || body.charAt(pos) != '[') {
+                throw new MatsimModelException("Expected '[' for mode " + mode + " at position " + pos);
+            }
+            pos++;
+            // Parse list of sequences
+            List<List<String>> sequences = new ArrayList<>();
+            while (pos < body.length()) {
+                while (pos < body.length() && (body.charAt(pos) == ' ' || body.charAt(pos) == ',')) pos++;
+                if (pos >= body.length()) break;
+                if (body.charAt(pos) == ']') { pos++; break; }
+                if (body.charAt(pos) != '[') {
+                    throw new MatsimModelException("Expected '[' or ']' at position " + pos + " in: " + trimmed);
                 }
-                parsed.put(entry.getKey(), parseSequences(entry.getValue(), json));
+                pos++; // skip '['
+                // Parse inner sequence
+                List<String> seq = new ArrayList<>();
+                while (pos < body.length()) {
+                    while (pos < body.length() && (body.charAt(pos) == ' ' || body.charAt(pos) == ',')) pos++;
+                    if (pos >= body.length()) break;
+                    if (body.charAt(pos) == ']') { pos++; break; }
+                    if (body.charAt(pos) != '"') {
+                        throw new MatsimModelException("Expected '\"' in sequence at position " + pos);
+                    }
+                    int valEnd = findClosingQuote(body, pos + 1);
+                    String val = body.substring(pos + 1, valEnd);
+                    if (val.isEmpty()) {
+                        throw new MatsimModelException("Empty link ID in sequence");
+                    }
+                    seq.add(val);
+                    pos = valEnd + 1;
+                }
+                if (seq.isEmpty()) {
+                    throw new MatsimModelException("Empty sequence for mode " + mode);
+                }
+                sequences.add(List.copyOf(seq));
             }
-            return new DisallowedNextLinks(parsed);
-        } catch (MatsimModelException exception) {
-            throw exception;
-        } catch (JsonProcessingException exception) {
-            throw new MatsimModelException("Disallowed next links JSON is malformed: " + json, exception);
+            result.put(mode, List.copyOf(sequences));
         }
+        return new DisallowedNextLinks(result);
     }
 
-    private static List<List<String>> parseSequences(JsonNode modeNode, String json) {
-        if (!modeNode.isArray()) {
-            throw new MatsimModelException("Disallowed next links mode entry must be an array: " + json);
+    private static int findClosingQuote(String s, int start) {
+        for (int i = start; i < s.length(); i++) {
+            if (s.charAt(i) == '\\') { i++; continue; }
+            if (s.charAt(i) == '"') return i;
         }
-        List<List<String>> sequences = new ArrayList<>();
-        for (JsonNode sequenceNode : modeNode) {
-            if (!sequenceNode.isArray() || sequenceNode.isEmpty()) {
-                throw new MatsimModelException("Disallowed next links sequences must be non-empty arrays: " + json);
-            }
-            List<String> sequence = new ArrayList<>();
-            for (JsonNode linkNode : sequenceNode) {
-                if (!linkNode.isTextual() || linkNode.asText().isBlank()) {
-                    throw new MatsimModelException("Disallowed next links link ids must be non-blank strings: " + json);
-                }
-                sequence.add(linkNode.asText());
-            }
-            sequences.add(sequence);
-        }
-        return sequences;
+        throw new MatsimModelException("Unterminated string in JSON");
+    }
+
+    private static String escape(String s) {
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (!(obj instanceof DisallowedNextLinks other)) {
-            return false;
-        }
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof DisallowedNextLinks other)) return false;
         return byMode.equals(other.byMode);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(byMode);
+        return byMode.hashCode();
     }
 
     @Override
     public String toString() {
-        return toJson();
+        return "DisallowedNextLinks" + byMode;
     }
 }
