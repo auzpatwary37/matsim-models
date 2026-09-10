@@ -115,4 +115,42 @@ class OsmTurnRestrictionReaderTest {
                 "restriction-via-way-unsupported".equals(i.code())));
         assertTrue(result.perLink().isEmpty());
     }
+
+    @Test
+    void exceptBusRemovesBusMode() {
+        OsmRelationRecord rel = new OsmRelationRecord("r1",
+                List.of(
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "10", "from"),
+                        new OsmRelationMemberRecord(OsmElementType.NODE, "2", "via"),
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "30", "to")),
+                OsmTagSet.of(Map.of("type", "restriction", "restriction", "no_left_turn", "except", "bus")));
+
+        Network net = threeArmJunction();
+        Record result = OsmTurnRestrictionReader.read(restrictionFixture(rel), buildResult(net));
+
+        DisallowedNextLinks dnl = result.perLink().get("osm_way_10_0_f");
+        assertNotNull(dnl);
+        // car is restricted, bus is exempt
+        assertTrue(dnl.isDisallowed("car", List.of("osm_way_30_0_f")));
+        assertFalse(dnl.isDisallowed("bus", List.of("osm_way_30_0_f")));
+    }
+
+    @Test
+    void nonImportedFromWayProducesNoRestriction() {
+        // Relation references way "99" which is not in the import result
+        OsmRelationRecord rel = new OsmRelationRecord("r1",
+                List.of(
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "99", "from"),
+                        new OsmRelationMemberRecord(OsmElementType.NODE, "2", "via"),
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "30", "to")),
+                OsmTagSet.of(Map.of("type", "restriction", "restriction", "no_left_turn")));
+
+        Network net = threeArmJunction();
+        Record result = OsmTurnRestrictionReader.read(restrictionFixture(rel), buildResult(net));
+
+        // No restriction should be attached to any link
+        assertTrue(result.perLink().isEmpty());
+        assertTrue(result.issues().stream().anyMatch(i ->
+                "restriction-from-unresolved".equals(i.code())));
+    }
 }

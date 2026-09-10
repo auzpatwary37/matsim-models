@@ -105,7 +105,6 @@ public final class OsmTurnRestrictionReader {
             if (modes.isEmpty()) continue;
 
             boolean isOnly = restriction.startsWith("only_");
-            boolean isNo = restriction.startsWith("no_") || restriction.startsWith("no_") || type.startsWith("keep");
 
             // Resolve from-link(s): incoming to via node, belonging to fromWay
             List<String> fromLinks = resolveIncomingToVia(matSimViaNodeId, fromWayId,
@@ -168,7 +167,7 @@ public final class OsmTurnRestrictionReader {
         return new Record(index, perLink, issues);
     }
 
-    /** Resolve modes from the from-way's rule, applying except=* exemptions. */
+    /** Resolve modes from the from-way's rule, applying OSM except=* exemptions. */
     private static Set<String> resolveAffectedModes(OsmRelationRecord rel, OsmImportResult importResult,
                                                      String fromWayId, List<OsmImportIssue> issues) {
         OsmWayRecord fromWay = importResult.ways().get(fromWayId);
@@ -180,13 +179,18 @@ public final class OsmTurnRestrictionReader {
             modes = new HashSet<>(Set.of("car"));
         }
 
-        // Apply except=* exemptions
+        // Standard OSM: except=bus;bicycle (semicolon-separated mode list)
+        String exceptValue = rel.tags().get("except");
+        if (exceptValue != null && !exceptValue.isBlank()) {
+            for (String exceptMode : exceptValue.split(";")) {
+                modes.remove(exceptMode.trim());
+            }
+        }
+        // Also support mode-specific: except:bus=bus, except:taxi=taxi
         for (var entry : rel.tags().asMap().entrySet()) {
-            if (entry.getKey().startsWith("except:")) {
-                String exceptMode = entry.getKey().substring("except:".length());
-                if (exceptMode.equals(entry.getValue())) {
-                    modes.remove(exceptMode);
-                }
+            String key = entry.getKey();
+            if (key.startsWith("except:") && entry.getValue().equals(key.substring("except:".length()))) {
+                modes.remove(key.substring("except:".length()));
             }
         }
         return modes;
@@ -200,18 +204,13 @@ public final class OsmTurnRestrictionReader {
         List<String> wayLinks = linkIdsByWay.getOrDefault(fromWayId, List.of());
         Set<String> wayLinkSet = new HashSet<>(wayLinks);
 
-        // Prefer links from the from-way
         List<String> matched = new ArrayList<>();
         for (String linkId : candidates) {
             if (wayLinkSet.contains(linkId)) {
                 matched.add(linkId);
             }
         }
-        // Fallback: if no way-specific match, use any incoming link
-        // (handles cases where the from-way wasn't imported or ID differs)
-        if (matched.isEmpty()) {
-            return List.copyOf(candidates);
-        }
+        // No fallback: an unmatched way should not attach to arbitrary junction links.
         return matched;
     }
 
@@ -229,9 +228,7 @@ public final class OsmTurnRestrictionReader {
                 matched.add(linkId);
             }
         }
-        if (matched.isEmpty()) {
-            return List.copyOf(candidates);
-        }
+        // No fallback: an unmatched way should not attach to arbitrary junction links.
         return matched;
     }
 
