@@ -43,15 +43,50 @@ public final class OsmNetworkImporter {
 
     public OsmImportResult read(OsmImportConfig config) {
         try {
+            OsmImportResult result;
             if (isPbf(config.osmFile())) {
-                return OsmPbfReader.read(config.osmFile(), config);
+                result = OsmPbfReader.read(config.osmFile(), config);
+            } else {
+                result = doParse(config);
             }
-            return doParse(config);
+            if (config.boundary() != null) {
+                result = applyBoundaryFilter(result, config.boundary());
+            }
+            return result;
         } catch (MatsimParseException e) {
             throw e;
         } catch (Exception e) {
             throw new MatsimParseException("Failed to parse OSM file: " + e.getMessage(), e);
         }
+    }
+
+    private static OsmImportResult applyBoundaryFilter(OsmImportResult result, OsmBoundary boundary) {
+        OsmPolygonFilter filter = new OsmPolygonFilter(boundary);
+
+        var filteredNodes = result.nodes().entrySet().stream()
+                .filter(e -> filter.keepNode(e.getValue()))
+                .collect(java.util.stream.Collectors.toMap(
+                        java.util.Map.Entry::getKey, java.util.Map.Entry::getValue,
+                        (a, b) -> a, java.util.LinkedHashMap::new));
+
+        var filteredWays = result.ways().entrySet().stream()
+                .filter(e -> filter.keepWay(e.getValue(), filteredNodes))
+                .collect(java.util.stream.Collectors.toMap(
+                        java.util.Map.Entry::getKey, java.util.Map.Entry::getValue,
+                        (a, b) -> a, java.util.LinkedHashMap::new));
+
+        var keptWayIds = filteredWays.keySet();
+        var keptNodeIds = filteredNodes.keySet();
+        var filteredRelations = result.relations().entrySet().stream()
+                .filter(e -> e.getValue().members().stream().anyMatch(m ->
+                        (m.type() == OsmElementType.WAY && keptWayIds.contains(m.ref())) ||
+                        (m.type() == OsmElementType.NODE && keptNodeIds.contains(m.ref()))))
+                .collect(java.util.stream.Collectors.toMap(
+                        java.util.Map.Entry::getKey, java.util.Map.Entry::getValue,
+                        (a, b) -> a, java.util.LinkedHashMap::new));
+
+        return new OsmImportResult(filteredNodes, filteredWays, filteredRelations,
+                result.issues(), result.provenance());
     }
 
     private static boolean isPbf(Path path) {
