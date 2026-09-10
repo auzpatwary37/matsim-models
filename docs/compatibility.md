@@ -6,7 +6,7 @@ This document describes what `matsim-models` supports and the limitations of its
 
 `matsim-models` is a pure Java 17 library for reading and writing MATSim XML files. It provides:
 - Domain model classes (Network, Population, TransitSchedule, Config, etc.)
-- XML readers and writers compatible with MATSim 2025.0 XML format
+- XML readers and writers for the MATSim XML wire formats (see the compatibility matrix in the README)
 - Zero runtime dependency on MATSim
 
 It does **not** include:
@@ -114,8 +114,13 @@ Applications use `matsim-models` for XML I/O while MATSim simulation runs as a s
 5. **Whitespace and comments lost**: XML whitespace and comments are not preserved through read/write cycles.
 6. **No config value coercion**: Config values are stored as strings; no type conversion is applied.
 
-## MATSim Version Notes
+## MATSim version and schema notes
 
-- `matsim-models` targets Java 17 and does not depend on MATSim
-- XML format compatibility is maintained for MATSim 2025.0 and later
-- MATSim 2026.0 requires Java 25 and runs as an external process; `matsim-models` XML output remains compatible
+- This library targets Java 17 and does not depend on MATSim.
+- Interoperability is asserted against the **published MATSim schema/DTD versions**
+  validated in-repo: `vehicleDefinitions_v2.0.xsd` and `transitSchedule_v2.dtd`
+  (served from `https://matsim.org/files/dtd/`; the vendored copies were adapted from the
+  reference MATSim build `2027.0-2026w25`). This is **not** a blanket guarantee across all
+  MATSim releases; earlier "MATSim 2025.0 and later" wording is intentionally withdrawn.
+- MATSim simulation runs as a separate external process; only the XML wire formats are
+  handled by this library.
