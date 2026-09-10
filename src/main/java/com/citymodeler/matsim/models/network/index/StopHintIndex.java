@@ -37,8 +37,9 @@ public final class StopHintIndex {
 
     public List<String> stopsNear(Coord point, double maxDistance) {
         if (stops.isEmpty()) return List.of();
-        double dx = Math.max(Math.abs(point.getX() - minX), Math.abs(point.getX() - maxX));
-        double dy = Math.max(Math.abs(point.getY() - minY), Math.abs(point.getY() - maxY));
+        // Distance from point to the bbox (0 if inside)
+        double dx = Math.max(Math.max(minX - point.getX(), 0), point.getX() - maxX);
+        double dy = Math.max(Math.max(minY - point.getY(), 0), point.getY() - maxY);
         if (dx > maxDistance && dy > maxDistance) return List.of();
 
         List<OsmStopHint> near = new ArrayList<>();

@@ -72,6 +72,7 @@ public final class LinkSpatialIndex {
         int cy = (int) (query.getY() / cellSize) - gridMinY;
         int radius = (int) (maxDistance / cellSize) + 1;
 
+        java.util.Set<String> seen = new java.util.HashSet<>();
         List<NearestLink> candidates = new ArrayList<>();
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dy = -radius; dy <= radius; dy++) {
@@ -79,6 +80,7 @@ public final class LinkSpatialIndex {
                 int gy = cy + dy;
                 if (gx < 0 || gx >= gridWidth || gy < 0 || gy >= gridHeight) continue;
                 for (String linkId : grid.get(gy * gridWidth + gx)) {
+                    if (!seen.add(linkId)) continue;
                     var id = Id.create(linkId, Link.class);
                     Link link = network.getLinks().get(id);
                     if (link == null) continue;
