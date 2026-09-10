@@ -105,7 +105,15 @@ public final class OsmMatsimNetworkBuilder {
         network.postProcess();
         importResult.applyProvenanceTo(network);
 
-        return new OsmNetworkBuildResult(network, issues, linkRefsByLinkId, linkIdsByOsmWayId);
+        var baseResult = new OsmNetworkBuildResult(network, issues, linkRefsByLinkId, linkIdsByOsmWayId);
+
+        List<OsmStopHint> stopHints = OsmStopHintExtractor.extract(importResult, baseResult);
+        Map<String, OsmLaneHint> laneHints = OsmLaneHintExtractor.extractLaneHints(importResult, baseResult);
+        Map<String, OsmIntersectionLaneHint> intersectionHints =
+                OsmLaneHintExtractor.extractIntersectionLaneHints(importResult, network, laneHints);
+
+        return new OsmNetworkBuildResult(network, issues, linkRefsByLinkId, linkIdsByOsmWayId,
+                stopHints, laneHints, intersectionHints);
     }
 
     private List<String> createSegments(

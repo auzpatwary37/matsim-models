@@ -14,18 +14,38 @@ public final class OsmNetworkBuildResult {
     private final List<OsmImportIssue> issues;
     private final Map<String, OsmLinkRef> linkRefsByLinkId;
     private final Map<String, List<String>> linkIdsByOsmWayId;
+    private final List<OsmStopHint> stopHints;
+    private final Map<String, OsmLaneHint> laneHintsByLinkId;
+    private final Map<String, OsmIntersectionLaneHint> intersectionLaneHintsByNodeId;
 
     public OsmNetworkBuildResult(
             Network cleanedNetwork,
             List<OsmImportIssue> issues,
             Map<String, OsmLinkRef> linkRefsByLinkId,
             Map<String, List<String>> linkIdsByOsmWayId) {
+        this(cleanedNetwork, issues, linkRefsByLinkId, linkIdsByOsmWayId,
+                List.of(), Map.of(), Map.of());
+    }
+
+    public OsmNetworkBuildResult(
+            Network cleanedNetwork,
+            List<OsmImportIssue> issues,
+            Map<String, OsmLinkRef> linkRefsByLinkId,
+            Map<String, List<String>> linkIdsByOsmWayId,
+            List<OsmStopHint> stopHints,
+            Map<String, OsmLaneHint> laneHintsByLinkId,
+            Map<String, OsmIntersectionLaneHint> intersectionLaneHintsByNodeId) {
         this.cleanedNetwork = Objects.requireNonNull(cleanedNetwork, "cleanedNetwork");
         this.issues = List.copyOf(Objects.requireNonNull(issues, "issues"));
         this.linkRefsByLinkId = Collections.unmodifiableSortedMap(new TreeMap<>(
                 Objects.requireNonNull(linkRefsByLinkId, "linkRefsByLinkId")));
         this.linkIdsByOsmWayId = Collections.unmodifiableSortedMap(new TreeMap<>(
                 Objects.requireNonNull(linkIdsByOsmWayId, "linkIdsByOsmWayId")));
+        this.stopHints = List.copyOf(Objects.requireNonNull(stopHints, "stopHints"));
+        this.laneHintsByLinkId = Collections.unmodifiableMap(new TreeMap<>(
+                Objects.requireNonNull(laneHintsByLinkId, "laneHintsByLinkId")));
+        this.intersectionLaneHintsByNodeId = Collections.unmodifiableMap(new TreeMap<>(
+                Objects.requireNonNull(intersectionLaneHintsByNodeId, "intersectionLaneHintsByNodeId")));
     }
 
     public Network cleanedNetwork() {
@@ -42,5 +62,17 @@ public final class OsmNetworkBuildResult {
 
     public Map<String, List<String>> linkIdsByOsmWayId() {
         return linkIdsByOsmWayId;
+    }
+
+    public List<OsmStopHint> stopHints() {
+        return stopHints;
+    }
+
+    public Map<String, OsmLaneHint> laneHintsByLinkId() {
+        return laneHintsByLinkId;
+    }
+
+    public Map<String, OsmIntersectionLaneHint> intersectionLaneHintsByNodeId() {
+        return intersectionLaneHintsByNodeId;
     }
 }
