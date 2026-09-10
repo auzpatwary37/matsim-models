@@ -41,18 +41,23 @@ public final class GtfsTransitScheduleBuilder {
         TransitSchedule schedule = new TransitSchedule();
 
         // Add stop facilities (only platforms with coordinates)
+        // GTFS provides WGS84 lon/lat; we store them as-is and the mapping layer
+        // applies CRS transformation via CrsUtils when matching to the projected network.
         for (GtfsFeed feed : feeds.allFeeds()) {
             for (Map.Entry<String, GtfsStop> entry : feed.stops().entrySet()) {
                 GtfsStop stop = entry.getValue();
                 if (!stop.hasCoordinates()) continue;
                 if (stop.locationType() != 0) continue;
                 String facId = feed.prefixedStopId(stop.id());
+                // Store WGS84 coordinates; mapping layer projects them
                 Coord coord = new Coord(stop.lon(), stop.lat());
                 TransitStopFacility facility = new TransitStopFacility(
                         Id.create(facId, TransitStopFacility.class), coord, false);
                 facility.setName(stop.name());
                 facility.getAttributes().putAttribute("gtfs:feedId", feed.feedId());
                 facility.getAttributes().putAttribute("gtfs:agencyId", feed.agencyId() != null ? feed.agencyId() : "");
+                facility.getAttributes().putAttribute("gtfs:lon", stop.lon());
+                facility.getAttributes().putAttribute("gtfs:lat", stop.lat());
                 schedule.addStopFacility(facility);
             }
         }
@@ -77,7 +82,17 @@ public final class GtfsTransitScheduleBuilder {
                     if (sb.length() > 0) sb.append('|');
                     sb.append(feed.prefixedStopId(st.stopId()));
                 }
-                String groupKey = trip.routeId() + "|" + trip.effectiveDirectionId() + "|" + sb;
+                // Include offset vector in grouping key so trips with different
+                // run/dwell times get separate MATSim routes
+                StringBuilder offsetSb = new StringBuilder();
+                double base = stopTimes.get(0).departureTime() != null ? stopTimes.get(0).departureTime() : 0;
+                for (GtfsStopTime st : stopTimes) {
+                    if (offsetSb.length() > 0) offsetSb.append('|');
+                    double arrOff = (st.arrivalTime() != null ? st.arrivalTime() : base) - base;
+                    double depOff = (st.departureTime() != null ? st.departureTime() : base) - base;
+                    offsetSb.append(Math.round(arrOff)).append(',').append(Math.round(depOff));
+                }
+                String groupKey = trip.routeId() + "|" + trip.effectiveDirectionId() + "|" + sb + "|" + offsetSb;
                 groups.computeIfAbsent(groupKey, k -> new ArrayList<>())
                         .add(new GroupEntry(feed, trip, route, mode, stopTimes));
             }

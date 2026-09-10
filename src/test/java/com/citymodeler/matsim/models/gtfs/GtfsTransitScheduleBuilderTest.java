@@ -86,9 +86,15 @@ class GtfsTransitScheduleBuilderTest {
         assertEquals("tram", GtfsModeMapper.map(0));
         assertEquals("subway", GtfsModeMapper.map(1));
         assertEquals("rail", GtfsModeMapper.map(2));
-        assertEquals("pt", GtfsModeMapper.map(3));
-        assertEquals("pt", GtfsModeMapper.map(4));
-        assertEquals("ferry", GtfsModeMapper.map(5));
-        assertEquals("pt", GtfsModeMapper.map(99)); // unknown → pt
+        assertEquals("pt", GtfsModeMapper.map(3));       // bus
+        assertEquals("ferry", GtfsModeMapper.map(4));    // ferry
+        assertEquals("cable_car", GtfsModeMapper.map(5));// cable tram
+        assertEquals("aerial_lift", GtfsModeMapper.map(6)); // aerial lift
+        assertEquals("funicular", GtfsModeMapper.map(7)); // funicular
+        assertEquals("aerial_lift", GtfsModeMapper.map(8)); // aerial tramway
+        assertEquals("funicular", GtfsModeMapper.map(9)); // subway (trolley)
+        assertEquals("trolleybus", GtfsModeMapper.map(11));
+        assertEquals("pt", GtfsModeMapper.map(12));      // monorail
+        assertEquals("pt", GtfsModeMapper.map(99));      // unknown → pt
     }
 }

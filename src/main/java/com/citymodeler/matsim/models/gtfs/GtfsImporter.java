@@ -165,8 +165,8 @@ public final class GtfsImporter {
                 String depStr = GtfsCsvReader.cell(row, "departure_time");
                 Integer arr = (arrStr != null && !arrStr.isBlank()) ? parseTime(arrStr) : null;
                 Integer dep = (depStr != null && !depStr.isBlank()) ? parseTime(depStr) : null;
-                int tp = parseInt(GtfsCsvReader.cell(row, "stop_time_type"), 0);
-                boolean isTimepoint = tp == 0;
+                int tpRaw = parseInt(GtfsCsvReader.cell(row, "timepoint"), 1);
+                boolean isTimepoint = tpRaw == 1; // GTFS: 1=exact, 0=approximate; default=1
                 int pickup = parseInt(GtfsCsvReader.cell(row, "pickup_type"), 0);
                 int dropOff = parseInt(GtfsCsvReader.cell(row, "drop_off_type"), 0);
                 GtfsStopTime st = new GtfsStopTime(tripId, stopId, seq, arr, dep, isTimepoint, pickup, dropOff);
