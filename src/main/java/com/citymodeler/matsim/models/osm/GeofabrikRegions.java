@@ -55,7 +55,7 @@ public final class GeofabrikRegions {
             "https://download.geofabrik.de/europe/germany-latest.osm.pbf",
             5, 47, 15, 55);
     public static final Region UK = region("united-kingdom",
-            "https://download.geofabrik.de/europe/great-brain-latest.osm.pbf",
+            "https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf",
             -11, 49, 2, 61);
 
     // Canadian provinces/states
@@ -87,20 +87,11 @@ public final class GeofabrikRegions {
             "https://download.geofabrik.de/north-america/canada/newfoundland-and-labrador-latest.osm.pbf",
             -60, 46, -52, 60);
 
-    // Major metro areas (smaller, faster downloads)
-    public static final Region MONTREAL = region("montreal",
-            "https://download.geofabrik.de/north-america/canada/quebec/montreal-latest.osm.pbf",
-            -74.1, 45.3, -73.3, 46.0);
-    public static final Region TORONTO = region("toronto",
-            "https://download.geofabrik.de/north-america/canada/ontario/toronto-latest.osm.pbf",
-            -79.7, 43.4, -79.0, 44.0);
-    public static final Region VANCOUVER = region("vancouver",
-            "https://download.geofabrik.de/north-america/canada/british-columbia/vancouver-latest.osm.pbf",
-            -123.4, 49.0, -122.8, 49.5);
+    // NOTE: Metro-level extracts are not guaranteed to exist on Geofabrik.
+    // Resolution falls back to the containing province/state region.
 
     private static final List<Region> ALL = List.of(
             // Order matters: smallest first for resolution
-            MONTREAL, TORONTO, VANCOUVER,
             QUEBEC, ONTARIO, BRITISH_COLUMBIA, ALBERTA, MANITOBA, SASKATCHEWAN,
             NOVA_SCOTIA, NEW_BRUNSWICK, NEWFOUNDLAND,
             CANADA, USA, MEXICO, FRANCE, GERMANY, UK,

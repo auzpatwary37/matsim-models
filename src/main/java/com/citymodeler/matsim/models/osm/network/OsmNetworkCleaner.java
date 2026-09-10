@@ -1,19 +1,24 @@
 package com.citymodeler.matsim.models.osm.network;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
 import com.citymodeler.matsim.models.network.Network;
+import com.citymodeler.matsim.models.network.Node;
 import com.citymodeler.matsim.models.osm.OsmImportIssue;
 import com.citymodeler.matsim.models.osm.OsmIssueSeverity;
 
 /**
- * Cleans the network: removes orphaned nodes, dangling links, and
- * optionally disconnected components that lack transit-relevant modes.
+ * Cleans the network in-place: removes orphaned nodes, dangling links, and
+ * optionally small disconnected components that lack transit-relevant modes.
+ * Calls {@code network.postProcess()} after mutations.
  */
 public final class OsmNetworkCleaner {
 
@@ -22,20 +27,27 @@ public final class OsmNetworkCleaner {
 
     public static CleanResult clean(Network network, boolean removeDisconnectedNonTransit) {
         List<OsmImportIssue> issues = new ArrayList<>();
-        Set<String> linksToRemove = new HashSet<>();
-        Set<String> nodesToRemove = new HashSet<>();
+        Set<Id<Link>> linksToRemove = new HashSet<>();
 
         if (removeDisconnectedNonTransit) {
-            // Find connected components
-            Map<com.citymodeler.matsim.models.api.Id<Link>, Boolean> visited = new java.util.HashMap<>();
+            Map<Id<Link>, Boolean> visited = new HashMap<>();
+            // Build adjacency by node for efficient BFS
+            Map<String, List<Id<Link>>> nodeToLinks = new HashMap<>();
+            for (var entry : network.getLinks().entrySet()) {
+                Link link = entry.getValue();
+                nodeToLinks.computeIfAbsent(link.getFromNode().getId().toString(), k -> new ArrayList<>()).add(entry.getKey());
+                nodeToLinks.computeIfAbsent(link.getToNode().getId().toString(), k -> new ArrayList<>()).add(entry.getKey());
+            }
+
             for (var entry : network.getLinks().entrySet()) {
                 if (visited.containsKey(entry.getKey())) continue;
-                Set<com.citymodeler.matsim.models.api.Id<Link>> component = new HashSet<>();
+                Set<Id<Link>> component = new HashSet<>();
                 boolean hasTransit = false;
-                // BFS
-                var queue = new java.util.ArrayDeque<com.citymodeler.matsim.models.api.Id<Link>>();
+
+                var queue = new ArrayDeque<Id<Link>>();
                 queue.add(entry.getKey());
                 visited.put(entry.getKey(), true);
+
                 while (!queue.isEmpty()) {
                     var linkId = queue.poll();
                     Link link = network.getLinks().get(linkId);
@@ -46,25 +58,20 @@ public final class OsmNetworkCleaner {
                                     || m.equals("tram") || m.equals("subway"))) {
                         hasTransit = true;
                     }
-                    // Neighbors: links sharing a node
                     String fromNode = link.getFromNode().getId().toString();
                     String toNode = link.getToNode().getId().toString();
-                    for (var other : network.getLinks().entrySet()) {
-                        if (visited.containsKey(other.getKey())) continue;
-                        Link ol = other.getValue();
-                        if (ol.getFromNode().getId().toString().equals(toNode)
-                                || ol.getToNode().getId().toString().equals(toNode)
-                                || ol.getFromNode().getId().toString().equals(fromNode)
-                                || ol.getToNode().getId().toString().equals(fromNode)) {
-                            visited.put(other.getKey(), true);
-                            queue.add(other.getKey());
+                    for (String nodeId : Set.of(fromNode, toNode)) {
+                        for (Id<Link> neighborId : nodeToLinks.getOrDefault(nodeId, List.of())) {
+                            if (!visited.containsKey(neighborId)) {
+                                visited.put(neighborId, true);
+                                queue.add(neighborId);
+                            }
                         }
                     }
                 }
+
                 if (!hasTransit && component.size() < 3) {
-                    for (var linkId : component) {
-                        linksToRemove.add(linkId.toString());
-                    }
+                    linksToRemove.addAll(component);
                     issues.add(new OsmImportIssue(OsmIssueSeverity.INFO,
                             "removed-small-nontransit-component",
                             "Removed " + component.size() + "-link non-transit component", null));
@@ -72,24 +79,31 @@ public final class OsmNetworkCleaner {
             }
         }
 
-        // Remove orphaned nodes (no links after removal)
-        if (!linksToRemove.isEmpty()) {
-            Set<String> nodesWithLinks = new HashSet<>();
-            for (var entry : network.getLinks().entrySet()) {
-                if (linksToRemove.contains(entry.getKey().toString())) continue;
-                nodesWithLinks.add(entry.getValue().getFromNode().getId().toString());
-                nodesWithLinks.add(entry.getValue().getToNode().getId().toString());
-            }
-            for (var entry : network.getNodes().entrySet()) {
-                if (!nodesWithLinks.contains(entry.getKey().toString())) {
-                    nodesToRemove.add(entry.getKey().toString());
-                }
-            }
+        // Remove links
+        for (Id<Link> linkId : linksToRemove) {
+            network.removeLink(linkId);
         }
 
-        int removedLinks = linksToRemove.size();
-        int removedNodes = nodesToRemove.size();
-        return new CleanResult(removedLinks, removedNodes, issues);
+        // Remove orphaned nodes (no remaining links reference them)
+        Set<String> nodesWithLinks = new HashSet<>();
+        for (Link link : network.getLinks().values()) {
+            nodesWithLinks.add(link.getFromNode().getId().toString());
+            nodesWithLinks.add(link.getToNode().getId().toString());
+        }
+
+        Set<Id<Node>> nodesToRemove = new HashSet<>();
+        for (var entry : network.getNodes().entrySet()) {
+            if (!nodesWithLinks.contains(entry.getKey().toString())) {
+                nodesToRemove.add(entry.getKey());
+            }
+        }
+        for (Id<Node> nodeId : nodesToRemove) {
+            network.removeNode(nodeId);
+        }
+
+        network.postProcess();
+
+        return new CleanResult(linksToRemove.size(), nodesToRemove.size(), List.copyOf(issues));
     }
 
     public record CleanResult(int removedLinks, int removedNodes, List<OsmImportIssue> issues) {

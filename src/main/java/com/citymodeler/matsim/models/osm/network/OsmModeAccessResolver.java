@@ -63,11 +63,7 @@ public final class OsmModeAccessResolver {
             return surviving;
         }
         Set<String> result = new LinkedHashSet<>(ruleModes);
-        for (String mode : result) {
-            if (isModeRestricted(tags, mode)) {
-                result.remove(mode);
-            }
-        }
+        result.removeIf(mode -> isModeRestricted(tags, mode));
         return result;
     }
 

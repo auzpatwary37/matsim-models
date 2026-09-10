@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.citymodeler.matsim.models.api.Coord;
+import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.network.Node;
 
@@ -17,9 +18,12 @@ public final class NodeSpatialIndex {
     private final double cellSize;
     private final int gridMinX, gridMinY, gridWidth, gridHeight;
     private final List<List<String>> grid;
-    private final Map<com.citymodeler.matsim.models.api.Id<Node>, Node> nodes;
+    private final Map<Id<Node>, Node> nodes;
 
     public NodeSpatialIndex(Network network, double cellSizeMeters) {
+        if (cellSizeMeters <= 0) {
+            throw new IllegalArgumentException("cellSizeMeters must be > 0");
+        }
         this.cellSize = cellSizeMeters;
         this.nodes = network.getNodes();
 
@@ -40,7 +44,7 @@ public final class NodeSpatialIndex {
         this.gridWidth = (int) ((maxX - minX) / cellSize) + 2;
         this.gridHeight = (int) ((maxY - minY) / cellSize) + 2;
         this.grid = new ArrayList<>(gridWidth * gridHeight);
-        for (int i = 0; i < grid.size(); i++) {
+        for (int i = 0; i < gridWidth * gridHeight; i++) {
             grid.add(new ArrayList<>());
         }
 
@@ -67,7 +71,7 @@ public final class NodeSpatialIndex {
                 int gy = cy + dy;
                 if (gx < 0 || gx >= gridWidth || gy < 0 || gy >= gridHeight) continue;
                 for (String nodeId : grid.get(gy * gridWidth + gx)) {
-                    var id = com.citymodeler.matsim.models.api.Id.create(nodeId, Node.class);
+                    var id = Id.create(nodeId, Node.class);
                     Node node = nodes.get(id);
                     if (node == null) continue;
                     Coord nc = node.getCoord();
@@ -82,6 +86,6 @@ public final class NodeSpatialIndex {
         }
 
         candidates.sort(Comparator.comparingDouble(NearestNode::distance));
-        return candidates.size() > maxResults ? candidates.subList(0, maxResults) : candidates;
+        return candidates.size() > maxResults ? List.copyOf(candidates.subList(0, maxResults)) : List.copyOf(candidates);
     }
 }

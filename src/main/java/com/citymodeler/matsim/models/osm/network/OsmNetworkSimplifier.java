@@ -73,8 +73,13 @@ public final class OsmNetworkSimplifier {
     }
 
     /**
-     * Builds polylines for compact link creation.
-     * For each segment between consecutive routing nodes, collects intermediate shape points.
+     * Builds polylines keyed by network link ID (matching the builder's per-segment indexing).
+     *
+     * <p><b>Note:</b> All three geometry modes currently produce the same network topology
+     * (one link per consecutive OSM node pair). The geometry store provides sidecar polylines
+     * for potential downstream use (e.g., rendering, shape matching) without altering link IDs.
+     * True routing-node collapsing (where shape nodes are absorbed into fewer links) is
+     * deferred to a future phase.
      */
     public static Map<String, OsmPolyline> buildGeometry(
             List<OsmWayRecord> ways,
@@ -92,50 +97,29 @@ public final class OsmNetworkSimplifier {
         for (OsmWayRecord way : ways) {
             List<String> refs = way.nodeRefs();
 
-            // Split way into segments between routing nodes
-            List<Integer> routingIndices = new java.util.ArrayList<>();
-            for (int i = 0; i < refs.size(); i++) {
-                if (routingNodes.contains(refs.get(i))) {
-                    routingIndices.add(i);
-                }
-            }
-            if (routingIndices.size() < 2) continue;
+            // Use the SAME segment index as the network builder (consecutive node pairs)
+            for (int i = 0; i + 1 < refs.size(); i++) {
+                OsmNodeRecord fromNode = nodes.get(refs.get(i));
+                OsmNodeRecord toNode = nodes.get(refs.get(i + 1));
+                if (fromNode == null || toNode == null) continue;
 
-            for (int s = 0; s + 1 < routingIndices.size(); s++) {
-                int fromIdx = routingIndices.get(s);
-                int toIdx = routingIndices.get(s + 1);
+                String fwdLinkId = OsmGeneratedIds.linkId(way.id(), i, true);
+                String revLinkId = OsmGeneratedIds.linkId(way.id(), i, false);
 
-                // Forward and reverse
-                List<Coord> forwardPoints = new java.util.ArrayList<>();
-                for (int i = fromIdx; i <= toIdx; i++) {
-                    OsmNodeRecord node = nodes.get(refs.get(i));
-                    if (node != null) {
-                        forwardPoints.add(node.projectedCoord());
-                    }
-                }
-                if (forwardPoints.size() >= 2) {
-                    String fwdLinkId = "osm_way_" + way.id() + "_" + s + "_f";
-                    if (mode == OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY) {
+                // Collect all shape points between this segment's routing endpoints
+                // (for multi-segment stretches between routing nodes, store the full polyline
+                //  under the first segment's ID as a "span" — but for Phase 1, store per-segment)
+                List<Coord> forwardPoints = List.of(fromNode.projectedCoord(), toNode.projectedCoord());
+                List<Coord> reversePoints = List.of(toNode.projectedCoord(), fromNode.projectedCoord());
+
+                if (mode == OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY) {
+                    geometry.put(fwdLinkId, new OsmPolyline(forwardPoints));
+                    geometry.put(revLinkId, new OsmPolyline(reversePoints));
+                } else {
+                    // ROUTING_NODES_ONLY: only store if both endpoints are routing nodes
+                    if (routingNodes.contains(refs.get(i)) && routingNodes.contains(refs.get(i + 1))) {
                         geometry.put(fwdLinkId, new OsmPolyline(forwardPoints));
-                    } else {
-                        // ROUTING_NODES_ONLY: just start and end
-                        geometry.put(fwdLinkId, new OsmPolyline(List.of(forwardPoints.get(0), forwardPoints.get(forwardPoints.size() - 1))));
-                    }
-
-                    List<Coord> reversePoints = new java.util.ArrayList<>();
-                    for (int i = toIdx; i >= fromIdx; i--) {
-                        OsmNodeRecord node = nodes.get(refs.get(i));
-                        if (node != null) {
-                            reversePoints.add(node.projectedCoord());
-                        }
-                    }
-                    if (reversePoints.size() >= 2) {
-                        String revLinkId = "osm_way_" + way.id() + "_" + s + "_r";
-                        if (mode == OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY) {
-                            geometry.put(revLinkId, new OsmPolyline(reversePoints));
-                        } else {
-                            geometry.put(revLinkId, new OsmPolyline(List.of(reversePoints.get(0), reversePoints.get(reversePoints.size() - 1))));
-                        }
+                        geometry.put(revLinkId, new OsmPolyline(reversePoints));
                     }
                 }
             }

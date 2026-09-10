@@ -89,8 +89,8 @@ final class OsmPbfReader {
                 long id = ids.get(i);
                 latAccum += lats.get(i);
                 lonAccum += lons.get(i);
-                double lat = latAccum / 1e7;
-                double lon = lonAccum / 1e7;
+                double lat = parseLat(latAccum);
+                double lon = parseLon(lonAccum);
 
                 if (Math.abs(lat) > 90.0 || Math.abs(lon) > 180.0) {
                     continue;
@@ -98,13 +98,14 @@ final class OsmPbfReader {
 
                 try {
                     Map<String, String> tags = new HashMap<>();
+                    // OSM PBF spec: ((keyId valueId) 0)* — single zero terminates each node's tags
                     while (kvIdx < keysVals.size()) {
-                        int keyIdx = keysVals.get(kvIdx++);
-                        int valIdx = keysVals.get(kvIdx++);
-                        if (keyIdx == 0 && valIdx == 0) {
-                            break;
+                        int first = keysVals.get(kvIdx++);
+                        if (first == 0) {
+                            break; // end of this node's tags
                         }
-                        tags.put(getStringById(keyIdx), getStringById(valIdx));
+                        int valIdx = keysVals.get(kvIdx++);
+                        tags.put(getStringById(first), getStringById(valIdx));
                     }
 
                     Coord projected = project(lon, lat, String.valueOf(id));
@@ -123,8 +124,8 @@ final class OsmPbfReader {
         @Override
         protected void parseNodes(List<Osmformat.Node> nodeList) {
             for (Osmformat.Node node : nodeList) {
-                double lat = node.getLat() / 1e7;
-                double lon = node.getLon() / 1e7;
+                double lat = parseLat(node.getLat());
+                double lon = parseLon(node.getLon());
                 if (Math.abs(lat) > 90.0 || Math.abs(lon) > 180.0) {
                     continue;
                 }

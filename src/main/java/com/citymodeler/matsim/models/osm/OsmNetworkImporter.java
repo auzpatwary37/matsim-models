@@ -63,20 +63,43 @@ public final class OsmNetworkImporter {
     private static OsmImportResult applyBoundaryFilter(OsmImportResult result, OsmBoundary boundary) {
         OsmPolygonFilter filter = new OsmPolygonFilter(boundary);
 
+        // Step 1: Decide which ways to keep using ORIGINAL node positions.
+        // A way is kept if any of its nodes is inside the polygon, OR if a
+        // segment between consecutive nodes crosses the polygon boundary.
+        Map<String, OsmNodeRecord> allNodes = result.nodes();
+        var keptWayIds = new java.util.HashSet<String>();
+        for (var wayEntry : result.ways().entrySet()) {
+            OsmWayRecord way = wayEntry.getValue();
+            if (filter.wayIntersectsBoundary(way.nodeRefs(), allNodes)) {
+                keptWayIds.add(wayEntry.getKey());
+            }
+        }
+
+        // Step 2: Determine which nodes to keep — all nodes referenced by kept ways.
+        // This naturally retains boundary-crossing endpoints (one inside, one outside).
+        var keptNodeIds = new java.util.HashSet<String>();
+        for (String wayId : keptWayIds) {
+            OsmWayRecord way = result.ways().get(wayId);
+            if (way != null) {
+                for (String nodeId : way.nodeRefs()) {
+                    keptNodeIds.add(nodeId);
+                }
+            }
+        }
+
+        // Step 3: Build filtered maps
         var filteredNodes = result.nodes().entrySet().stream()
-                .filter(e -> filter.keepNode(e.getValue()))
+                .filter(e -> keptNodeIds.contains(e.getKey()))
                 .collect(java.util.stream.Collectors.toMap(
                         java.util.Map.Entry::getKey, java.util.Map.Entry::getValue,
                         (a, b) -> a, java.util.LinkedHashMap::new));
 
         var filteredWays = result.ways().entrySet().stream()
-                .filter(e -> filter.keepWay(e.getValue(), filteredNodes))
+                .filter(e -> keptWayIds.contains(e.getKey()))
                 .collect(java.util.stream.Collectors.toMap(
                         java.util.Map.Entry::getKey, java.util.Map.Entry::getValue,
                         (a, b) -> a, java.util.LinkedHashMap::new));
 
-        var keptWayIds = filteredWays.keySet();
-        var keptNodeIds = filteredNodes.keySet();
         var filteredRelations = result.relations().entrySet().stream()
                 .filter(e -> e.getValue().members().stream().anyMatch(m ->
                         (m.type() == OsmElementType.WAY && keptWayIds.contains(m.ref())) ||

@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import com.citymodeler.matsim.models.api.Coord;
+import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
 import com.citymodeler.matsim.models.network.Network;
 
@@ -20,6 +21,9 @@ public final class LinkSpatialIndex {
     private final Network network;
 
     public LinkSpatialIndex(Network network, double cellSizeMeters) {
+        if (cellSizeMeters <= 0) {
+            throw new IllegalArgumentException("cellSizeMeters must be > 0");
+        }
         this.cellSize = cellSizeMeters;
         this.network = network;
 
@@ -33,13 +37,14 @@ public final class LinkSpatialIndex {
             if (x > maxX) maxX = x;
             if (y > maxY) maxY = y;
         }
+        if (minX > maxX) { minX = 0; maxX = 0; minY = 0; maxY = 0; }
 
         this.gridMinX = (int) (minX / cellSize);
         this.gridMinY = (int) (minY / cellSize);
         this.gridWidth = (int) ((maxX - minX) / cellSize) + 2;
         this.gridHeight = (int) ((maxY - minY) / cellSize) + 2;
         this.grid = new ArrayList<>(gridWidth * gridHeight);
-        for (int i = 0; i < grid.size(); i++) {
+        for (int i = 0; i < gridWidth * gridHeight; i++) {
             grid.add(new ArrayList<>());
         }
 
@@ -50,12 +55,12 @@ public final class LinkSpatialIndex {
             double y1 = link.getFromNode().getCoord().getY();
             double x2 = link.getToNode().getCoord().getX();
             double y2 = link.getToNode().getCoord().getY();
-            double minGX = (int) (Math.min(x1, x2) / cellSize) - gridMinX;
-            double maxGX = (int) (Math.max(x1, x2) / cellSize) - gridMinX;
-            double minGY = (int) (Math.min(y1, y2) / cellSize) - gridMinY;
-            double maxGY = (int) (Math.max(y1, y2) / cellSize) - gridMinY;
-            for (int gx = Math.max(0, (int) minGX); gx <= Math.min(gridWidth - 1, (int) maxGX); gx++) {
-                for (int gy = Math.max(0, (int) minGY); gy <= Math.min(gridHeight - 1, (int) maxGY); gy++) {
+            int minGX = Math.max(0, (int) (Math.min(x1, x2) / cellSize) - gridMinX);
+            int maxGX = Math.min(gridWidth - 1, (int) (Math.max(x1, x2) / cellSize) - gridMinX);
+            int minGY = Math.max(0, (int) (Math.min(y1, y2) / cellSize) - gridMinY);
+            int maxGY = Math.min(gridHeight - 1, (int) (Math.max(y1, y2) / cellSize) - gridMinY);
+            for (int gx = minGX; gx <= maxGX; gx++) {
+                for (int gy = minGY; gy <= maxGY; gy++) {
                     grid.get(gy * gridWidth + gx).add(linkId);
                 }
             }
@@ -74,7 +79,7 @@ public final class LinkSpatialIndex {
                 int gy = cy + dy;
                 if (gx < 0 || gx >= gridWidth || gy < 0 || gy >= gridHeight) continue;
                 for (String linkId : grid.get(gy * gridWidth + gx)) {
-                    var id = com.citymodeler.matsim.models.api.Id.create(linkId, Link.class);
+                    var id = Id.create(linkId, Link.class);
                     Link link = network.getLinks().get(id);
                     if (link == null) continue;
                     var result = pointToSegment(query, link);
@@ -86,34 +91,23 @@ public final class LinkSpatialIndex {
         }
 
         candidates.sort(Comparator.comparingDouble(NearestLink::distance));
-        return candidates.size() > maxResults ? candidates.subList(0, maxResults) : candidates;
+        return candidates.size() > maxResults ? List.copyOf(candidates.subList(0, maxResults)) : List.copyOf(candidates);
     }
 
-    private NearestLink pointToSegment(Link link) {
-        Coord p = query;
+    private static NearestLink pointToSegment(Coord query, Link link) {
         Coord a = link.getFromNode().getCoord();
         Coord b = link.getToNode().getCoord();
-        return computeClosest(link.getId().toString(), a, b, p);
-    }
-
-    private Coord query;
-
-    private NearestLink pointToSegment(Coord query, Link link) {
-        Coord a = link.getFromNode().getCoord();
-        Coord b = link.getToNode().getCoord();
-        return computeClosest(link.getId().toString(), a, b, query);
-    }
-
-    private static NearestLink computeClosest(String linkId, Coord a, Coord b, Coord p) {
         double dx = b.getX() - a.getX();
         double dy = b.getY() - a.getY();
         double lenSq = dx * dx + dy * dy;
         double t = lenSq == 0 ? 0 : Math.max(0, Math.min(1,
-                ((p.getX() - a.getX()) * dx + (p.getY() - a.getY()) * dy) / lenSq));
+                ((query.getX() - a.getX()) * dx + (query.getY() - a.getY()) * dy) / lenSq));
         double projX = a.getX() + t * dx;
         double projY = a.getY() + t * dy;
-        double dist = Math.sqrt((p.getX() - projX) * (p.getX() - projX) + (p.getY() - projY) * (p.getY() - projY));
+        double dist = Math.sqrt(
+                (query.getX() - projX) * (query.getX() - projX)
+                        + (query.getY() - projY) * (query.getY() - projY));
         double linkLen = Math.sqrt(lenSq);
-        return new NearestLink(linkId, dist, new Coord(projX, projY), linkLen == 0 ? 0 : t);
+        return new NearestLink(link.getId().toString(), dist, new Coord(projX, projY), linkLen == 0 ? 0 : t);
     }
 }
