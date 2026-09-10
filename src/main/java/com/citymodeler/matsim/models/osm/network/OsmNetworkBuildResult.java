@@ -7,6 +7,8 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 import com.citymodeler.matsim.models.network.Network;
+import com.citymodeler.matsim.models.network.index.NetworkQueryIndex;
+import com.citymodeler.matsim.models.network.turnrestrictions.TurnRestrictionIndex;
 import com.citymodeler.matsim.models.osm.OsmImportIssue;
 
 public final class OsmNetworkBuildResult {
@@ -18,6 +20,9 @@ public final class OsmNetworkBuildResult {
     private final Map<String, OsmLaneHint> laneHintsByLinkId;
     private final Map<String, OsmIntersectionLaneHint> intersectionLaneHintsByNodeId;
     private final OsmGeometryStore geometryStore;
+    private final TurnRestrictionIndex turnRestrictionIndex;
+    private final NetworkQueryIndex queryIndex;
+    private final List<List<String>> quarantinedComponents;
 
     public OsmNetworkBuildResult(
             Network cleanedNetwork,
@@ -61,6 +66,38 @@ public final class OsmNetworkBuildResult {
         this.intersectionLaneHintsByNodeId = Collections.unmodifiableMap(new TreeMap<>(
                 Objects.requireNonNull(intersectionLaneHintsByNodeId, "intersectionLaneHintsByNodeId")));
         this.geometryStore = Objects.requireNonNull(geometryStore, "geometryStore");
+        this.turnRestrictionIndex = null;
+        this.queryIndex = null;
+        this.quarantinedComponents = List.of();
+    }
+
+    public OsmNetworkBuildResult(
+            Network cleanedNetwork,
+            List<OsmImportIssue> issues,
+            Map<String, OsmLinkRef> linkRefsByLinkId,
+            Map<String, List<String>> linkIdsByOsmWayId,
+            List<OsmStopHint> stopHints,
+            Map<String, OsmLaneHint> laneHintsByLinkId,
+            Map<String, OsmIntersectionLaneHint> intersectionLaneHintsByNodeId,
+            OsmGeometryStore geometryStore,
+            TurnRestrictionIndex turnRestrictionIndex,
+            NetworkQueryIndex queryIndex,
+            List<List<String>> quarantinedComponents) {
+        this.cleanedNetwork = Objects.requireNonNull(cleanedNetwork, "cleanedNetwork");
+        this.issues = List.copyOf(Objects.requireNonNull(issues, "issues"));
+        this.linkRefsByLinkId = Collections.unmodifiableSortedMap(new TreeMap<>(
+                Objects.requireNonNull(linkRefsByLinkId, "linkRefsByLinkId")));
+        this.linkIdsByOsmWayId = Collections.unmodifiableSortedMap(new TreeMap<>(
+                Objects.requireNonNull(linkIdsByOsmWayId, "linkIdsByOsmWayId")));
+        this.stopHints = List.copyOf(Objects.requireNonNull(stopHints, "stopHints"));
+        this.laneHintsByLinkId = Collections.unmodifiableMap(new TreeMap<>(
+                Objects.requireNonNull(laneHintsByLinkId, "laneHintsByLinkId")));
+        this.intersectionLaneHintsByNodeId = Collections.unmodifiableMap(new TreeMap<>(
+                Objects.requireNonNull(intersectionLaneHintsByNodeId, "intersectionLaneHintsByNodeId")));
+        this.geometryStore = Objects.requireNonNull(geometryStore, "geometryStore");
+        this.turnRestrictionIndex = turnRestrictionIndex;
+        this.queryIndex = queryIndex;
+        this.quarantinedComponents = List.copyOf(quarantinedComponents != null ? quarantinedComponents : List.of());
     }
 
     public Network cleanedNetwork() {
@@ -93,5 +130,20 @@ public final class OsmNetworkBuildResult {
 
     public OsmGeometryStore geometryStore() {
         return geometryStore;
+    }
+
+    /** May be null if turn restrictions were not processed. */
+    public TurnRestrictionIndex turnRestrictionIndex() {
+        return turnRestrictionIndex;
+    }
+
+    /** May be null if query indexes were not built. */
+    public NetworkQueryIndex queryIndex() {
+        return queryIndex;
+    }
+
+    /** Link ID groups quarantined during cleaning (removed small non-transit components). */
+    public List<List<String>> quarantinedComponents() {
+        return quarantinedComponents;
     }
 }
