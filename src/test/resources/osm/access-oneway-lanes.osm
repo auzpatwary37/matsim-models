@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="matsim-models-test">
+  <node id="1" lat="0.000000" lon="0.000000" />
+  <node id="2" lat="0.000000" lon="0.001000" />
+  <node id="3" lat="0.001000" lon="0.001000" />
+  <way id="10">
+    <nd ref="1" /><nd ref="2" />
+    <tag k="highway" v="primary" />
+    <tag k="maxspeed" v="35 mph" />
+    <tag k="lanes" v="4" />
+  </way>
+  <way id="11">
+    <nd ref="2" /><nd ref="3" />
+    <tag k="highway" v="busway" />
+    <tag k="oneway" v="yes" />
+    <tag k="bus" v="designated" />
+    <tag k="access" v="no" />
+    <tag k="psv" v="yes" />
+    <tag k="lanes" v="1" />
+  </way>
+</osm>

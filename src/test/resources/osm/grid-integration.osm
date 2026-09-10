@@ -1,0 +1,400 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="synthetic-grid">
+<node id="1" lat="45.5017000" lon="-73.5673000"/>
+<node id="2" lat="45.5017000" lon="-73.5668000"/>
+<node id="3" lat="45.5017000" lon="-73.5663000"/>
+<node id="4" lat="45.5017000" lon="-73.5658000"/>
+<node id="5" lat="45.5017000" lon="-73.5653000"/>
+<node id="6" lat="45.5017000" lon="-73.5648000"/>
+<node id="7" lat="45.5022000" lon="-73.5673000"/>
+<node id="8" lat="45.5022000" lon="-73.5668000"/>
+<node id="9" lat="45.5022000" lon="-73.5663000"/>
+<node id="10" lat="45.5022000" lon="-73.5658000"/>
+<node id="11" lat="45.5022000" lon="-73.5653000"/>
+<node id="12" lat="45.5022000" lon="-73.5648000"/>
+<node id="13" lat="45.5027000" lon="-73.5673000"/>
+<node id="14" lat="45.5027000" lon="-73.5668000"/>
+<node id="15" lat="45.5027000" lon="-73.5663000"/>
+<node id="16" lat="45.5027000" lon="-73.5658000"/>
+<node id="17" lat="45.5027000" lon="-73.5653000"/>
+<node id="18" lat="45.5027000" lon="-73.5648000"/>
+<node id="19" lat="45.5032000" lon="-73.5673000"/>
+<node id="20" lat="45.5032000" lon="-73.5668000"/>
+<node id="21" lat="45.5032000" lon="-73.5663000"/>
+<node id="22" lat="45.5032000" lon="-73.5658000"/>
+<node id="23" lat="45.5032000" lon="-73.5653000"/>
+<node id="24" lat="45.5032000" lon="-73.5648000"/>
+<node id="25" lat="45.5037000" lon="-73.5673000"/>
+<node id="26" lat="45.5037000" lon="-73.5668000"/>
+<node id="27" lat="45.5037000" lon="-73.5663000"/>
+<node id="28" lat="45.5037000" lon="-73.5658000"/>
+<node id="29" lat="45.5037000" lon="-73.5653000"/>
+<node id="30" lat="45.5037000" lon="-73.5648000"/>
+<node id="31" lat="45.5042000" lon="-73.5673000"/>
+<node id="32" lat="45.5042000" lon="-73.5668000"/>
+<node id="33" lat="45.5042000" lon="-73.5663000"/>
+<node id="34" lat="45.5042000" lon="-73.5658000"/>
+<node id="35" lat="45.5042000" lon="-73.5653000"/>
+<node id="36" lat="45.5042000" lon="-73.5648000"/>
+<node id="90" lat="45.5017000" lon="-73.5673000"><tag k="amenity" v="cafe"/></node>
+<node id="91" lat="45.5027000" lon="-73.5653000"><tag k="amenity" v="cafe"/></node>
+<node id="92" lat="45.5037000" lon="-73.5633000"><tag k="amenity" v="cafe"/></node>
+<node id="93" lat="45.5047000" lon="-73.5613000"><tag k="amenity" v="cafe"/></node>
+<node id="94" lat="45.5057000" lon="-73.5593000"><tag k="amenity" v="cafe"/></node>
+<way id="100">
+  <nd ref="1"/>
+  <nd ref="2"/>
+  <tag k="highway" v="residential"/>
+</way>
+<way id="101">
+  <nd ref="2"/>
+  <nd ref="3"/>
+  <tag k="highway" v="residential"/>
+</way>
+<way id="102">
+  <nd ref="3"/>
+  <nd ref="4"/>
+  <tag k="highway" v="residential"/>
+</way>
+<way id="103">
+  <nd ref="4"/>
+  <nd ref="5"/>
+  <tag k="highway" v="residential"/>
+</way>
+<way id="104">
+  <nd ref="5"/>
+  <nd ref="6"/>
+  <tag k="highway" v="residential"/>
+  <tag k="maxspeed" v="50 mph"/>
+</way>
+<way id="105">
+  <nd ref="7"/>
+  <nd ref="8"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="106">
+  <nd ref="8"/>
+  <nd ref="9"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="107">
+  <nd ref="9"/>
+  <nd ref="10"/>
+  <tag k="highway" v="secondary"/>
+  <tag k="oneway" v="yes"/>
+</way>
+<way id="108">
+  <nd ref="10"/>
+  <nd ref="11"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="109">
+  <nd ref="11"/>
+  <nd ref="12"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="110">
+  <nd ref="13"/>
+  <nd ref="14"/>
+  <tag k="highway" v="tertiary"/>
+</way>
+<way id="111">
+  <nd ref="14"/>
+  <nd ref="15"/>
+  <tag k="highway" v="tertiary"/>
+</way>
+<way id="112">
+  <nd ref="15"/>
+  <nd ref="16"/>
+  <tag k="highway" v="tertiary"/>
+</way>
+<way id="113">
+  <nd ref="16"/>
+  <nd ref="17"/>
+  <tag k="highway" v="tertiary"/>
+  <tag k="oneway" v="-1"/>
+</way>
+<way id="114">
+  <nd ref="17"/>
+  <nd ref="18"/>
+  <tag k="highway" v="tertiary"/>
+</way>
+<way id="115">
+  <nd ref="19"/>
+  <nd ref="20"/>
+  <tag k="highway" v="busway"/>
+  <tag k="access" v="no"/>
+  <tag k="bus" v="designated"/>
+</way>
+<way id="116">
+  <nd ref="20"/>
+  <nd ref="21"/>
+  <tag k="highway" v="busway"/>
+  <tag k="access" v="no"/>
+  <tag k="bus" v="designated"/>
+</way>
+<way id="117">
+  <nd ref="21"/>
+  <nd ref="22"/>
+  <tag k="highway" v="busway"/>
+  <tag k="access" v="no"/>
+  <tag k="bus" v="designated"/>
+</way>
+<way id="118">
+  <nd ref="22"/>
+  <nd ref="23"/>
+  <tag k="highway" v="busway"/>
+  <tag k="access" v="no"/>
+  <tag k="bus" v="designated"/>
+</way>
+<way id="119">
+  <nd ref="23"/>
+  <nd ref="24"/>
+  <tag k="highway" v="busway"/>
+  <tag k="access" v="no"/>
+  <tag k="bus" v="designated"/>
+</way>
+<way id="120">
+  <nd ref="25"/>
+  <nd ref="26"/>
+  <tag k="highway" v="primary"/>
+</way>
+<way id="121">
+  <nd ref="26"/>
+  <nd ref="27"/>
+  <tag k="highway" v="primary"/>
+  <tag k="maxspeed" v="70"/>
+</way>
+<way id="122">
+  <nd ref="27"/>
+  <nd ref="28"/>
+  <tag k="highway" v="primary"/>
+  <tag k="lanes" v="4"/>
+</way>
+<way id="123">
+  <nd ref="28"/>
+  <nd ref="29"/>
+  <tag k="highway" v="primary"/>
+</way>
+<way id="124">
+  <nd ref="29"/>
+  <nd ref="30"/>
+  <tag k="highway" v="primary"/>
+</way>
+<way id="125">
+  <nd ref="31"/>
+  <nd ref="32"/>
+  <tag k="highway" v="living_street"/>
+  <tag k="motor_vehicle:forward" v="no"/>
+</way>
+<way id="126">
+  <nd ref="32"/>
+  <nd ref="33"/>
+  <tag k="highway" v="living_street"/>
+</way>
+<way id="127">
+  <nd ref="33"/>
+  <nd ref="34"/>
+  <tag k="highway" v="living_street"/>
+</way>
+<way id="128">
+  <nd ref="34"/>
+  <nd ref="35"/>
+  <tag k="highway" v="living_street"/>
+</way>
+<way id="129">
+  <nd ref="35"/>
+  <nd ref="36"/>
+  <tag k="highway" v="living_street"/>
+</way>
+<way id="130">
+  <nd ref="1"/>
+  <nd ref="7"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="131">
+  <nd ref="7"/>
+  <nd ref="13"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="132">
+  <nd ref="13"/>
+  <nd ref="19"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="133">
+  <nd ref="19"/>
+  <nd ref="25"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="134">
+  <nd ref="25"/>
+  <nd ref="31"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="135">
+  <nd ref="2"/>
+  <nd ref="8"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="136">
+  <nd ref="8"/>
+  <nd ref="14"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="137">
+  <nd ref="14"/>
+  <nd ref="20"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="138">
+  <nd ref="20"/>
+  <nd ref="26"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="139">
+  <nd ref="26"/>
+  <nd ref="32"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="140">
+  <nd ref="3"/>
+  <nd ref="9"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="141">
+  <nd ref="9"/>
+  <nd ref="15"/>
+  <tag k="highway" v="secondary"/>
+  <tag k="oneway" v="yes"/>
+</way>
+<way id="142">
+  <nd ref="15"/>
+  <nd ref="21"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="143">
+  <nd ref="21"/>
+  <nd ref="27"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="144">
+  <nd ref="27"/>
+  <nd ref="33"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="145">
+  <nd ref="4"/>
+  <nd ref="10"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="146">
+  <nd ref="10"/>
+  <nd ref="16"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="147">
+  <nd ref="16"/>
+  <nd ref="22"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="148">
+  <nd ref="22"/>
+  <nd ref="28"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="149">
+  <nd ref="28"/>
+  <nd ref="34"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="150">
+  <nd ref="5"/>
+  <nd ref="11"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="151">
+  <nd ref="11"/>
+  <nd ref="17"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="152">
+  <nd ref="17"/>
+  <nd ref="23"/>
+  <tag k="highway" v="secondary"/>
+  <tag k="lanes:forward" v="2"/><tag k="lanes:backward" v="1"/>
+</way>
+<way id="153">
+  <nd ref="23"/>
+  <nd ref="29"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="154">
+  <nd ref="29"/>
+  <nd ref="35"/>
+  <tag k="highway" v="secondary"/>
+</way>
+<way id="155">
+  <nd ref="6"/>
+  <nd ref="12"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="156">
+  <nd ref="12"/>
+  <nd ref="18"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="157">
+  <nd ref="18"/>
+  <nd ref="24"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="158">
+  <nd ref="24"/>
+  <nd ref="30"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="159">
+  <nd ref="30"/>
+  <nd ref="36"/>
+  <tag k="highway" v="unclassified"/>
+</way>
+<way id="900">
+  <nd ref="1"/>
+  <nd ref="3"/>
+  <nd ref="6"/>
+  <nd ref="10"/>
+  <tag k="railway" v="rail"/>
+</way>
+<way id="901">
+  <nd ref="7"/>
+  <nd ref="13"/>
+  <nd ref="19"/>
+  <nd ref="25"/>
+  <tag k="railway" v="tram"/>
+</way>
+<way id="902">
+  <nd ref="31"/>
+  <nd ref="36"/>
+  <tag k="waterway" v="ferry"/>
+</way>
+<way id="903">
+  <nd ref="16"/>
+  <nd ref="17"/>
+  <nd ref="22"/>
+  <nd ref="21"/>
+  <nd ref="16"/>
+  <tag k="highway" v="roundabout"/>
+</way>
+<way id="904">
+  <nd ref="27"/>
+  <nd ref="28"/>
+  <tag k="highway" v="primary"/>
+  <tag k="maxspeed" v="none"/>
+</way>
+<way id="905">
+  <nd ref="27"/>
+  <nd ref="9999"/>
+  <tag k="highway" v="residential"/>
+</way>
+</osm>
