@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Published MATSim wire-format common schema.
+  Retrieved verbatim from https://matsim.org/files/dtd/matsimCommon.xsd
+  and vendored here for OFFLINE INTEROPERABILITY VALIDATION ONLY (test scope).
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+targetNamespace="http://www.matsim.org/files/dtd"
+xmlns="http://www.matsim.org/files/dtd" elementFormDefault="qualified"
+xml:lang="en">
+
+
+<xs:simpleType name="matsimIdType">
+ 	<xs:restriction base="xs:string">
+  </xs:restriction>
+</xs:simpleType>
+
+<xs:complexType name="matsimObjectType" >
+  <xs:attribute name="id" type="matsimIdType" use="required" />
+</xs:complexType>
+
+<xs:complexType name="idRefType">
+  <xs:attribute name="refId" type="matsimIdType" use="required" />
+</xs:complexType>
+
+
+<xs:complexType name="matsimParameterType">
+  <xs:attribute name="name" type="xs:string" use="required"/>
+  <xs:attribute name="value" type="xs:string" use="required" />
+</xs:complexType>
+
+<xs:complexType name="matsimTimeAttributeType">
+  <xs:attribute name="seconds" type="xs:double" use="required"></xs:attribute>
+</xs:complexType>
+
+<xs:simpleType name="matsimFormattedTimeAttributeType">
+ 	<xs:restriction base="xs:string">
+ 		<xs:pattern value="[0-9]+[0-9]:[0-5][0-9]:[0-5][0-9]" />
+  </xs:restriction>
+</xs:simpleType>
+
+
+<xs:element name="coordinate" type="coordinateType" />
+
+
+<xs:complexType name="coordinateType">
+  <xs:sequence>
+    <xs:element name="xCoord" type="xs:decimal" minOccurs="1" maxOccurs="1"/>
+    <xs:element name="yCoord" type="xs:decimal" minOccurs="1" maxOccurs="1"/>
+  </xs:sequence>
+</xs:complexType>
+
+<xs:element name="facilityId">
+  <xs:complexType>
+    <xs:complexContent>
+      <xs:extension base="idRefType" />
+    </xs:complexContent>
+  </xs:complexType>
+</xs:element>
+
+<xs:element name="linkId">
+  <xs:complexType>
+    <xs:complexContent>
+      <xs:extension base="idRefType" />
+    </xs:complexContent>
+  </xs:complexType>
+</xs:element>
+
+<xs:complexType name="actLocationType">
+  <xs:sequence>
+        <xs:element ref="facilityId" minOccurs="0" maxOccurs="1" />
+        <xs:element ref="linkId" minOccurs="0" maxOccurs="1" />
+  </xs:sequence>
+</xs:complexType>
+
+
+<xs:element name="location">
+  <xs:complexType>
+    <xs:sequence>
+      <xs:element ref="coordinate" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="actLocation" type="actLocationType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:element>
+
+<xs:simpleType name="probabilityType">
+  <xs:restriction base="xs:decimal">
+    <xs:maxInclusive value="1.0"></xs:maxInclusive>
+    <xs:minInclusive value="0.0"></xs:minInclusive>
+  </xs:restriction>
+</xs:simpleType>
+
+
+<xs:complexType name="attributeType">
+	<xs:simpleContent>
+		<xs:extension base="xs:string">
+			<xs:attribute name="name" type="xs:string"/>
+			<xs:attribute name="class" type="xs:string"/>
+		</xs:extension>
+	</xs:simpleContent>
+</xs:complexType>
+
+
+
+</xs:schema>

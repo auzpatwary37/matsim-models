@@ -275,7 +275,7 @@ class ScenarioModelTest {
     }
 
     @Test
-    void saveScenarioRequiresConfigForReloadableBundle() {
+    void saveScenarioRequiresConfigForReloadableBundle() throws Exception {
         Scenario scenario = new Scenario();
         scenario.setVehicleDefinitions(new VehicleDefinitions());
 
@@ -294,6 +294,36 @@ class ScenarioModelTest {
         assertFalse(Files.exists(tempDir.resolve("network.xml")));
         assertFalse(Files.exists(tempDir.resolve("transitSchedule.xml")));
         assertTrue(Files.exists(tempDir.resolve("vehicles.xml")));
+    }
+
+    @Test
+    void saveScenarioCreatesNonexistentNestedDirectory() throws Exception {
+        Scenario scenario = ScenarioUtils.createScenario(ConfigUtils.createConfig());
+        VehicleDefinitions definitions = new VehicleDefinitions();
+        definitions.addVehicle(new Vehicle(Id.create("v1", Vehicle.class), "car"));
+        scenario.setVehicleDefinitions(definitions);
+
+        Path nestedDir = tempDir.resolve("out").resolve("bundle");
+        ScenarioUtils.saveScenario(scenario, nestedDir);
+
+        assertTrue(Files.exists(nestedDir.resolve("vehicles.xml")));
+        assertTrue(Files.exists(nestedDir.resolve("config.xml")));
+    }
+
+    @Test
+    void saveScenarioDoesNotMutateLiveConfig() throws Exception {
+        Config config = ConfigUtils.createConfig();
+        Scenario scenario = ScenarioUtils.createScenario(config);
+        VehicleDefinitions definitions = new VehicleDefinitions();
+        definitions.addVehicle(new Vehicle(Id.create("v1", Vehicle.class), "car"));
+        scenario.setVehicleDefinitions(definitions);
+
+        String originalInput = "original-path.xml";
+        config.vehicles().addParam("inputFile", originalInput);
+
+        ScenarioUtils.saveScenario(scenario, tempDir);
+
+        assertEquals(originalInput, config.vehicles().getParam("inputFile").orElse(null));
     }
 
     @Test

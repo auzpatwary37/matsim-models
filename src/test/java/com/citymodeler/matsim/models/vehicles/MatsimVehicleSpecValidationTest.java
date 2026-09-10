@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.vehicles;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -72,6 +73,67 @@ class MatsimVehicleSpecValidationTest {
 
         assertEquals(3, definitions.getVehicles().size());
         assertEquals("Bus", definitions.getVehicles().get(Id.create("bus-1", Vehicle.class)).getType());
+
+        assertEquals("serial", bus.getExtraAttributes().getAttribute("doorOperationMode"));
+    }
+
+    @Test
+    void unknownAttributesSurviveReadWriteRoundTrip() throws Exception {
+        String xml = resourceAsString("matsim-spec/vehicleDefinitions-current-v2.xml");
+        VehicleDefinitions definitions = new VehiclesXmlReader().read(xml);
+
+        String rewritten = new VehiclesXmlWriter().writeToString(definitions);
+        validator().validate(new StreamSource(new StringReader(rewritten)));
+
+        VehicleDefinitions reparsed = new VehiclesXmlReader().read(rewritten);
+        VehicleType bus = reparsed.getVehicleTypes().get(Id.create("Bus", VehicleType.class));
+        assertEquals("serial", bus.getExtraAttributes().getAttribute("doorOperationMode"));
+        assertEquals(0.5, bus.getAccessTimeSeconds());
+        assertEquals(1.5, bus.getEgressTimeSeconds());
+    }
+
+    @Test
+    void unsetAccessEgressDefaultsToOneSecond() {
+        VehicleType type = new VehicleType(Id.create("plain", VehicleType.class));
+        assertNull(type.getAccessTimeSeconds());
+        assertNull(type.getEgressTimeSeconds());
+        assertEquals(1.0, type.getEffectiveAccessTimeSeconds());
+        assertEquals(1.0, type.getEffectiveEgressTimeSeconds());
+    }
+
+    @Test
+    void schemaOrderedVehicleTypeRoundTripsThroughValidation() throws Exception {
+        String xml = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <vehicleDefinitions xmlns="http://www.matsim.org/files/dtd"
+                                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                                   xsi:schemaLocation="http://www.matsim.org/files/dtd http://www.matsim.org/files/dtd/vehicleDefinitions_v2.0.xsd">
+                    <vehicleType id="bus">
+                        <description>12 m city bus</description>
+                        <capacity seats="40" standingRoomInPersons="60" volumeInCubicMeters="72.0" weightInTons="12.5"/>
+                        <length meter="12.0"/>
+                        <width meter="2.5"/>
+                        <maximumVelocity meterPerSecond="27.78"/>
+                        <passengerCarEquivalents pce="22.0"/>
+                    </vehicleType>
+                    <vehicle id="bus-1" type="bus"/>
+                </vehicleDefinitions>
+                """;
+        VehicleDefinitions defs = new VehiclesXmlReader().read(xml);
+        VehicleType bus = defs.getVehicleTypes().get(Id.create("bus", VehicleType.class));
+        assertEquals(40, bus.getSeatingCapacity());
+        assertEquals(72.0, Double.parseDouble(bus.getCapacityVolumeInCubicMeters()));
+        assertEquals(12.5, Double.parseDouble(bus.getCapacityWeightInTons()));
+
+        String rewritten = new VehiclesXmlWriter().writeToString(defs);
+        validator().validate(new StreamSource(new StringReader(rewritten)));
+
+        VehicleDefinitions reparsed = new VehiclesXmlReader().read(rewritten);
+        VehicleType reparsedBus = reparsed.getVehicleTypes().get(Id.create("bus", VehicleType.class));
+        assertEquals(40, reparsedBus.getSeatingCapacity());
+        assertEquals(60, reparsedBus.getStandingCapacity());
+        assertEquals("72.0", reparsedBus.getCapacityVolumeInCubicMeters());
+        assertEquals("12.5", reparsedBus.getCapacityWeightInTons());
     }
 
     private static Validator validator() throws Exception {

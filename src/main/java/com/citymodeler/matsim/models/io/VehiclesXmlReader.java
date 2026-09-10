@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.io;
 
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.util.Set;
 
 import org.w3c.dom.Element;
 
@@ -18,7 +19,8 @@ import com.citymodeler.matsim.models.vehicles.VehicleType;
  * dimension unit, and {@code accessTime}/{@code egressTime} element form.
  */
 public final class VehiclesXmlReader {
-    private static final String SCHEMA = "/schemas/vehicles.xsd";
+    private static final String SCHEMA = "/schemas/v2/vehicleDefinitions_v2.0.xsd";
+    private static final String LEGACY_SCHEMA = "/schemas/vehicles.xsd";
     private final boolean validateSchema;
 
     public VehiclesXmlReader() {
@@ -30,15 +32,22 @@ public final class VehiclesXmlReader {
     }
 
     public VehicleDefinitions read(Path path) {
-        return read((validateSchema ? XmlSupport.parse(path, SCHEMA) : XmlSupport.parse(path)).getDocumentElement());
+        String schema = resolveSchema();
+        return read((validateSchema ? XmlSupport.parse(path, schema) : XmlSupport.parse(path)).getDocumentElement());
     }
 
     public VehicleDefinitions read(InputStream inputStream) {
-        return read((validateSchema ? XmlSupport.parse(inputStream, SCHEMA) : XmlSupport.parse(inputStream)).getDocumentElement());
+        String schema = resolveSchema();
+        return read((validateSchema ? XmlSupport.parse(inputStream, schema) : XmlSupport.parse(inputStream)).getDocumentElement());
     }
 
     public VehicleDefinitions read(String xml) {
-        return read((validateSchema ? XmlSupport.parse(xml, SCHEMA) : XmlSupport.parse(xml)).getDocumentElement());
+        String schema = resolveSchema();
+        return read((validateSchema ? XmlSupport.parse(xml, schema) : XmlSupport.parse(xml)).getDocumentElement());
+    }
+
+    private String resolveSchema() {
+        return SCHEMA;
     }
 
     private VehicleDefinitions read(Element root) {
@@ -58,15 +67,19 @@ public final class VehiclesXmlReader {
                         type.setAccessTimeSeconds(Double.parseDouble(text.trim()));
                     } else if (VehiclesXmlWriter.EGRESS_TIME_IN_SECONDS_PER_PERSON.equals(name)) {
                         type.setEgressTimeSeconds(Double.parseDouble(text.trim()));
+                    } else {
+                        String classAttr = XmlSupport.attr(attributeElement, "class");
+                        Object value = coerceAttributeValue(classAttr, text.trim());
+                        type.getExtraAttributes().putAttribute(name, value);
                     }
                 }
             }
             Element accessTimeElement = XmlSupport.child(typeElement, "accessTime");
-            if (accessTimeElement != null && type.getAccessTimeSeconds() == 0.0) {
+            if (accessTimeElement != null && type.getAccessTimeSeconds() == null) {
                 type.setAccessTimeSeconds(XmlSupport.optionalDouble(accessTimeElement, "seconds", 0.0));
             }
             Element egressTimeElement = XmlSupport.child(typeElement, "egressTime");
-            if (egressTimeElement != null && type.getEgressTimeSeconds() == 0.0) {
+            if (egressTimeElement != null && type.getEgressTimeSeconds() == null) {
                 type.setEgressTimeSeconds(XmlSupport.optionalDouble(egressTimeElement, "seconds", 0.0));
             }
 
@@ -83,6 +96,29 @@ public final class VehiclesXmlReader {
                 if (standing != null && !standing.isBlank()) {
                     type.setStandingCapacity(Integer.parseInt(standing.trim()));
                 }
+                String volume = XmlSupport.attr(capacityElement, "volumeInCubicMeters");
+                if (volume != null && !volume.isBlank()) {
+                    type.setCapacityVolumeInCubicMeters(volume.trim());
+                }
+                String weight = XmlSupport.attr(capacityElement, "weightInTons");
+                if (weight != null && !weight.isBlank()) {
+                    type.setCapacityWeightInTons(weight.trim());
+                }
+                String other = XmlSupport.attr(capacityElement, "other");
+                if (other != null && !other.isBlank()) {
+                    type.setCapacityOther(other.trim());
+                }
+                Element capAttrsEl = XmlSupport.child(capacityElement, "attributes");
+                if (capAttrsEl != null) {
+                    for (Element attrEl : XmlSupport.children(capAttrsEl, "attribute")) {
+                        String name = XmlSupport.attr(attrEl, "name");
+                        String text = attrEl.getTextContent();
+                        String classAttr = XmlSupport.attr(attrEl, "class");
+                        if (name != null && text != null && !text.isBlank()) {
+                            type.getCapacityExtraAttributes().putAttribute(name, coerceAttributeValue(classAttr, text.trim()));
+                        }
+                    }
+                }
             }
 
             Element lengthElement = XmlSupport.child(typeElement, "length");
@@ -92,6 +128,15 @@ public final class VehiclesXmlReader {
             Element widthElement = XmlSupport.child(typeElement, "width");
             if (widthElement != null) {
                 type.setWidthMeters(optionalDimension(widthElement));
+            }
+
+            // Preserve unrecognized v2.0 vehicleType child elements losslessly.
+            var knownElements = Set.of("attributes", "capacity", "length", "width", "accessTime", "egressTime");
+            org.w3c.dom.NodeList childNodes = typeElement.getChildNodes();
+            for (int ci = 0; ci < childNodes.getLength(); ci++) {
+                if (childNodes.item(ci) instanceof Element childEl && !knownElements.contains(childEl.getTagName())) {
+                    type.addExtensionElement(childEl.getTagName(), XmlSupport.writeElementToString(childEl));
+                }
             }
 
             definitions.addVehicleType(type);
@@ -117,5 +162,25 @@ public final class VehiclesXmlReader {
             return Double.parseDouble(legacyMeters.trim());
         }
         return 0.0;
+    }
+
+    private static Object coerceAttributeValue(String classAttr, String text) {
+        if (classAttr == null || classAttr.isBlank()) {
+            return text;
+        }
+        try {
+            if ("java.lang.Double".equals(classAttr) || "double".equals(classAttr)) {
+                return Double.parseDouble(text);
+            }
+            if ("java.lang.Integer".equals(classAttr) || "int".equals(classAttr)) {
+                return Integer.parseInt(text);
+            }
+            if ("java.lang.Boolean".equals(classAttr) || "boolean".equals(classAttr)) {
+                return Boolean.parseBoolean(text);
+            }
+        } catch (NumberFormatException e) {
+            return text;
+        }
+        return text;
     }
 }

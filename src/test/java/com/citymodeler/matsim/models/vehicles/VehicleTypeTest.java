@@ -13,14 +13,16 @@ import com.citymodeler.matsim.models.api.Id;
 class VehicleTypeTest {
 
     @Test
-    void capacitiesDefaultToUnsetAndDimensionsToZero() {
+    void capacitiesDefaultToUnsetAndAccessEgressDefaultToUnset() {
         VehicleType type = new VehicleType(Id.create("car", VehicleType.class));
         assertNull(type.getSeatingCapacity());
         assertNull(type.getStandingCapacity());
         assertEquals(0.0, type.getLengthMeters());
         assertEquals(0.0, type.getWidthMeters());
-        assertEquals(0.0, type.getAccessTimeSeconds());
-        assertEquals(0.0, type.getEgressTimeSeconds());
+        assertNull(type.getAccessTimeSeconds());
+        assertNull(type.getEgressTimeSeconds());
+        assertEquals(1.0, type.getEffectiveAccessTimeSeconds());
+        assertEquals(1.0, type.getEffectiveEgressTimeSeconds());
     }
 
     @Test

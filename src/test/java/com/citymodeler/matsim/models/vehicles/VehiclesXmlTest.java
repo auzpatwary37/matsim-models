@@ -178,4 +178,61 @@ class VehiclesXmlTest {
         Vehicle v1 = roundTripped.getVehicles().get(Id.create("v1", Vehicle.class));
         assertEquals("red", v1.getAttributes().getAttribute("color"));
     }
+
+    @Test
+    void capacityOtherRoundTrips() {
+        String xml = """
+                <vehicles>
+                    <vehicleType id="bus">
+                        <capacity seats="40" other="2.5"/>
+                    </vehicleType>
+                    <vehicle id="v1" type="bus"/>
+                </vehicles>
+                """;
+        VehicleDefinitions defs = new VehiclesXmlReader().read(xml);
+        VehicleType bus = defs.getVehicleTypes().get(Id.create("bus", VehicleType.class));
+        assertEquals("2.5", bus.getCapacityOther());
+
+        String out = new VehiclesXmlWriter().writeToString(defs);
+        assertTrue(out.contains("other=\"2.5\""), out);
+
+        VehicleDefinitions reRead = new VehiclesXmlReader().read(out);
+        assertEquals("2.5", reRead.getVehicleTypes().get(Id.create("bus", VehicleType.class)).getCapacityOther());
+    }
+
+    @Test
+    void effectiveAccessTimeDefaultsToOneSecondWhenUnset() {
+        VehicleType vt = new VehicleType(Id.create("car", VehicleType.class));
+        assertNull(vt.getAccessTimeSeconds());
+        assertEquals(1.0, vt.getEffectiveAccessTimeSeconds());
+        assertNull(vt.getEgressTimeSeconds());
+        assertEquals(1.0, vt.getEffectiveEgressTimeSeconds());
+
+        vt.setAccessTimeSeconds(2.5);
+        assertEquals(2.5, vt.getEffectiveAccessTimeSeconds());
+    }
+
+    @Test
+    void unknownChildElementsSurviveRoundTrip() {
+        String xml = """
+                <vehicles>
+                    <vehicleType id="bus">
+                        <capacity seats="40"/>
+                        <doorOperationMode>automatic</doorOperationMode>
+                        <maximumVelocity unit="m/s">20.0</maximumVelocity>
+                    </vehicleType>
+                    <vehicle id="v1" type="bus"/>
+                </vehicles>
+                """;
+        VehicleDefinitions defs = new VehiclesXmlReader().read(xml);
+        VehicleType bus = defs.getVehicleTypes().get(Id.create("bus", VehicleType.class));
+        assertEquals(2, bus.getExtensionElements().size());
+
+        String out = new VehiclesXmlWriter().writeToString(defs);
+        assertTrue(out.contains("doorOperationMode"), out);
+        assertTrue(out.contains("maximumVelocity"), out);
+
+        VehicleDefinitions reRead = new VehiclesXmlReader().read(out);
+        assertEquals(2, reRead.getVehicleTypes().get(Id.create("bus", VehicleType.class)).getExtensionElements().size());
+    }
 }

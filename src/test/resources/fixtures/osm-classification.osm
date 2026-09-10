@@ -8,6 +8,14 @@
   <node id="12" lat="43.61" lon="-79.4">
     <tag k="leisure" v="fitness_centre"/>
   </node>
+  <!-- transit/traffic infrastructure: must NOT become facilities -->
+  <node id="13" lat="43.62" lon="-79.4">
+    <tag k="amenity" v="bus_station"/>
+    <tag k="name" v="Yonge Station"/>
+  </node>
+  <node id="14" lat="43.63" lon="-79.4">
+    <tag k="amenity" v="taxi"/>
+  </node>
   <!-- closed commercial triangle; corner 400 is repeated as the closing ref -->
   <node id="400" lat="43.60" lon="-79.40"/>
   <node id="401" lat="43.60" lon="-79.39"/>
