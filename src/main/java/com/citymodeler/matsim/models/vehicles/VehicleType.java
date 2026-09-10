@@ -90,11 +90,6 @@ public final class VehicleType {
         return accessTimeSeconds;
     }
 
-    /** Returns the effective access time (1.0 s/person when unset, per MATSim default). */
-    public double effectiveAccessTimeSeconds() {
-        return accessTimeSeconds != null ? accessTimeSeconds : 1.0;
-    }
-
     public void setAccessTimeSeconds(double accessTimeSeconds) {
         requireFiniteNonNegative("accessTimeSeconds", accessTimeSeconds);
         this.accessTimeSeconds = accessTimeSeconds;
@@ -106,11 +101,6 @@ public final class VehicleType {
 
     public Double getEgressTimeSeconds() {
         return egressTimeSeconds;
-    }
-
-    /** Returns the effective egress time (1.0 s/person when unset, per MATSim default). */
-    public double effectiveEgressTimeSeconds() {
-        return egressTimeSeconds != null ? egressTimeSeconds : 1.0;
     }
 
     public void setEgressTimeSeconds(double egressTimeSeconds) {

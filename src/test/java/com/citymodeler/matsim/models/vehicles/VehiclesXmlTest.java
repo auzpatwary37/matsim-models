@@ -204,12 +204,12 @@ class VehiclesXmlTest {
     void effectiveAccessTimeDefaultsToOneSecondWhenUnset() {
         VehicleType vt = new VehicleType(Id.create("car", VehicleType.class));
         assertNull(vt.getAccessTimeSeconds());
-        assertEquals(1.0, vt.effectiveAccessTimeSeconds());
+        assertEquals(1.0, vt.getEffectiveAccessTimeSeconds());
         assertNull(vt.getEgressTimeSeconds());
-        assertEquals(1.0, vt.effectiveEgressTimeSeconds());
+        assertEquals(1.0, vt.getEffectiveEgressTimeSeconds());
 
         vt.setAccessTimeSeconds(2.5);
-        assertEquals(2.5, vt.effectiveAccessTimeSeconds());
+        assertEquals(2.5, vt.getEffectiveAccessTimeSeconds());
     }
 
     @Test
