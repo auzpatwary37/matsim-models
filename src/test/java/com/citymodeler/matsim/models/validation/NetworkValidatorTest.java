@@ -167,4 +167,58 @@ class NetworkValidatorTest {
         assertFalse(report.isEmpty());
         assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("isolated_node")));
     }
+
+    private Network createSelfLoopNetwork() {
+        Network network = new Network();
+        Node n1 = network.createNode("n1", 0, 0);
+        network.createLink("pt_self_loop", "n1", "n1", 100, 1000, 13.89, 1, Set.of("pt"));
+        network.createLink("road_self_loop", "n1", "n1", 100, 1000, 13.89, 1, Set.of("car"));
+        network.postProcess();
+        return network;
+    }
+
+    @Test
+    void allowSelfLoopPrefixDowngradesMatchingSelfLoopsToInfo() {
+        Network network = createSelfLoopNetwork();
+
+        ValidationReport defaultReport = validator.validate(network);
+        assertEquals(2, defaultReport.getIssues().stream()
+                .filter(i -> i.getCode().equals("self_loop")).count());
+
+        ValidationReport report = validator.validate(network,
+                NetworkValidatorOptions.defaults().allowSelfLoopPrefix("pt_"));
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("self_loop")
+                        && i.getObjectId().equals("pt_self_loop") && i.isInfo()),
+                String.valueOf(report.getIssues()));
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("self_loop")
+                        && i.getObjectId().equals("road_self_loop") && i.isWarning()),
+                String.valueOf(report.getIssues()));
+    }
+
+    @Test
+    void maxLinkLengthFlagsOverlongLinks() {
+        Network network = createValidNetwork();
+
+        ValidationReport defaultReport = validator.validate(network);
+        assertFalse(defaultReport.getIssues().stream().anyMatch(i -> i.getCode().equals("link_too_long")));
+
+        ValidationReport report = validator.validate(network,
+                NetworkValidatorOptions.defaults().maxLinkLengthMeters(90.0));
+        assertTrue(report.getIssues().stream().anyMatch(i -> i.getCode().equals("link_too_long")
+                && i.getObjectId().equals("l1")), String.valueOf(report.getIssues()));
+    }
+
+    @Test
+    void requireModesFlagsMissingModeCoverage() {
+        Network network = createValidNetwork();
+
+        ValidationReport carReport = validator.validate(network,
+                NetworkValidatorOptions.defaults().requireModes(Set.of("car")));
+        assertFalse(carReport.getIssues().stream().anyMatch(i -> i.getCode().equals("missing_mode")));
+
+        ValidationReport busReport = validator.validate(network,
+                NetworkValidatorOptions.defaults().requireModes(Set.of("bus")));
+        assertTrue(busReport.getIssues().stream().anyMatch(i -> i.getCode().equals("missing_mode")
+                && i.getMessage().contains("bus")), String.valueOf(busReport.getIssues()));
+    }
 }

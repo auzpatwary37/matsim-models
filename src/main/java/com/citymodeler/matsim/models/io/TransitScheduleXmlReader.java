@@ -2,6 +2,8 @@ package com.citymodeler.matsim.models.io;
 
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.w3c.dom.Element;
 
@@ -13,6 +15,7 @@ import com.citymodeler.matsim.models.transit.TransitLine;
 import com.citymodeler.matsim.models.transit.TransitRoute;
 import com.citymodeler.matsim.models.transit.TransitRouteStop;
 import com.citymodeler.matsim.models.transit.TransitSchedule;
+import com.citymodeler.matsim.models.transit.TransitStopArea;
 import com.citymodeler.matsim.models.transit.TransitStopFacility;
 
 public final class TransitScheduleXmlReader {
@@ -50,12 +53,19 @@ public final class TransitScheduleXmlReader {
                         Id.create(XmlSupport.attr(stopElement, "id"), TransitStopFacility.class),
                         new Coord(XmlSupport.requiredDouble(stopElement, "x"), XmlSupport.requiredDouble(stopElement, "y")),
                         XmlSupport.optionalBoolean(stopElement, "isBlocking", false));
-                String linkId = XmlSupport.attr(stopElement, "linkId");
+                String linkId = XmlSupport.attr(stopElement, "linkRefId");
                 if (linkId == null || linkId.isBlank()) {
-                    linkId = XmlSupport.attr(stopElement, "linkRefId");
+                    linkId = XmlSupport.attr(stopElement, "linkId");
                 }
                 if (linkId != null && !linkId.isBlank()) {
                     facility.setLinkId(Id.create(linkId, Link.class));
+                }
+                String stopAreaId = XmlSupport.attr(stopElement, "stopAreaId");
+                if (stopAreaId == null || stopAreaId.isBlank()) {
+                    stopAreaId = XmlSupport.attr(stopElement, "parentId");
+                }
+                if (stopAreaId != null && !stopAreaId.isBlank()) {
+                    facility.setStopAreaId(Id.create(stopAreaId, TransitStopArea.class));
                 }
                 facility.setName(XmlSupport.attr(stopElement, "name"));
                 XmlSupport.readAttributes(stopElement, facility.getAttributes());
@@ -92,6 +102,19 @@ public final class TransitScheduleXmlReader {
                                 XmlSupport.optionalClockTimeOrSeconds(stopElement, "arrivalOffset", 0.0),
                                 XmlSupport.optionalClockTimeOrSeconds(stopElement, "departureOffset", 0.0),
                                 XmlSupport.optionalBoolean(stopElement, "awaitDeparture", false)));
+                    }
+                }
+                Element routeSequenceElement = XmlSupport.child(routeElement, "route");
+                if (routeSequenceElement != null) {
+                    List<Id<Link>> networkRoute = new ArrayList<>();
+                    for (Element linkElement : XmlSupport.children(routeSequenceElement, "link")) {
+                        String refId = XmlSupport.attr(linkElement, "refId");
+                        if (refId != null && !refId.isBlank()) {
+                            networkRoute.add(Id.create(refId, Link.class));
+                        }
+                    }
+                    if (!networkRoute.isEmpty()) {
+                        route.setNetworkRoute(networkRoute);
                     }
                 }
                 Element departuresElement = XmlSupport.child(routeElement, "departures");

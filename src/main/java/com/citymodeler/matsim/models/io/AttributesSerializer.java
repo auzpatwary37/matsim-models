@@ -7,6 +7,7 @@ import java.util.TreeMap;
 import javax.xml.namespace.QName;
 
 import com.citymodeler.matsim.models.api.Attributes;
+import com.citymodeler.matsim.models.network.turnrestrictions.DisallowedNextLinks;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
@@ -33,7 +34,7 @@ public final class AttributesSerializer extends JsonSerializer<Attributes> {
                     .append("\" class=\"")
                     .append(classHint(value))
                     .append("\">")
-                    .append(escapeXml(value.toString()))
+                    .append(escapeXml(value instanceof DisallowedNextLinks links ? links.toJson() : value.toString()))
                     .append("</attribute>");
         }
 
@@ -44,6 +45,9 @@ public final class AttributesSerializer extends JsonSerializer<Attributes> {
     }
 
     private static String classHint(Object value) {
+        if (value instanceof DisallowedNextLinks) {
+            return XmlSupport.MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT;
+        }
         if (value instanceof String) {
             return String.class.getName();
         }

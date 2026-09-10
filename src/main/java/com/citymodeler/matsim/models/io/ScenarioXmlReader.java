@@ -78,6 +78,14 @@ public final class ScenarioXmlReader {
             }
         });
 
+        config.getModule("vehicles").ifPresent(vehiclesModule -> {
+            String inputFile = vehiclesModule.getParam("inputFile").orElse(null);
+            if (inputFile != null) {
+                Path vehiclesPath = baseDirectory.resolve(inputFile);
+                scenario.setVehicleDefinitions(new VehiclesXmlReader(validateSchema).read(vehiclesPath));
+            }
+        });
+
         scenario.postProcess();
         return scenario;
     }

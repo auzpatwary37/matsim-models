@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Interoperability fixture: a vehicle definitions file in the CURRENT MATSim
+  vehicleDefinitions v2.0 wire format. Authored by hand strictly from the
+  published v2.0 schema (matsim-spec/vehicleDefinitions_v2.0.xsd) and the
+  documented vehicle-type attribute conventions; it contains no MATSim or
+  Pt2MATSim code. Used to prove the reader ingests current-format input.
+-->
+<vehicleDefinitions xmlns="http://www.matsim.org/files/dtd"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.matsim.org/files/dtd http://www.matsim.org/files/dtd/vehicleDefinitions_v2.0.xsd">
+    <vehicleType id="Bus">
+        <attributes>
+            <attribute name="accessTimeInSecondsPerPerson" class="java.lang.Double">0.5</attribute>
+            <attribute name="doorOperationMode" class="java.lang.String">serial</attribute>
+            <attribute name="egressTimeInSecondsPerPerson" class="java.lang.Double">1.5</attribute>
+        </attributes>
+        <capacity seats="40" standingRoomInPersons="60"/>
+        <length meter="12.0"/>
+        <width meter="2.5"/>
+        <passengerCarEquivalents pce="22.0"/>
+    </vehicleType>
+    <vehicleType id="car">
+        <capacity seats="4"/>
+        <maximumVelocity meterPerSecond="16.67"/>
+        <passengerCarEquivalents pce="1.0"/>
+    </vehicleType>
+    <vehicle id="bus-1" type="Bus"/>
+    <vehicle id="bus-2" type="Bus"/>
+    <vehicle id="car-1" type="car"/>
+</vehicleDefinitions>

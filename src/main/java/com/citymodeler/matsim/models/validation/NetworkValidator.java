@@ -15,15 +15,22 @@ import java.util.Objects;
  */
 public final class NetworkValidator {
     private final Network network;
+    private final NetworkValidatorOptions options;
     private final ValidationReport report;
 
     public NetworkValidator() {
         this.network = null;
+        this.options = NetworkValidatorOptions.defaults();
         this.report = null;
     }
 
     public NetworkValidator(Network network) {
+        this(network, NetworkValidatorOptions.defaults());
+    }
+
+    public NetworkValidator(Network network, NetworkValidatorOptions options) {
         this.network = Objects.requireNonNull(network, "network");
+        this.options = Objects.requireNonNull(options, "options");
         this.report = new ValidationReport();
     }
 
@@ -34,7 +41,18 @@ public final class NetworkValidator {
      * @return a {@link ValidationReport} with any issues found (may be empty)
      */
     public static ValidationReport validate(Network network) {
-        NetworkValidator validator = new NetworkValidator(network);
+        return validate(network, NetworkValidatorOptions.defaults());
+    }
+
+    /**
+     * Convenience method that validates the given network with the given options and returns a report.
+     *
+     * @param network the network to validate; must not be {@code null}
+     * @param options optional checks and severity overrides
+     * @return a {@link ValidationReport} with any issues found (may be empty)
+     */
+    public static ValidationReport validate(Network network, NetworkValidatorOptions options) {
+        NetworkValidator validator = new NetworkValidator(network, options);
         validator.validate();
         return validator.getReport();
     }
@@ -52,6 +70,7 @@ public final class NetworkValidator {
         validateLinks();
         validateLinkConnectivity();
         validateIsolatedNodes();
+        validateRequiredModes();
     }
 
     /**
@@ -108,6 +127,14 @@ public final class NetworkValidator {
                         link.getId().toString(),
                         "Set link lanes to a positive integer"));
             }
+            if (options.getMaxLinkLengthMeters() != null && link.getLength() > options.getMaxLinkLengthMeters()) {
+                report.addIssue(new ValidationIssue(
+                        ValidationSeverity.WARNING, "network", "link_too_long",
+                        "Link " + link.getId() + " length " + link.getLength()
+                                + " exceeds configured maximum " + options.getMaxLinkLengthMeters(),
+                        link.getId().toString(),
+                        "Split the link or review its length"));
+            }
         }
     }
 
@@ -147,11 +174,32 @@ public final class NetworkValidator {
             }
 
             if (fromNodeById != null && toNodeById != null && fromNodeById.equals(toNodeById)) {
+                String prefix = options.getSelfLoopInfoPrefix();
+                ValidationSeverity severity = prefix != null && link.getId().toString().startsWith(prefix)
+                        ? ValidationSeverity.INFO
+                        : ValidationSeverity.WARNING;
                 report.addIssue(new ValidationIssue(
-                        ValidationSeverity.WARNING, "network", "self_loop",
+                        severity, "network", "self_loop",
                         "Link " + link.getId() + " is a self-loop (fromNode == toNode)",
                         link.getId().toString(),
                         "Consider removing or rewriting the link"));
+            }
+        }
+    }
+
+    private void validateRequiredModes() {
+        if (options.getRequiredModes() == null) {
+            return;
+        }
+        for (String mode : options.getRequiredModes()) {
+            boolean covered = network.getLinks().values().stream()
+                    .anyMatch(link -> link.getAllowedModes().contains(mode));
+            if (!covered) {
+                report.addIssue(new ValidationIssue(
+                        ValidationSeverity.WARNING, "network", "missing_mode",
+                        "No link allows mode: " + mode,
+                        null,
+                        "Assign the mode to at least one link"));
             }
         }
     }

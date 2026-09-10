@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Repo-local permissive stub for the historic <vehicles> dialect used by this
+  project's early artifacts. Real compatibility with the CURRENT MATSim
+  vehicleDefinitions v2.0 wire format is NOT established by this stub; it is
+  verified in test scope against the vendored published v2.0 schema
+  (src/test/resources/matsim-spec/) by MatsimVehicleSpecValidationTest.
+-->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="http://www.matsim.org/schema/vehicles"
            xmlns="http://www.matsim.org/schema/vehicles"

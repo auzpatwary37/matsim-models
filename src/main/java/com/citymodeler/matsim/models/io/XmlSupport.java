@@ -34,8 +34,23 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 import com.citymodeler.matsim.models.api.Attributes;
+import com.citymodeler.matsim.models.network.turnrestrictions.DisallowedNextLinks;
 
 final class XmlSupport {
+    /**
+     * Allowlisted {@code org.matsim.*} string constant. Wire-format
+     * compatibility only: written into MATSim network files as the attribute
+     * class hint so MATSim can rehydrate the value; no MATSim code is imported.
+     */
+    public static final String MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT =
+            "org.matsim.core.network.turnRestrictions.DisallowedNextLinks";
+
+    /** Historic class hint written by older MATSim versions; accepted on read only. */
+    public static final String LEGACY_MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT =
+            "org.matsim.core.network.DisallowedNextLinks";
+
+    public static final String ATTR_DISALLOWED_NEXT_LINKS = "disallowedNextLinks";
+
     private XmlSupport() {
     }
 
@@ -115,6 +130,7 @@ final class XmlSupport {
             var schemaFactory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
             schemaFactory.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
             schemaFactory.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+            schemaFactory.setResourceResolver(createClasspathResourceResolver(schemaResource));
             var schema = schemaFactory.newSchema(new StreamSource(schemaStream));
             var validator = schema.newValidator();
             validator.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
@@ -125,6 +141,60 @@ final class XmlSupport {
         } catch (Exception exception) {
             throw new MatsimValidationException("XML schema validation failed", exception);
         }
+    }
+
+    private static org.w3c.dom.ls.LSResourceResolver createClasspathResourceResolver(String baseSchemaResource) {
+        String baseDir = baseSchemaResource.contains("/")
+                ? baseSchemaResource.substring(0, baseSchemaResource.lastIndexOf('/') + 1)
+                : "";
+        return (type, namespaceUri, publicId, systemId, baseUri) -> {
+            if (systemId == null) {
+                return null;
+            }
+            String resolved = systemId;
+            if (resolved.startsWith("http://") || resolved.startsWith("https://")) {
+                return null;
+            }
+            String classpathResource = baseDir + resolved;
+            InputStream stream = XmlSupport.class.getResourceAsStream(classpathResource);
+            if (stream == null) {
+                return null;
+            }
+            return new ClasspathLSInput(stream, systemId);
+        };
+    }
+
+    private static final class ClasspathLSInput implements org.w3c.dom.ls.LSInput {
+        private final InputStream stream;
+        private final String systemId;
+        private java.io.Reader reader;
+
+        ClasspathLSInput(InputStream stream, String systemId) {
+            this.stream = stream;
+            this.systemId = systemId;
+        }
+
+        @Override public void setStringData(String data) { }
+        @Override public String getStringData() { return null; }
+        @Override public void setSystemId(String systemId) { }
+        @Override public String getSystemId() { return systemId; }
+        @Override public void setPublicId(String publicId) { }
+        @Override public String getPublicId() { return null; }
+        @Override public void setCertifiedText(boolean certified) { }
+        @Override public boolean getCertifiedText() { return false; }
+        @Override public void setCharacterStream(java.io.Reader reader) { }
+        @Override public java.io.Reader getCharacterStream() {
+            if (reader == null) {
+                reader = new java.io.InputStreamReader(stream, java.nio.charset.StandardCharsets.UTF_8);
+            }
+            return reader;
+        }
+        @Override public void setByteStream(InputStream stream) { }
+        @Override public InputStream getByteStream() { return null; }
+        @Override public void setEncoding(String encoding) { }
+        @Override public String getEncoding() { return java.nio.charset.StandardCharsets.UTF_8.name(); }
+        @Override public void setBaseURI(String baseURI) { }
+        @Override public String getBaseURI() { return null; }
     }
 
     static Document newDocument() {
@@ -162,6 +232,34 @@ final class XmlSupport {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         write(document, outputStream);
         return outputStream.toString(StandardCharsets.UTF_8);
+    }
+
+    static String writeElementToString(Element element) {
+        try {
+            TransformerFactory factory = TransformerFactory.newInstance();
+            var transformer = factory.newTransformer();
+            transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+            transformer.setOutputProperty(OutputKeys.INDENT, "no");
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            transformer.transform(new DOMSource(element), new StreamResult(outputStream));
+            return outputStream.toString(StandardCharsets.UTF_8);
+        } catch (Exception exception) {
+            throw new MatsimWriteException("Could not serialize element", exception);
+        }
+    }
+
+    static void appendRawXmlFragment(Document document, Element parent, String xmlFragment) {
+        try {
+            var dbFactory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            dbFactory.setNamespaceAware(false);
+            dbFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            javax.xml.parsers.DocumentBuilder db = dbFactory.newDocumentBuilder();
+            Document fragDoc = db.parse(new java.io.ByteArrayInputStream(xmlFragment.getBytes(StandardCharsets.UTF_8)));
+            Element fragRoot = fragDoc.getDocumentElement();
+            parent.appendChild(document.importNode(fragRoot, true));
+        } catch (Exception exception) {
+            throw new MatsimWriteException("Could not parse raw XML fragment", exception);
+        }
     }
 
     static Element child(Element parent, String name) {
@@ -295,23 +393,37 @@ final class XmlSupport {
             if (name == null || name.isBlank()) {
                 continue;
             }
-            attributes.putAttribute(name, convert(attributeElement.getTextContent(), attr(attributeElement, "class")));
+            attributes.putAttribute(name, convert(name, attributeElement.getTextContent(), attr(attributeElement, "class")));
         }
     }
 
     static void appendAttributes(Document document, Element parent, Attributes attributes) {
+        appendAttributes(document, parent, attributes, null);
+    }
+
+    /**
+     * Appends an {@code <attributes>} container. When {@code namespaceUri} is
+     * non-null the container and its entries are created in that namespace
+     * (required for documents whose root declares a default namespace, e.g.
+     * the MATSim vehicleDefinitions v2.0 root element).
+     */
+    static void appendAttributes(Document document, Element parent, Attributes attributes, String namespaceUri) {
         if (attributes.getAsMap().isEmpty()) {
             return;
         }
-        Element attributesElement = document.createElement("attributes");
+        Element attributesElement = namespaceUri == null
+                ? document.createElement("attributes")
+                : document.createElementNS(namespaceUri, "attributes");
         for (Map.Entry<String, Object> entry : new TreeMap<>(attributes.getAsMap()).entrySet()) {
             if (entry.getValue() == null) {
                 continue;
             }
-            Element attributeElement = document.createElement("attribute");
+            Element attributeElement = namespaceUri == null
+                    ? document.createElement("attribute")
+                    : document.createElementNS(namespaceUri, "attribute");
             attributeElement.setAttribute("name", entry.getKey());
             attributeElement.setAttribute("class", classHint(entry.getValue()));
-            attributeElement.setTextContent(entry.getValue().toString());
+            attributeElement.setTextContent(textContent(entry.getValue()));
             attributesElement.appendChild(attributeElement);
         }
         parent.appendChild(attributesElement);
@@ -349,7 +461,16 @@ final class XmlSupport {
         return outputStream;
     }
 
-    private static Object convert(String value, String className) {
+    private static Object convert(String name, String value, String className) {
+        if (isDisallowedNextLinksAttribute(name, className)) {
+            try {
+                return DisallowedNextLinks.fromJson(value);
+            } catch (MatsimModelException exception) {
+                System.err.println("WARNING: matsim-models: malformed disallowedNextLinks payload, keeping raw string: "
+                        + exception.getMessage());
+                return value;
+            }
+        }
         if (Double.class.getName().equals(className)) {
             return Double.valueOf(value);
         }
@@ -365,7 +486,23 @@ final class XmlSupport {
         return value;
     }
 
-    private static String classHint(Object value) {
+    static String textContent(Object value) {
+        if (value instanceof DisallowedNextLinks links) {
+            return links.toJson();
+        }
+        return value.toString();
+    }
+
+    private static boolean isDisallowedNextLinksAttribute(String name, String className) {
+        return MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT.equals(className)
+                || LEGACY_MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT.equals(className)
+                || ATTR_DISALLOWED_NEXT_LINKS.equals(name);
+    }
+
+    static String classHint(Object value) {
+        if (value instanceof DisallowedNextLinks) {
+            return MATSIM_DISALLOWED_NEXT_LINKS_CLASS_HINT;
+        }
         if (value instanceof Double) {
             return Double.class.getName();
         }

@@ -13,12 +13,14 @@ import com.citymodeler.matsim.models.lanes.Lanes;
 import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.population.Person;
 import com.citymodeler.matsim.models.transit.TransitSchedule;
+import com.citymodeler.matsim.models.vehicles.VehicleDefinitions;
 
 public final class Scenario {
     private Config config;
     private Network network;
     private TransitSchedule transitSchedule;
     private ActivityFacilities activityFacilities;
+    private VehicleDefinitions vehicleDefinitions;
     private final Map<Id<Person>, Person> population = new LinkedHashMap<>();
     private Lanes lanes;
     private final Attributes attributes = new Attributes();
@@ -53,6 +55,14 @@ public final class Scenario {
 
     public void setActivityFacilities(ActivityFacilities activityFacilities) {
         this.activityFacilities = activityFacilities;
+    }
+
+    public VehicleDefinitions getVehicleDefinitions() {
+        return vehicleDefinitions;
+    }
+
+    public void setVehicleDefinitions(VehicleDefinitions vehicleDefinitions) {
+        this.vehicleDefinitions = vehicleDefinitions;
     }
 
     public Map<Id<Person>, Person> getPopulation() {
