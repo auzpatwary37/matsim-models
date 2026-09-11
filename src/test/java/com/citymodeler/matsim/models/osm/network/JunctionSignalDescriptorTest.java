@@ -176,6 +176,90 @@ final class JunctionSignalDescriptorTest {
         assertFalse(j.hasMovement("sim_12_r_bs_B", "sim_11_r_A_aw"));
     }
 
+    /**
+     * Review #1: OSM represents ramp/connector roads as the parent class with a {@code _link} suffix.
+     * The classifier must recognize the real taxonomy (and still accept bare {@code link}), and must
+     * not treat ordinary classes as link roads.
+     */
+    @Test
+    void isLinkHighwayRecognizesRealLinkClasses() {
+        assertTrue(OsmSignalAwareSimplifier.isLinkHighway("motorway_link"));
+        assertTrue(OsmSignalAwareSimplifier.isLinkHighway("trunk_link"));
+        assertTrue(OsmSignalAwareSimplifier.isLinkHighway("primary_link"));
+        assertTrue(OsmSignalAwareSimplifier.isLinkHighway("secondary_link"));
+        assertTrue(OsmSignalAwareSimplifier.isLinkHighway("tertiary_link"));
+        assertTrue(OsmSignalAwareSimplifier.isLinkHighway("link"));
+        assertFalse(OsmSignalAwareSimplifier.isLinkHighway("motorway"));
+        assertFalse(OsmSignalAwareSimplifier.isLinkHighway("primary"));
+        assertFalse(OsmSignalAwareSimplifier.isLinkHighway("residential"));
+        assertFalse(OsmSignalAwareSimplifier.isLinkHighway(null));
+    }
+
+    /**
+     * Review #1 integration: a wide intersection whose internal road is a real {@code primary_link}
+     * (not the invented {@code highway=link}) still enters the network and clusters into one junction.
+     */
+    @Test
+    void realPrimaryLinkRoadDrivesClustering() {
+        OsmSimplifiedNetwork s =
+                simplify(SignalReadyFixtures.wideIntersectionPrimaryLink(),
+                        new OsmSimplifyOptions(40.0, false, 35.0, Set.of()));
+        assertEquals(1, s.signalizedJunctions().size());
+        assertSame(s.junctionAt("osm_node_A"), s.junctionAt("osm_node_B"));
+    }
+
+    /**
+     * Review #2: two signal corners joined only through a NON-signal internal node X. X must survive
+     * materialization, the pair must cluster, and the A-to-B cross-node movement must be emitted
+     * through A -> X -> B (no direct A-B link exists).
+     */
+    @Test
+    void viaInternalNodeClusterEmitsCrossNodeMovement() {
+        OsmSimplifiedNetwork s =
+                simplify(SignalReadyFixtures.wideIntersectionViaInternalNode(),
+                        new OsmSimplifyOptions(40.0, false, 35.0, Set.of()));
+        assertEquals(1, s.signalizedJunctions().size());
+        // The non-signal internal node survives, so the path really is A -> X -> B.
+        assertTrue(s.network().getNodes().containsKey(com.citymodeler.matsim.models.api.Id
+                .create("osm_node_X", com.citymodeler.matsim.models.network.Node.class)));
+        JunctionSignalDescriptor j = s.junctionAt("osm_node_A");
+        assertNotNull(j);
+        // Bidirectional internal path: both cross-node directions are reachable.
+        assertTrue(j.hasMovement("sim_10_f_an_A", "sim_12_f_B_bs"));
+        assertTrue(j.hasMovement("sim_12_r_bs_B", "sim_11_r_A_aw"));
+    }
+
+    /** Review #2: with a one-way internal path A -> X -> B, the impossible reverse movement is absent. */
+    @Test
+    void viaInternalNodeOnewayFiltersImpossibleReverseMovement() {
+        OsmSimplifiedNetwork s =
+                simplify(SignalReadyFixtures.wideIntersectionViaInternalNodeOneway(),
+                        new OsmSimplifyOptions(40.0, false, 35.0, Set.of()));
+        JunctionSignalDescriptor j = s.junctionAt("osm_node_A");
+        assertNotNull(j);
+        assertTrue(j.hasMovement("sim_10_f_an_A", "sim_12_f_B_bs"));
+        assertFalse(j.hasMovement("sim_12_r_bs_B", "sim_11_r_A_aw"));
+    }
+
+    /**
+     * Review #3: junction membership is direction-independent. The only internal connectivity is a
+     * one-way B -> X -> A path even though {@code A} sorts before {@code B}; the pair must still
+     * cluster. Movement direction, however, stays directional (A -> B is absent).
+     */
+    @Test
+    void clusteringMembershipIsDirectionIndependent() {
+        OsmSimplifiedNetwork s =
+                simplify(SignalReadyFixtures.wideIntersectionOnewayAgainstSort(),
+                        new OsmSimplifyOptions(40.0, false, 35.0, Set.of()));
+        assertEquals(1, s.signalizedJunctions().size(),
+                "one-way-against-sort internal path must still form one junction");
+        assertSame(s.junctionAt("osm_node_A"), s.junctionAt("osm_node_B"));
+        JunctionSignalDescriptor j = s.junctionAt("osm_node_A");
+        // B -> A is the only reachable cross-node direction.
+        assertTrue(j.hasMovement("sim_12_r_bs_B", "sim_11_r_A_aw"));
+        assertFalse(j.hasMovement("sim_10_f_an_A", "sim_12_f_B_bs"));
+    }
+
     private static SignalizedMovement movement(JunctionSignalDescriptor j, String in, String out) {
         return j.movements().stream()
                 .filter(m -> m.incomingLinkId().equals(in) && m.outgoingLinkId().equals(out))

@@ -380,7 +380,7 @@ public final class OsmSignalAwareSimplifier {
 
         List<JunctionSignalDescriptor> result = new ArrayList<>();
         for (List<String> cluster : clusters) {
-            result.add(buildOneJunction(network, nodes, cluster.get(0), cluster, index));
+            result.add(buildOneJunction(network, nodes, ways, cluster.get(0), cluster, index));
         }
         return result;
     }
@@ -394,10 +394,11 @@ public final class OsmSignalAwareSimplifier {
      * {@code maxHops} and total length, and never transiting another signalized node.
      *
      * <p>Review: raw Euclidean proximity plus transitive union-find merged distinct intersections.
-     * Here the connectivity basis is topological and OSM-idiomatic: only {@code highway=link}
-     * (intersection-box) roads connect two signalized nodes into one junction. A normal street
-     * between two separate intersections is therefore never a clustering edge, and a signalized
-     * node is never traversed, so A-B-C chaining across separate intersections is impossible.
+     * Here the connectivity basis is topological and OSM-idiomatic: only junction-internal link
+     * roads (highway classes tagged {@code _link}, e.g. {@code primary_link}, plus bare
+     * {@code highway=link}) connect two signalized nodes into one junction. A normal street between
+     * two separate intersections is therefore never a clustering edge, and a signalized node is
+     * never traversed, so A-B-C chaining across separate intersections is impossible.
      */
     private static List<List<String>> cluster(List<String> osmIds, Network network,
                                               Map<String, OsmWayRecord> ways,
@@ -413,8 +414,9 @@ public final class OsmSignalAwareSimplifier {
             return out;
         }
 
-        // Directed adjacency restricted to junction-internal (highway=link) roads, deterministic.
-        Map<String, List<String>> adj = new TreeMap<>();
+        // Directed adjacency over junction-internal link-road roads — the SAME basis used by movement
+        // reachability (Reviews #1/#2), so clustering and movement enumeration see one junction graph.
+        Map<String, List<String>> adj = internalAdjacency(network, ways);
         Map<String, Double> edgeLen = new HashMap<>();
         for (Link link : network.getLinks().values()) {
             if (!isInternalJunctionLink(link, ways)) {
@@ -422,14 +424,9 @@ public final class OsmSignalAwareSimplifier {
             }
             String a = link.getFromNode().getId().toString();
             String b = link.getToNode().getId().toString();
-            if (a.equals(b)) {
-                continue;
+            if (!a.equals(b)) {
+                edgeLen.put(a + "|" + b, link.getLength());
             }
-            adj.computeIfAbsent(a, k -> new ArrayList<>()).add(b);
-            edgeLen.put(a + "|" + b, link.getLength());
-        }
-        for (List<String> v : adj.values()) {
-            v.sort(String::compareTo);
         }
 
         Set<String> signalNetIds = new HashSet<>();
@@ -445,7 +442,12 @@ public final class OsmSignalAwareSimplifier {
             for (int j = i + 1; j < n; j++) {
                 String a = OsmGeneratedIds.nodeId(osmIds.get(i));
                 String b = OsmGeneratedIds.nodeId(osmIds.get(j));
-                if (connectedWithinJunctionBox(a, b, signalNetIds, adj, edgeLen, threshold, maxHops)) {
+                // Review #3: junction MEMBERSHIP is a physical/topological relation and must not
+                // depend on which signal node sorts first. Treat internal connectivity as
+                // direction-independent (either-direction); movement LEGALITY stays directional and is
+                // handled later by memberReachability.
+                if (connectedWithinJunctionBox(a, b, signalNetIds, adj, edgeLen, threshold, maxHops)
+                        || connectedWithinJunctionBox(b, a, signalNetIds, adj, edgeLen, threshold, maxHops)) {
                     union(parent, i, j);
                 }
             }
@@ -475,8 +477,10 @@ public final class OsmSignalAwareSimplifier {
     }
 
     /**
-     * True when the link's source OSM way is a {@code highway=link} road, i.e. an intersection-box
-     * internal road. Such links are the only ones treated as "inside the same junction".
+     * True when the link's source OSM way is a link road (ramp/connector/internal box road). Review
+     * #1: OSM tags these as the parent highway class with a {@code _link} suffix (e.g.
+     * {@code primary_link}), plus a bare {@code highway=link} for unclassified minor links. These are
+     * the only roads treated as "inside the same junction".
      */
     private static boolean isInternalJunctionLink(Link link, Map<String, OsmWayRecord> ways) {
         Object wayId = link.getAttributes().getAttribute("osm:wayId");
@@ -484,7 +488,16 @@ public final class OsmSignalAwareSimplifier {
             return false;
         }
         OsmWayRecord way = ways.get(String.valueOf(wayId));
-        return way != null && "link".equals(way.tags().get("highway"));
+        return way != null && isLinkHighway(way.tags().get("highway"));
+    }
+
+    /**
+     * An OSM highway value denotes a link road iff it is {@code link} or carries the standard
+     * {@code _link} class suffix (motorway_link, trunk_link, primary_link, secondary_link,
+     * tertiary_link, ...). Exposed for tests.
+     */
+    static boolean isLinkHighway(String highway) {
+        return "link".equals(highway) || (highway != null && highway.endsWith("_link"));
     }
 
     /**
@@ -533,8 +546,8 @@ public final class OsmSignalAwareSimplifier {
     }
 
     private static JunctionSignalDescriptor buildOneJunction(
-            Network network, Map<String, OsmNodeRecord> nodes, String primary,
-            List<String> cluster, TurnRestrictionIndex index) {
+            Network network, Map<String, OsmNodeRecord> nodes, Map<String, OsmWayRecord> ways,
+            String primary, List<String> cluster, TurnRestrictionIndex index) {
 
         Set<String> clusterNetNodeIds = new TreeSet<>();
         for (String osmId : cluster) {
@@ -544,7 +557,7 @@ public final class OsmSignalAwareSimplifier {
         for (int i = 0; i < cluster.size(); i++) {
             memberIdx.put(OsmGeneratedIds.nodeId(cluster.get(i)), i);
         }
-        boolean[][] reach = memberReachability(cluster, network);
+        boolean[][] reach = memberReachability(cluster, network, ways);
 
         List<Link> incoming = new ArrayList<>();
         List<Link> outgoing = new ArrayList<>();
@@ -629,46 +642,70 @@ public final class OsmSignalAwareSimplifier {
     }
 
     /**
-     * Directed reachability within the cluster's induced member subgraph. {@code reach[i][j]} is
-     * true when member {@code i} can reach member {@code j} following link direction, or is the
-     * same member. Used to reject physically impossible cross-node movements.
+     * Directed reachability between cluster members through the <em>internal-junction subgraph</em>
+     * — the same junction-internal (link-road) edges that justify clustering. Review #2: the
+     * previous version only considered direct member-to-member links, so a member pair joined via a
+     * non-signal internal node (e.g. {@code A -> X -> B}) was accepted as one cluster but its
+     * A-to-B movement was dropped. Traversing the full internal subgraph (including non-signal
+     * nodes such as ramp/turn-lane nodes) and projecting back to members makes movement reachability
+     * consistent with cluster formation. Still directional, so a one-way internal path does not
+     * yield a reverse movement.
      */
-    private static boolean[][] memberReachability(List<String> cluster, Network network) {
+    private static boolean[][] memberReachability(List<String> cluster, Network network,
+                                                   Map<String, OsmWayRecord> ways) {
         int n = cluster.size();
         Map<String, Integer> idx = new HashMap<>();
         for (int i = 0; i < n; i++) {
             idx.put(OsmGeneratedIds.nodeId(cluster.get(i)), i);
         }
-        List<List<Integer>> adj = new ArrayList<>();
-        for (int i = 0; i < n; i++) {
-            adj.add(new ArrayList<>());
-        }
-        for (Link link : network.getLinks().values()) {
-            Integer fi = idx.get(link.getFromNode().getId().toString());
-            Integer ti = idx.get(link.getToNode().getId().toString());
-            if (fi != null && ti != null && fi.intValue() != ti.intValue()) {
-                adj.get(fi).add(ti);
-            }
-        }
+        Map<String, List<String>> adj = internalAdjacency(network, ways);
         boolean[][] reach = new boolean[n][n];
         for (int s = 0; s < n; s++) {
-            Deque<Integer> dq = new ArrayDeque<>();
-            boolean[] seen = new boolean[n];
-            dq.add(s);
-            seen[s] = true;
+            String start = OsmGeneratedIds.nodeId(cluster.get(s));
+            Deque<String> dq = new ArrayDeque<>();
+            Set<String> seen = new HashSet<>();
+            dq.add(start);
+            seen.add(start);
             reach[s][s] = true;
             while (!dq.isEmpty()) {
-                int u = dq.poll();
-                for (int v : adj.get(u)) {
-                    if (!seen[v]) {
-                        seen[v] = true;
-                        reach[s][v] = true;
-                        dq.add(v);
+                String u = dq.poll();
+                for (String v : adj.getOrDefault(u, List.of())) {
+                    if (!seen.add(v)) {
+                        continue;
                     }
+                    Integer vi = idx.get(v);
+                    if (vi != null) {
+                        reach[s][vi] = true;
+                    }
+                    dq.add(v);
                 }
             }
         }
         return reach;
+    }
+
+    /**
+     * Directed adjacency over the junction-internal link-road subgraph (all endpoints, not just
+     * signal members). This is the single connectivity basis shared by clustering (#3) and
+     * movement reachability (#2), so both operations see the same internal junction.
+     */
+    static Map<String, List<String>> internalAdjacency(Network network, Map<String, OsmWayRecord> ways) {
+        Map<String, List<String>> adj = new TreeMap<>();
+        for (Link link : network.getLinks().values()) {
+            if (!isInternalJunctionLink(link, ways)) {
+                continue;
+            }
+            String a = link.getFromNode().getId().toString();
+            String b = link.getToNode().getId().toString();
+            if (a.equals(b)) {
+                continue;
+            }
+            adj.computeIfAbsent(a, k -> new ArrayList<>()).add(b);
+        }
+        for (List<String> v : adj.values()) {
+            v.sort(String::compareTo);
+        }
+        return adj;
     }
 
     /**

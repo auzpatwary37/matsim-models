@@ -200,6 +200,95 @@ final class SignalReadyFixtures {
     }
 
     /**
+     * Wide intersection whose two signal corners A and B are joined through a NON-signal internal
+     * node X (two {@code highway=link} ways A-X and X-B). Review #2: X must survive materialization
+     * and movement reachability must flow through it (A -> X -> B), not require a direct A-B link.
+     */
+    static OsmImportResult wideIntersectionViaInternalNode(boolean oneway) {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("A", node("A", 100, 100, "highway", "traffic_signals"));
+        nodes.put("X", node("X", 115, 100));  // internal ramp/turn-lane node, NOT signalized
+        nodes.put("B", node("B", 130, 100, "highway", "traffic_signals"));
+        nodes.put("an", node("an", 100, 140));
+        nodes.put("aw", node("aw", 60, 100));
+        nodes.put("bs", node("bs", 130, 60));
+        nodes.put("be", node("be", 170, 100));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("10", way("10", List.of("an", "A"), "highway", "residential"));
+        ways.put("11", way("11", List.of("aw", "A"), "highway", "residential"));
+        ways.put("12", way("12", List.of("B", "bs"), "highway", "residential"));
+        ways.put("13", way("13", List.of("B", "be"), "highway", "residential"));
+        if (oneway) {
+            ways.put("90", way("90", List.of("A", "X"), "highway", "link", "oneway", "yes"));
+            ways.put("91", way("91", List.of("X", "B"), "highway", "link", "oneway", "yes"));
+        } else {
+            ways.put("90", way("90", List.of("A", "X"), "highway", "link"));
+            ways.put("91", way("91", List.of("X", "B"), "highway", "link"));
+        }
+        return result(nodes, ways);
+    }
+
+    /** Via-internal-node wide intersection, bidirectional internal path A -> X -> B. */
+    static OsmImportResult wideIntersectionViaInternalNode() {
+        return wideIntersectionViaInternalNode(false);
+    }
+
+    /** Via-internal-node wide intersection, one-way A -> X -> B (B -> A impossible). */
+    static OsmImportResult wideIntersectionViaInternalNodeOneway() {
+        return wideIntersectionViaInternalNode(true);
+    }
+
+    /**
+     * Wide intersection whose only internal connectivity is a one-way path B -> X -> A, even though
+     * {@code A} sorts before {@code B}. Review #3: membership must be direction-independent, so the
+     * pair still clusters even though the earlier-sorting node cannot reach the later one.
+     */
+    static OsmImportResult wideIntersectionOnewayAgainstSort() {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("A", node("A", 100, 100, "highway", "traffic_signals"));
+        nodes.put("X", node("X", 115, 100));
+        nodes.put("B", node("B", 130, 100, "highway", "traffic_signals"));
+        nodes.put("an", node("an", 100, 140));
+        nodes.put("aw", node("aw", 60, 100));
+        nodes.put("bs", node("bs", 130, 60));
+        nodes.put("be", node("be", 170, 100));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("10", way("10", List.of("an", "A"), "highway", "residential"));
+        ways.put("11", way("11", List.of("aw", "A"), "highway", "residential"));
+        ways.put("12", way("12", List.of("B", "bs"), "highway", "residential"));
+        ways.put("13", way("13", List.of("B", "be"), "highway", "residential"));
+        // One-way against the A < B sort order: B -> X -> A.
+        ways.put("90", way("90", List.of("B", "X"), "highway", "link", "oneway", "yes"));
+        ways.put("91", way("91", List.of("X", "A"), "highway", "link", "oneway", "yes"));
+        return result(nodes, ways);
+    }
+
+    /**
+     * Wide intersection whose internal road uses a REAL OSM link class ({@code primary_link}) rather
+     * than the invented generic {@code highway=link}. Review #1: the production taxonomy must drive
+     * both network inclusion and junction-internal recognition.
+     */
+    static OsmImportResult wideIntersectionPrimaryLink() {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("A", node("A", 100, 100, "highway", "traffic_signals"));
+        nodes.put("B", node("B", 130, 100, "highway", "traffic_signals"));
+        nodes.put("an", node("an", 100, 140));
+        nodes.put("aw", node("aw", 60, 100));
+        nodes.put("bs", node("bs", 130, 60));
+        nodes.put("be", node("be", 170, 100));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("10", way("10", List.of("an", "A"), "highway", "residential"));
+        ways.put("11", way("11", List.of("aw", "A"), "highway", "residential"));
+        ways.put("12", way("12", List.of("B", "bs"), "highway", "residential"));
+        ways.put("13", way("13", List.of("B", "be"), "highway", "residential"));
+        ways.put("90", way("90", List.of("A", "B"), "highway", "primary_link"));
+        return result(nodes, ways);
+    }
+
+    /**
      * A single residential way with a repeated interior node (P1 at positions 1 and 3). Only the two
      * endpoints are kept, so the whole span collapses to one link whose source-segment provenance
      * must be positional (segments 0,1,2,3 forward) rather than corrupted by id -> position lookup.
