@@ -135,6 +135,15 @@ public final class OsmMatsimNetworkBuilder {
                 stopHints, laneHints, intersectionHints, geometryStore);
     }
 
+    /**
+     * Build the network and then run signal-aware simplification, returning a collapsed network with
+     * signalized-junction metadata, re-attached turn restrictions, and a signal-readiness report.
+     */
+    public OsmSimplifiedNetwork buildSignalReady(OsmImportResult importResult, OsmNetworkBuildConfig config) {
+        OsmNetworkBuildResult built = build(importResult, config);
+        return OsmSignalAwareSimplifier.simplify(built, importResult, config, OsmSimplifyOptions.from(config));
+    }
+
     private List<String> createSegments(
             OsmImportResult importResult,
             Network network,

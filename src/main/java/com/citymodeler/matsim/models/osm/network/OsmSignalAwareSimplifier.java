@@ -141,7 +141,9 @@ public final class OsmSignalAwareSimplifier {
             }
         }
 
-        List<OsmImportIssue> reportIssues = diagnostics(junctions, network);
+        Map<String, OsmWayRecord> ways = importResult.ways();
+        List<OsmImportIssue> reportIssues =
+                diagnostics(junctions, network, ways, junctionsByNodeId);
         List<OsmImportIssue> allIssues = new ArrayList<>(issues);
         allIssues.addAll(reportIssues);
 
@@ -150,7 +152,7 @@ public final class OsmSignalAwareSimplifier {
                 (int) junctions.stream().filter(JunctionSignalDescriptor::confirmedSignalized).count(),
                 signalNodes, collapsed, preserved,
                 countHighDegreeNonSignalized(network, junctionsByNodeId),
-                countMovementsWithoutLaneInfo(junctions),
+                countMovementsWithoutLaneInfo(junctions, network, ways),
                 reportIssues);
 
         return new OsmSimplifiedNetwork(
@@ -254,6 +256,7 @@ public final class OsmSignalAwareSimplifier {
             link.getAttributes().putAttribute("osm:value", rule.value());
             link.getAttributes().putAttribute("osm:simplified", "true");
             link.getAttributes().putAttribute("osm:segmentCount", String.valueOf(q - p));
+            copyLaneTags(link, way);
             if (rawTagsKept) {
                 for (Map.Entry<String, String> e : way.tags().asMap().entrySet()) {
                     link.getAttributes().putAttribute("osm:tag:" + e.getKey(), e.getValue());
@@ -264,6 +267,19 @@ public final class OsmSignalAwareSimplifier {
                     new OsmCollapsedLink(linkId, way.id(), forward, fromOsm, toOsm, sourceSegments));
             geometry.put(linkId, new OsmPolyline(pts));
             linkIdsByOsmWayId.computeIfAbsent(way.id(), key -> new ArrayList<>()).add(linkId);
+        }
+    }
+
+    /** Always copy lane-relevant way tags onto the merged link so lane data survives simplification. */
+    private static void copyLaneTags(Link link, OsmWayRecord way) {
+        String[] laneKeys = {"lanes", "lanes:forward", "lanes:backward",
+                "turn:lanes", "turn:lanes:forward", "turn:lanes:backward",
+                "bus:lanes", "psv:lanes", "taxi:lanes", "bicycle:lanes"};
+        for (String key : laneKeys) {
+            String value = way.tags().get(key);
+            if (value != null) {
+                link.getAttributes().putAttribute("osm:tag:" + key, value);
+            }
         }
     }
 
@@ -315,11 +331,13 @@ public final class OsmSignalAwareSimplifier {
         return count;
     }
 
-    private static int countMovementsWithoutLaneInfo(List<JunctionSignalDescriptor> junctions) {
+    /** Movements at junctions whose approach carries turn-lane source data we do not decompose here. */
+    private static int countMovementsWithoutLaneInfo(
+            List<JunctionSignalDescriptor> junctions, Network network, Map<String, OsmWayRecord> ways) {
         int count = 0;
         for (JunctionSignalDescriptor j : junctions) {
-            for (SignalizedMovement m : j.movements()) {
-                count += (m == null ? 1 : 0);
+            if (approachHasTurnLanes(j, network, ways)) {
+                count += j.movements().size();
             }
         }
         return count;
@@ -506,9 +524,77 @@ public final class OsmSignalAwareSimplifier {
         return cross > 0 ? OsmTurnType.LEFT : OsmTurnType.RIGHT;
     }
 
-    // Populated by the diagnostics step (Task 4).
+    /** Signal-readiness diagnostics: fatal/readiness findings on junctions and high-degree nodes. */
     private static List<OsmImportIssue> diagnostics(
-            List<JunctionSignalDescriptor> junctions, Network network) {
-        return List.of();
+            List<JunctionSignalDescriptor> junctions, Network network,
+            Map<String, OsmWayRecord> ways, Map<String, JunctionSignalDescriptor> junctionsByNodeId) {
+
+        List<OsmImportIssue> issues = new ArrayList<>();
+        for (JunctionSignalDescriptor j : junctions) {
+            if (j.incomingLinks().isEmpty()) {
+                issues.add(issue(OsmIssueSeverity.WARNING, "signalized-no-incoming",
+                        "Junction " + j.junctionId() + " has no incoming approach links"));
+            }
+            if (j.outgoingLinks().isEmpty()) {
+                issues.add(issue(OsmIssueSeverity.WARNING, "signalized-no-outgoing",
+                        "Junction " + j.junctionId() + " has no outgoing links"));
+            }
+            for (String in : j.incomingLinks()) {
+                boolean anyLegal =
+                        j.movementsForIncoming(in).stream().anyMatch(SignalizedMovement::fullyLegal);
+                if (!anyLegal) {
+                    issues.add(issue(OsmIssueSeverity.WARNING, "approach-no-legal-outgoing",
+                            "Junction " + j.junctionId() + " approach " + in
+                                    + " has no legal outgoing movement"));
+                }
+            }
+            if (approachHasTurnLanes(j, network, ways)) {
+                issues.add(issue(OsmIssueSeverity.INFO, "ambiguous-lane-tags",
+                        "Junction " + j.junctionId()
+                                + " approaches carry turn:lanes data not decomposed into per-movement lanes"));
+            }
+        }
+        for (Map.Entry<Id<Node>, Node> e : network.getNodes().entrySet()) {
+            Node node = e.getValue();
+            int degree = node.getInLinks().size() + node.getOutLinks().size();
+            if (degree >= 4 && junctionsByNodeId.get(e.getKey().toString()) == null) {
+                issues.add(issue(OsmIssueSeverity.INFO, "non-signalized-high-degree",
+                        "Node " + e.getKey() + " has high degree but is not a signalized junction"));
+            }
+        }
+        return issues;
+    }
+
+    private static OsmImportIssue issue(OsmIssueSeverity severity, String code, String message) {
+        return new OsmImportIssue(severity, code, message, null);
+    }
+
+    /** True when any approach of the junction belongs to a way with turn:lanes source data. */
+    private static boolean approachHasTurnLanes(
+            JunctionSignalDescriptor j, Network network, Map<String, OsmWayRecord> ways) {
+        for (String linkId : j.incomingLinks()) {
+            Link link = network.getLinks().get(Id.create(linkId, Link.class));
+            if (link == null) {
+                continue;
+            }
+            Object wayIdAttr = link.getAttributes().getAttribute("osm:wayId");
+            if (wayIdAttr == null) {
+                continue;
+            }
+            OsmWayRecord way = ways.get(String.valueOf(wayIdAttr));
+            if (way != null && wayHasTurnLanes(way)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean wayHasTurnLanes(OsmWayRecord way) {
+        for (String key : way.tags().asMap().keySet()) {
+            if (key.startsWith("turn:lanes")) {
+                return true;
+            }
+        }
+        return false;
     }
 }

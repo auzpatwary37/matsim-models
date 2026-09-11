@@ -87,4 +87,28 @@ final class SignalReadyFixtures {
 
         return result(nodes, ways, relations);
     }
+
+    /** Crossroads with turn:lanes on the west arm (way 10) to exercise lane diagnostics. */
+    static OsmImportResult crossroadsWithTurnLanes() {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("W", node("W", 0, 100));
+        nodes.put("Wm", node("Wm", 50, 100));
+        nodes.put("N", node("N", 100, 100, "highway", "traffic_signals", "traffic_signals", "yes"));
+        nodes.put("Em", node("Em", 150, 100));
+        nodes.put("E", node("E", 200, 100));
+        nodes.put("Sm", node("Sm", 100, 50));
+        nodes.put("S", node("S", 100, 0));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("10", way("10", List.of("W", "Wm", "N"),
+                "highway", "residential", "lanes", "2", "turn:lanes", "through|left"));
+        ways.put("20", way("20", List.of("N", "Em", "E"), "highway", "residential"));
+        ways.put("30", way("30", List.of("S", "Sm", "N"), "highway", "residential"));
+
+        Map<String, OsmRelationRecord> relations = new TreeMap<>();
+        relations.put("r1", restriction("r1", "10", "N", "20",
+                "type", "restriction", "restriction", "no_left_turn"));
+
+        return result(nodes, ways, relations);
+    }
 }
