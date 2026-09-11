@@ -52,13 +52,29 @@ public final class StopCandidateScorer {
         return candidates;
     }
 
+    /**
+     * Network modes that are transit-capable. Review #7: a generic {@code pt} request must NOT be
+     * accepted unconditionally (the old code returned true for any link). A {@code pt} route is only
+     * compatible with a link that can actually carry transit — a car-only street is rejected so the
+     * scorer falls through to a transit-capable (or, failing that, artificial) candidate.
+     */
+    static final Set<String> TRANSIT_MODES = Set.of(
+            "bus", "tram", "rail", "light_rail", "subway", "metro", "trolleybus",
+            "cable_car", "aerial_lift", "funicular", "gondola", "monorail", "ferry",
+            "taxi", "pt");
+
     private boolean isModeCompatible(Link link, String mode) {
         Set<String> allowed = link.getAllowedModes();
-        if (allowed == null || allowed.isEmpty()) return true; // no restriction
-        // MATSim mode hierarchy: "pt" covers bus, tram, subway, rail, etc.
+        if (allowed == null || allowed.isEmpty()) return true; // unrestricted link carries anything
         if (allowed.contains(mode)) return true;
-        if ("pt".equals(mode)) return true; // pt links carry all transit
-        // Check if the mode is a sub-mode of what's allowed
+        // Generic transit: require the link to be transit-capable, not a car-only street.
+        if ("pt".equals(mode)) {
+            for (String m : allowed) {
+                if (TRANSIT_MODES.contains(m)) return true;
+            }
+            return false;
+        }
+        // A specific requested mode: "pt" on the link is a transit super-mode.
         for (String m : allowed) {
             if (isSubMode(mode, m)) return true;
         }
@@ -67,8 +83,7 @@ public final class StopCandidateScorer {
 
     private boolean isSubMode(String requested, String allowed) {
         if (requested.equals(allowed)) return true;
-        // "pt" is a super-mode
-        if ("pt".equals(allowed)) return true;
+        if ("pt".equals(allowed) && TRANSIT_MODES.contains(requested)) return true;
         return false;
     }
 

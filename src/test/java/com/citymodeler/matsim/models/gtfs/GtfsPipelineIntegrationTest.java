@@ -75,7 +75,7 @@ class GtfsPipelineIntegrationTest {
         // 5. Map
         LinkSpatialIndex index = new LinkSpatialIndex(network, 100.0);
         TransitNetworkMapper mapper = new TransitNetworkMapper(
-                TransitMappingConfig.defaults(), index, null);
+                TransitMappingConfig.defaults(), index);
         TransitMappingResult mappingResult = mapper.map(schedule, network);
         assertNotNull(mappingResult.mappedSchedule());
 

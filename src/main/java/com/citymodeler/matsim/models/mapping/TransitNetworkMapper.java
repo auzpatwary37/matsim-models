@@ -4,15 +4,12 @@ import com.citymodeler.matsim.models.api.Coord;
 import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
 import com.citymodeler.matsim.models.network.Network;
-import com.citymodeler.matsim.models.network.Node;
 import com.citymodeler.matsim.models.network.index.LinkSpatialIndex;
-import com.citymodeler.matsim.models.network.turnrestrictions.TurnRestrictionIndex;
 import com.citymodeler.matsim.models.transit.TransitLine;
 import com.citymodeler.matsim.models.transit.TransitRoute;
 import com.citymodeler.matsim.models.transit.TransitRouteStop;
 import com.citymodeler.matsim.models.transit.TransitSchedule;
 import com.citymodeler.matsim.models.transit.TransitStopFacility;
-import com.citymodeler.matsim.models.transit.TransitStopArea;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -26,25 +23,22 @@ import java.util.Set;
  *
  * <p>For each transit route:
  * <ol>
- *   <li>Assigns the best candidate link to each stop (mode-compatible, scored)</li>
- *   <li>Finds least-cost paths between adjacent stop links (Dijkstra with turn restrictions)</li>
- *   <li>Creates artificial connectors where no path exists or path exceeds threshold</li>
+ *   <li>Projects GTFS stop coordinates into the network's CRS, assigns the best mode-compatible link</li>
+ *   <li>Finds least-cost distance paths between adjacent stop links (Dijkstra with turn restrictions)</li>
+ *   <li>Creates artificial connectors where no path exists or path exceeds the cap</li>
  *   <li>Assembles a continuous network route</li>
- *   <li>Creates child stop facilities per (parent, link) and rewires route stops</li>
+ *   <li>Creates child stop facilities per (parent, link) and rewires the route stops to them</li>
  * </ol>
  */
 public final class TransitNetworkMapper {
 
     private final TransitMappingConfig config;
     private final LinkSpatialIndex spatialIndex;
-    private final TurnRestrictionIndex turnRestrictionIndex;
 
     public TransitNetworkMapper(TransitMappingConfig config,
-                                LinkSpatialIndex spatialIndex,
-                                TurnRestrictionIndex turnRestrictionIndex) {
+                                LinkSpatialIndex spatialIndex) {
         this.config = config;
         this.spatialIndex = spatialIndex;
-        this.turnRestrictionIndex = turnRestrictionIndex;
         config.validate();
     }
 
@@ -54,11 +48,12 @@ public final class TransitNetworkMapper {
         StopCandidateScorer scorer = new StopCandidateScorer(config, spatialIndex, network);
         ArtificialLinkFactory linkFactory = new ArtificialLinkFactory(network);
         Set<Id<Link>> artificialLinkIds = new HashSet<>();
+        CrsUtils.Projector projector = CrsUtils.forCrs(CrsUtils.networkTargetCrs(network));
 
         for (TransitLine line : schedule.getTransitLines().values()) {
             for (TransitRoute route : line.getRoutes().values()) {
                 MappingReport report = mapRoute(schedule, network, route, scorer, linkFactory,
-                        artificialLinkIds, warnings);
+                        artificialLinkIds, projector, warnings);
                 reports.add(report);
             }
         }
@@ -70,7 +65,8 @@ public final class TransitNetworkMapper {
     private MappingReport mapRoute(TransitSchedule schedule, Network network,
                                     TransitRoute route, StopCandidateScorer scorer,
                                     ArtificialLinkFactory factory, Set<Id<Link>> artificialIds,
-                                    List<String> warnings) {
+                                    CrsUtils.Projector projector, List<String> warnings) {
+        // Review #6: the actual transport mode drives access + restriction evaluation.
         String mode = route.getTransportMode() != null ? route.getTransportMode() : "pt";
         List<TransitRouteStop> stops = route.getStops();
         List<String> createdArtificialIds = new ArrayList<>();
@@ -85,7 +81,7 @@ public final class TransitNetworkMapper {
             TransitStopFacility facility = schedule.getFacilities().get(stop.getStopFacilityId());
             if (facility == null) continue;
 
-            List<StopCandidate> candidates = scorer.score(projectedStop(facility), mode);
+            List<StopCandidate> candidates = scorer.score(projectedStop(facility, projector), mode);
             if (candidates.isEmpty()) {
                 // No candidate: create artificial loop
                 String ctx = facility.getId().toString() + "_" + route.getId().toString();
@@ -118,12 +114,11 @@ public final class TransitNetworkMapper {
             }
         }
 
+        boolean continuous = true;
         if (!uniqueStopLinks.isEmpty()) {
             RoutePathFinder pathFinder = new RoutePathFinder(
-                    network, turnRestrictionIndex, artificialIds,
-                    config.routingWithCandidateDistance());
+                    network, artificialIds, config.routingWithCandidateDistance(), mode);
 
-            // Add first stop link
             networkRoute.add(uniqueStopLinks.get(0));
 
             for (int i = 1; i < uniqueStopLinks.size(); i++) {
@@ -139,7 +134,7 @@ public final class TransitNetworkMapper {
                         networkRoute.add(path.get(j));
                     }
                 } else {
-                    // No path found: create artificial connector
+                    // No path found: create an artificial connector bridging the two links.
                     Link fromL = network.getLinks().get(fromLink);
                     Link toL = network.getLinks().get(toLink);
                     if (fromL != null && toL != null && fromL.getToNode() != null && toL.getFromNode() != null) {
@@ -153,28 +148,31 @@ public final class TransitNetworkMapper {
                         warnings.add("No path between " + fromLink + " and " + toLink
                                 + ", created connector " + connector.getId());
                     } else {
-                        // Can't create connector (missing node refs), just add toLink
-                        networkRoute.add(toLink);
-                        warnings.add("Cannot connect " + fromLink + " to " + toLink + " (missing nodes)");
+                        // Review #13: cannot create a valid connector (missing node refs). Do NOT
+                        // append a disconnected link; mark the route unmapped instead of emitting a
+                        // discontinuous network route.
+                        continuous = false;
+                        warnings.add("Unmappable route " + route.getId()
+                                + ": cannot connect " + fromLink + " to " + toLink
+                                + " (missing node references); no network route emitted");
+                        break;
                     }
                 }
             }
         }
 
-        if (!networkRoute.isEmpty()) {
+        if (continuous && !networkRoute.isEmpty()) {
             route.setNetworkRoute(networkRoute);
+        } else {
+            route.setNetworkRoute(null);
         }
 
-        // Step 3: Create child stop facilities and rewire route stops
+        // Step 3: Create child stop facilities and rewire route stops to them (review #2).
         List<TransitRouteStop> newStops = new ArrayList<>();
         for (TransitRouteStop stop : stops) {
             TransitStopFacility facility = schedule.getFacilities().get(stop.getStopFacilityId());
-            if (facility == null) {
-                newStops.add(stop);
-                continue;
-            }
-            Id<Link> linkId = stopLinks.get(stop.getStopFacilityId());
-            if (linkId == null) {
+            Id<Link> linkId = facility != null ? stopLinks.get(stop.getStopFacilityId()) : null;
+            if (facility == null || linkId == null) {
                 newStops.add(stop);
                 continue;
             }
@@ -187,54 +185,39 @@ public final class TransitNetworkMapper {
                 schedule.addStopFacility(child);
             }
 
-            // Create new stop referencing the child facility, preserving offsets
             newStops.add(new TransitRouteStop(childId,
                     stop.getArrivalOffset(), stop.getDepartureOffset(), stop.isAwaitDeparture()));
         }
 
-        // Replace route stops with child-referencing versions
-        // TransitRoute doesn't support clearing stops, so we work with what we have.
-        // The child stops are added to the schedule; the original stops remain as-is
-        // but the child facilities are the authoritative mapping targets.
-        // (Full rewiring requires TransitRoute.setStops which we add here.)
         rewireRouteStops(route, newStops);
 
-        return new MappingReport(route.getId(), networkRoute, createdArtificialIds, List.of());
+        List<String> issues = continuous ? List.of() : List.of("unmapped: discontinuous path prevented");
+        return new MappingReport(route.getId(),
+                continuous ? networkRoute : List.of(),
+                createdArtificialIds, issues);
     }
 
     /**
-     * If the stop facility has WGS84 coordinates (from GTFS), project them to the
-     * network's CRS. Otherwise return the facility as-is.
-     * The reference point is the facility's own WGS84 coords (identity projection
-     * relative to itself), meaning the projected output will be (0,0) for the
-     * reference stop. In practice the caller should pass a pre-projected network.
+     * Projects a GTFS stop into the network's CRS using the shared projection contract (review #1).
+     * The stop's WGS84 coordinates are read from the {@code gtfs:lon}/{@code gtfs:lat} attributes
+     * written by the schedule builder; when those are absent the facility is assumed to already be
+     * in the network's CRS and is returned unchanged. No inference from coordinate magnitude.
      */
-    private TransitStopFacility projectedStop(TransitStopFacility facility) {
+    private TransitStopFacility projectedStop(TransitStopFacility facility, CrsUtils.Projector projector) {
         Object lon = facility.getAttributes().getAttribute("gtfs:lon");
         Object lat = facility.getAttributes().getAttribute("gtfs:lat");
-        if (lon == null || lat == null) return facility;
-
-        // When the facility already has projected coordinates matching the network,
-        // return as-is. Otherwise project using the facility's own WGS84 as reference
-        // (this yields (0,0); in a real deployment the caller passes projected coords).
+        if (lon == null || lat == null) {
+            return facility;
+        }
         double stopLon = ((Number) lon).doubleValue();
         double stopLat = ((Number) lat).doubleValue();
-        // If the facility's current coords are clearly not WGS84 (i.e., already projected),
-        // trust them. Heuristic: WGS84 lon/lat are in [-180,180]/[-90,90].
-        double cx = facility.getCoord().getX();
-        double cy = facility.getCoord().getY();
-        if (Math.abs(cx) <= 180 && Math.abs(cy) <= 90) {
-            // Looks like WGS84 — project relative to self (yields 0,0)
-            Coord projected = CrsUtils.wgs84ToProjected(stopLon, stopLat, stopLon, stopLat);
-            return new TransitStopFacility(facility.getId(), projected, facility.isBlockingLane());
-        }
-        // Already projected — use as-is
-        return facility;
+        Coord projected = projector.project(stopLon, stopLat);
+        return new TransitStopFacility(facility.getId(), projected, facility.isBlockingLane());
     }
 
     private void rewireRouteStops(TransitRoute route, List<TransitRouteStop> newStops) {
-        // Child facilities are added to the schedule; the original route stops
-        // remain as the logical stop references. The child stops carry the
-        // physical link assignment via their linkId attribute.
+        // Review #2: actually replace the route's stop references with the child-facility versions so
+        // route-specific (parent, link) assignments are represented in the TransitRouteStop list.
+        route.setStops(newStops);
     }
 }

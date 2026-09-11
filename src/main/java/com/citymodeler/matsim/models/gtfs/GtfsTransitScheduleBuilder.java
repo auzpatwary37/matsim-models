@@ -82,19 +82,20 @@ public final class GtfsTransitScheduleBuilder {
                     if (sb.length() > 0) sb.append('|');
                     sb.append(feed.prefixedStopId(st.stopId()));
                 }
-                // Include offset vector in grouping key so trips with different
-                // run/dwell times get separate MATSim routes
+                // Review #8/#9: normalize offsets once (linearly interpolating non-timepoints) and
+                // use that same vector for BOTH the grouping key and the route stops. The key uses the
+                // exact double values (not Math.round) so sub-second-different profiles are not
+                // silently coalesced.
+                List<GtfsDepartureBuilder.StopOffsets> offsets = normalizedOffsets(stopTimes);
                 StringBuilder offsetSb = new StringBuilder();
-                double base = stopTimes.get(0).departureTime() != null ? stopTimes.get(0).departureTime() : 0;
-                for (GtfsStopTime st : stopTimes) {
+                for (GtfsDepartureBuilder.StopOffsets so : offsets) {
                     if (offsetSb.length() > 0) offsetSb.append('|');
-                    double arrOff = (st.arrivalTime() != null ? st.arrivalTime() : base) - base;
-                    double depOff = (st.departureTime() != null ? st.departureTime() : base) - base;
-                    offsetSb.append(Math.round(arrOff)).append(',').append(Math.round(depOff));
+                    offsetSb.append(Double.toString(so.arrivalOffset()))
+                            .append(',').append(Double.toString(so.departureOffset()));
                 }
                 String groupKey = trip.routeId() + "|" + trip.effectiveDirectionId() + "|" + sb + "|" + offsetSb;
                 groups.computeIfAbsent(groupKey, k -> new ArrayList<>())
-                        .add(new GroupEntry(feed, trip, route, mode, stopTimes));
+                        .add(new GroupEntry(feed, trip, route, mode, stopTimes, offsets));
             }
         }
 
@@ -125,23 +126,39 @@ public final class GtfsTransitScheduleBuilder {
             transitRoute.setTransportMode(mode);
             transitRoute.setDescription(route.shortName() != null ? route.shortName() : route.id());
 
-            // Add stops
+            // Add stops using the SAME normalized (interpolated) offset vector that formed the
+            // grouping key (review #8), so the written TransitRoute reflects the interpolated
+            // timing profile rather than the raw, partially-missing stop_times values.
             List<GtfsStopTime> refStopTimes = first.stopTimes();
-            double base = 0;
-            if (!refStopTimes.isEmpty() && refStopTimes.get(0).departureTime() != null) {
-                base = refStopTimes.get(0).departureTime();
-            }
-            for (GtfsStopTime st : refStopTimes) {
+            List<GtfsDepartureBuilder.StopOffsets> offsets = first.offsets();
+            for (int i = 0; i < refStopTimes.size(); i++) {
+                GtfsStopTime st = refStopTimes.get(i);
                 GtfsStop stop = feed.stops().get(st.stopId());
                 if (stop == null || !stop.hasCoordinates() || stop.locationType() != 0) continue;
-                double arrOff = (st.arrivalTime() != null ? st.arrivalTime() : base) - base;
-                double depOff = (st.departureTime() != null ? st.departureTime() : base) - base;
+                GtfsDepartureBuilder.StopOffsets so = offsets.get(i);
                 String facId = feed.prefixedStopId(st.stopId());
                 TransitRouteStop trs = new TransitRouteStop(
                         Id.create(facId, TransitStopFacility.class),
-                        arrOff, depOff,
-                        Math.abs(depOff - arrOff) > 0.5);
+                        so.arrivalOffset(), so.departureOffset(), so.awaitDeparture());
                 transitRoute.addStop(trs);
+            }
+
+            // Review #10: exact_times. We deliberately expand both exact (1) and approximate (0)
+            // frequency service identically into headway departures; the original distinction is
+            // preserved in route metadata so downstream consumers are not misled. Overlapping
+            // frequency rows for a trip are warned about per the GTFS contract.
+            for (GroupEntry ge : groupEntries) {
+                List<GtfsFrequencyRow> geFreqs = ge.feed().frequencyRows().stream()
+                        .filter(f -> ge.trip().id().equals(f.tripId()))
+                        .toList();
+                validateFrequencyOverlaps(ge.feed().feedId(), ge.trip().id(), geFreqs, warnings);
+            }
+            List<GtfsFrequencyRow> refFreqs = feed.frequencyRows().stream()
+                    .filter(f -> first.trip().id().equals(f.tripId()))
+                    .toList();
+            if (!refFreqs.isEmpty()) {
+                int strictestExact = refFreqs.stream().mapToInt(GtfsFrequencyRow::exactTimes).min().orElse(1);
+                transitRoute.getAttributes().putAttribute("gtfs:exact_times", strictestExact);
             }
 
             // Add departures
@@ -175,6 +192,47 @@ public final class GtfsTransitScheduleBuilder {
     }
 
     private record GroupEntry(GtfsFeed feed, GtfsTrip trip, GtfsRoute route, String mode,
-                               List<GtfsStopTime> stopTimes) {
+                               List<GtfsStopTime> stopTimes,
+                               List<GtfsDepartureBuilder.StopOffsets> offsets) {
+    }
+
+    /**
+     * Normalized offset vector for a trip's stop_times: linearly interpolates non-timepoint stops and
+     * bases all offsets on the first departure. Falls back to raw offsets if interpolation is
+     * ill-formed for a malformed trip.
+     */
+    private static List<GtfsDepartureBuilder.StopOffsets> normalizedOffsets(List<GtfsStopTime> stopTimes) {
+        double base = stopTimes.get(0).departureTime() != null ? stopTimes.get(0).departureTime() : 0;
+        try {
+            return GtfsDepartureBuilder.interpolateOffsets(stopTimes, base);
+        } catch (RuntimeException e) {
+            List<GtfsDepartureBuilder.StopOffsets> raw = new ArrayList<>();
+            for (GtfsStopTime st : stopTimes) {
+                double arrOff = (st.arrivalTime() != null ? st.arrivalTime() : base) - base;
+                double depOff = (st.departureTime() != null ? st.departureTime() : base) - base;
+                raw.add(new GtfsDepartureBuilder.StopOffsets(arrOff, depOff,
+                        Math.abs(depOff - arrOff) > 0.5));
+            }
+            return raw;
+        }
+    }
+
+    /** Review #10: GTFS frequencies.txt rows for a trip must not overlap; warn when they do. */
+    private static void validateFrequencyOverlaps(String feedId, String tripId,
+                                                    List<GtfsFrequencyRow> freqs,
+                                                    List<String> warnings) {
+        for (int i = 0; i < freqs.size(); i++) {
+            for (int j = i + 1; j < freqs.size(); j++) {
+                GtfsFrequencyRow a = freqs.get(i);
+                GtfsFrequencyRow b = freqs.get(j);
+                boolean overlap = Math.max(a.startTime(), b.startTime())
+                        < Math.min(a.endTime(), b.endTime());
+                if (overlap) {
+                    warnings.add(feedId + ": overlapping frequency rows for trip " + tripId
+                            + " [" + a.startTime() + "," + a.endTime() + "] and ["
+                            + b.startTime() + "," + b.endTime() + "]");
+                }
+            }
+        }
     }
 }
