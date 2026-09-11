@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.osm.network;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -324,12 +325,185 @@ public final class OsmSignalAwareSimplifier {
         return count;
     }
 
-    // Populated by the signalized-junction step (Task 3).
+    /** Enumerate signalized junctions and their controlled movements from the collapsed network. */
     private static List<JunctionSignalDescriptor> buildJunctions(
             Network network, Map<String, OsmNodeRecord> nodes,
             Map<String, OsmNodeClassification> classification,
             TurnRestrictionIndex index, OsmSimplifyOptions options) {
-        return List.of();
+
+        List<String> signalized = new ArrayList<>();
+        for (String osmId : new TreeSet<>(classification.keySet())) {
+            OsmNodeClassification c = classification.get(osmId);
+            if (c.keep() && c.reasons().contains(OsmNodeReason.SIGNALIZED) && nodes.containsKey(osmId)) {
+                signalized.add(osmId);
+            }
+        }
+
+        List<List<String>> clusters =
+                cluster(signalized, nodes, options.junctionClusterDistanceMeters());
+
+        List<JunctionSignalDescriptor> result = new ArrayList<>();
+        for (List<String> cluster : clusters) {
+            result.add(buildOneJunction(network, nodes, cluster.get(0), cluster, index));
+        }
+        return result;
+    }
+
+    /** Greedy proximity clustering of signalized nodes; each group sorted, groups ordered by min id. */
+    private static List<List<String>> cluster(List<String> ids, Map<String, OsmNodeRecord> nodes,
+                                              double threshold) {
+        int n = ids.size();
+        int[] parent = new int[n];
+        for (int i = 0; i < n; i++) {
+            parent[i] = i;
+        }
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                if (distance(nodes, ids.get(i), ids.get(j)) <= threshold) {
+                    union(parent, i, j);
+                }
+            }
+        }
+        Map<Integer, List<String>> byRoot = new TreeMap<>();
+        for (int i = 0; i < n; i++) {
+            byRoot.computeIfAbsent(find(parent, i), k -> new ArrayList<>()).add(ids.get(i));
+        }
+        List<List<String>> out = new ArrayList<>();
+        for (List<String> grp : byRoot.values()) {
+            grp.sort(String::compareTo);
+            out.add(grp);
+        }
+        out.sort(Comparator.comparing(grp -> grp.get(0)));
+        return out;
+    }
+
+    private static int find(int[] p, int i) {
+        while (p[i] != i) {
+            p[i] = p[p[i]];
+            i = p[i];
+        }
+        return i;
+    }
+
+    private static void union(int[] p, int a, int b) {
+        p[find(p, a)] = find(p, b);
+    }
+
+    private static double distance(Map<String, OsmNodeRecord> nodes, String a, String b) {
+        OsmNodeRecord ra = nodes.get(a);
+        OsmNodeRecord rb = nodes.get(b);
+        double dx = ra.projectedCoord().getX() - rb.projectedCoord().getX();
+        double dy = ra.projectedCoord().getY() - rb.projectedCoord().getY();
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    private static JunctionSignalDescriptor buildOneJunction(
+            Network network, Map<String, OsmNodeRecord> nodes, String primary,
+            List<String> cluster, TurnRestrictionIndex index) {
+
+        Set<String> clusterNetNodeIds = new TreeSet<>();
+        for (String osmId : cluster) {
+            clusterNetNodeIds.add(OsmGeneratedIds.nodeId(osmId));
+        }
+
+        List<Link> incoming = new ArrayList<>();
+        List<Link> outgoing = new ArrayList<>();
+        for (Link link : network.getLinks().values()) {
+            if (clusterNetNodeIds.contains(link.getToNode().getId().toString())) {
+                incoming.add(link);
+            }
+            if (clusterNetNodeIds.contains(link.getFromNode().getId().toString())) {
+                outgoing.add(link);
+            }
+        }
+        incoming.sort(Comparator.comparing(l -> l.getId().toString()));
+        outgoing.sort(Comparator.comparing(l -> l.getId().toString()));
+
+        List<String> inIds = incoming.stream().map(l -> l.getId().toString()).toList();
+        List<String> outIds = outgoing.stream().map(l -> l.getId().toString()).toList();
+
+        List<SignalizedMovement> movements = new ArrayList<>();
+        for (Link in : incoming) {
+            for (Link out : outgoing) {
+                if (in.getId().equals(out.getId())) {
+                    continue;
+                }
+                Set<String> controlled = new TreeSet<>(in.getAllowedModes());
+                controlled.retainAll(out.getAllowedModes());
+                if (controlled.isEmpty()) {
+                    continue;
+                }
+                Set<String> restricted = new TreeSet<>();
+                if (index != null) {
+                    for (String mode : controlled) {
+                        if (index.isDisallowed(mode, in.getId().toString(), out.getId().toString())) {
+                            restricted.add(mode);
+                        }
+                    }
+                }
+                movements.add(new SignalizedMovement(in.getId().toString(), out.getId().toString(),
+                        turnType(in, out), controlled, restricted));
+            }
+        }
+
+        return new JunctionSignalDescriptor(
+                "signal_" + primary, primary, cluster, true, confidenceFor(nodes.get(primary)),
+                provenanceFor(primary, cluster, nodes.get(primary)), inIds, outIds, movements);
+    }
+
+    private static int confidenceFor(OsmNodeRecord rec) {
+        if (rec == null) {
+            return 1;
+        }
+        String ts = rec.tags().get("traffic_signals");
+        if (ts != null && !"no".equals(ts) && !"0".equals(ts) && !"none".equals(ts)) {
+            return 3;
+        }
+        if (rec.tags().has("highway", "traffic_signals")) {
+            return 2;
+        }
+        return 1;
+    }
+
+    private static String provenanceFor(String primary, List<String> cluster, OsmNodeRecord rec) {
+        StringBuilder sb = new StringBuilder("osm_node=").append(primary)
+                .append(";clusterSize=").append(cluster.size()).append(";tag=");
+        if (rec == null) {
+            sb.append("none");
+        } else if (rec.tags().get("traffic_signals") != null) {
+            sb.append("traffic_signals=").append(rec.tags().get("traffic_signals"));
+        } else if (rec.tags().has("highway", "traffic_signals")) {
+            sb.append("highway=traffic_signals");
+        } else {
+            sb.append("inferred");
+        }
+        return sb.toString();
+    }
+
+    /** Best-effort turn classification from arrival and departure geometry. */
+    private static OsmTurnType turnType(Link in, Link out) {
+        Coord prev = in.getFromNode().getCoord();
+        Coord cur = in.getToNode().getCoord();
+        Coord dep = out.getFromNode().getCoord();
+        Coord next = out.getToNode().getCoord();
+        double ix = cur.getX() - prev.getX();
+        double iy = cur.getY() - prev.getY();
+        double ox = next.getX() - dep.getX();
+        double oy = next.getY() - dep.getY();
+        double im = Math.hypot(ix, iy);
+        double om = Math.hypot(ox, oy);
+        if (im < 1e-6 || om < 1e-6) {
+            return OsmTurnType.UNKNOWN;
+        }
+        double cos = (ix * ox + iy * oy) / (im * om);
+        double cross = ix * oy - iy * ox;
+        if (cos < -0.98) {
+            return OsmTurnType.U_TURN;
+        }
+        if (Math.abs(cross) < 0.2 * im * om) {
+            return OsmTurnType.THROUGH;
+        }
+        return cross > 0 ? OsmTurnType.LEFT : OsmTurnType.RIGHT;
     }
 
     // Populated by the diagnostics step (Task 4).
