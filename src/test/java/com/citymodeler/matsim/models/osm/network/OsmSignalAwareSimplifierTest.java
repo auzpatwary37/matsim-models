@@ -24,6 +24,12 @@ final class OsmSignalAwareSimplifierTest {
         return OsmSignalAwareSimplifier.simplify(mat, r, cfg, OsmSimplifyOptions.defaults());
     }
 
+    private static OsmSimplifiedNetwork simplify(OsmImportResult r) {
+        OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
+        OsmNetworkBuildResult mat = SignalReadyFixtures.materialize(r, cfg);
+        return OsmSignalAwareSimplifier.simplify(mat, r, cfg, OsmSimplifyOptions.defaults());
+    }
+
     @Test
     void collapsesGeometryOnlyNodesAndKeepsSignalizedAndEndpoints() {
         OsmSimplifiedNetwork s = simplifyCrossroads();
@@ -63,5 +69,47 @@ final class OsmSignalAwareSimplifierTest {
         OsmSimplifiedNetwork b = simplifyCrossroads();
         assertEquals(a.network().getLinks().keySet(), b.network().getLinks().keySet());
         assertEquals(a.collapsedLinksByLinkId().keySet(), b.collapsedLinksByLinkId().keySet());
+    }
+
+    /** Review: repeated interior nodes must not corrupt positional source-segment provenance. */
+    @Test
+    void repeatedNodeWayKeepsPositionalSourceSegments() {
+        OsmSimplifiedNetwork s = simplify(SignalReadyFixtures.wayWithRepeatedNode());
+        OsmCollapsedLink cl = s.collapsedLink("sim_50_f_P0_P3");
+        assertNotNull(cl);
+        assertEquals(4, cl.segmentCount());
+        List<Integer> segs = cl.sourceSegments().stream().map(OsmLinkRef::segmentIndex).toList();
+        assertEquals(List.of(0, 1, 2, 3), segs);
+        assertTrue(cl.sourceSegments().stream().allMatch(OsmLinkRef::forward));
+    }
+
+    /** Review: a degree-2 node between two adjacent ways with differing lanes must survive. */
+    @Test
+    void semanticBoundaryNodeSurvivesBetweenAdjacentWays() {
+        OsmSimplifiedNetwork s = simplify(SignalReadyFixtures.semanticBoundaryNode());
+        var net = s.network();
+        assertTrue(net.getNodes().containsKey(Id.create("osm_node_M", Node.class)));
+        Link left = net.getLinks().get(Id.create("sim_30_f_L_M", Link.class));
+        Link right = net.getLinks().get(Id.create("sim_31_f_M_R", Link.class));
+        assertNotNull(left);
+        assertNotNull(right);
+        assertEquals("2", left.getAttributes().getAttribute("osm:tag:lanes"));
+        assertEquals("4", right.getAttributes().getAttribute("osm:tag:lanes"));
+    }
+
+    /** Review: carried-over lane tags must be explicitly marked raw whole-way provenance. */
+    @Test
+    void copiedLaneTagsAreMarkedRawWholeWayProvenance() {
+        OsmSimplifiedNetwork s = simplify(SignalReadyFixtures.crossroadsWithTurnLanes());
+        Link withLanes = s.network().getLinks().get(Id.create("sim_10_f_W_N", Link.class));
+        assertNotNull(withLanes);
+        assertEquals("2", withLanes.getAttributes().getAttribute("osm:tag:lanes"));
+        assertEquals("through|left", withLanes.getAttributes().getAttribute("osm:tag:turn:lanes"));
+        assertEquals("raw-source", withLanes.getAttributes().getAttribute("osm:laneTags.scope"));
+        assertEquals("whole-way", withLanes.getAttributes().getAttribute("osm:laneTags.applicability"));
+
+        Link noLanes = s.network().getLinks().get(Id.create("sim_20_f_N_E", Link.class));
+        assertNotNull(noLanes);
+        assertEquals(null, noLanes.getAttributes().getAttribute("osm:laneTags.scope"));
     }
 }

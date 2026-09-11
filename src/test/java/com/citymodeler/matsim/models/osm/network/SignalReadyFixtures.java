@@ -111,4 +111,126 @@ final class SignalReadyFixtures {
 
         return result(nodes, ways, relations);
     }
+
+    /**
+     * Two DISTINCT signalized intersections connected only by a normal {@code residential} street
+     * of length 25 (within a 30 m threshold). Review regression: a distance-only clusterer would
+     * merge them; the topology-gated one must not, because the connector is not {@code highway=link}.
+     */
+    static OsmImportResult twoSeparateIntersections() {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("S1", node("S1", 100, 100, "highway", "traffic_signals"));
+        nodes.put("S2", node("S2", 125, 100, "highway", "traffic_signals"));
+        nodes.put("a1w", node("a1w", 70, 100));
+        nodes.put("a1n", node("a1n", 100, 140));
+        nodes.put("a2e", node("a2e", 155, 100));
+        nodes.put("a2s", node("a2s", 125, 70));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("10", way("10", List.of("a1w", "S1"), "highway", "residential"));
+        ways.put("11", way("11", List.of("a1n", "S1"), "highway", "residential"));
+        ways.put("20", way("20", List.of("S2", "a2e"), "highway", "residential"));
+        ways.put("21", way("21", List.of("a2s", "S2"), "highway", "residential"));
+        // Normal street joining the two signalized nodes; 25 m < 30 m threshold.
+        ways.put("12", way("12", List.of("S1", "S2"), "highway", "residential"));
+
+        return result(nodes, ways);
+    }
+
+    /**
+     * Three signalized intersections in a row, A-B-C, spaced 50 m apart (A-C = 100 m). Legs are
+     * normal streets. Review regression: transitive distance union-find would glue A-C together via
+     * B even though A-C exceeds the threshold; the topology-gated cluser must keep all three apart.
+     */
+    static OsmImportResult threeSignalsInARow() {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("A", node("A", 100, 100, "highway", "traffic_signals"));
+        nodes.put("B", node("B", 150, 100, "highway", "traffic_signals"));
+        nodes.put("C", node("C", 200, 100, "highway", "traffic_signals"));
+        nodes.put("an", node("an", 100, 140));
+        nodes.put("bn", node("bn", 150, 140));
+        nodes.put("cn", node("cn", 200, 140));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("10", way("10", List.of("an", "A"), "highway", "residential"));
+        ways.put("11", way("11", List.of("B", "bn"), "highway", "residential"));
+        ways.put("12", way("12", List.of("C", "cn"), "highway", "residential"));
+        ways.put("21", way("21", List.of("A", "B"), "highway", "residential"));
+        ways.put("22", way("22", List.of("B", "C"), "highway", "residential"));
+
+        return result(nodes, ways);
+    }
+
+    /**
+     * A single WIDE intersection whose two signal corners A and B are joined by a junction-internal
+     * {@code highway=link} road. The arms are ordinary streets. Expected: one junction containing
+     * both A and B, resolvable from either member.
+     */
+    static OsmImportResult oneWideIntersection(boolean internalOneway) {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("A", node("A", 100, 100, "highway", "traffic_signals"));
+        nodes.put("B", node("B", 130, 100, "highway", "traffic_signals"));
+        nodes.put("an", node("an", 100, 140));
+        nodes.put("aw", node("aw", 60, 100));
+        nodes.put("bs", node("bs", 130, 60));
+        nodes.put("be", node("be", 170, 100));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("10", way("10", List.of("an", "A"), "highway", "residential"));
+        ways.put("11", way("11", List.of("aw", "A"), "highway", "residential"));
+        ways.put("12", way("12", List.of("B", "bs"), "highway", "residential"));
+        ways.put("13", way("13", List.of("B", "be"), "highway", "residential"));
+        if (internalOneway) {
+            ways.put("90", way("90", List.of("A", "B"), "highway", "link", "oneway", "yes"));
+        } else {
+            ways.put("90", way("90", List.of("A", "B"), "highway", "link"));
+        }
+
+        return result(nodes, ways);
+    }
+
+    /** Wide intersection with a bidirectional internal {@code highway=link} road. */
+    static OsmImportResult oneWideIntersection() {
+        return oneWideIntersection(false);
+    }
+
+    /** Wide intersection with a one-way (A -> B) internal {@code highway=link} road. */
+    static OsmImportResult oneWideIntersectionOneway() {
+        return oneWideIntersection(true);
+    }
+
+    /**
+     * A single residential way with a repeated interior node (P1 at positions 1 and 3). Only the two
+     * endpoints are kept, so the whole span collapses to one link whose source-segment provenance
+     * must be positional (segments 0,1,2,3 forward) rather than corrupted by id -> position lookup.
+     */
+    static OsmImportResult wayWithRepeatedNode() {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("P0", node("P0", 0, 0));
+        nodes.put("P1", node("P1", 10, 0));
+        nodes.put("P2", node("P2", 20, 10));
+        nodes.put("P3", node("P3", 30, 0));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("50", way("50", List.of("P0", "P1", "P2", "P1", "P3"), "highway", "residential"));
+
+        return result(nodes, ways);
+    }
+
+    /**
+     * Two adjacent collinear streets meeting at a degree-2 boundary node M with DIFFERENT lane data.
+     * M must survive (shared by multiple ways) so the two links keep their distinct lane semantics.
+     */
+    static OsmImportResult semanticBoundaryNode() {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("L", node("L", 0, 0));
+        nodes.put("M", node("M", 10, 0));
+        nodes.put("R", node("R", 20, 0));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("30", way("30", List.of("L", "M"), "highway", "residential", "lanes", "2"));
+        ways.put("31", way("31", List.of("M", "R"), "highway", "residential", "lanes", "4"));
+
+        return result(nodes, ways);
+    }
 }

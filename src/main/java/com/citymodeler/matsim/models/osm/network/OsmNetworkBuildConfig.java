@@ -94,6 +94,11 @@ public final class OsmNetworkBuildConfig {
                 Set.of("car"), 1.0, 8.33, 300.0, false, false));
         rules.put("highway:service", new OsmWayRule("highway", "service", 9,
                 Set.of("car"), 1.0, 11.11, 600.0, false, false));
+        // Narrow junction/access roads. Included so that the internal box roads of a
+        // multi-node intersection are materialised; the signal-aware simplifier relies on
+        // highway=link as the canonical marker of "inside the same intersection box".
+        rules.put("highway:link", new OsmWayRule("highway", "link", 9,
+                Set.of("car"), 1.0, 11.11, 600.0, false, false));
         rules.put("highway:busway", new OsmWayRule("highway", "busway", 3,
                 Set.of("bus", "pt"), 1.0, 13.89, 600.0, false, true));
         rules.put("railway:rail", new OsmWayRule("railway", "rail", 1,

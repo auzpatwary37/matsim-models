@@ -1,12 +1,16 @@
 package com.citymodeler.matsim.models.osm.network;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -120,10 +124,14 @@ public final class OsmSignalAwareSimplifier {
         issues.addAll(restrictionRecord.issues());
 
         List<JunctionSignalDescriptor> junctions = buildJunctions(
-                network, nodes, classification, restrictionRecord.index(), options);
+                network, nodes, importResult.ways(), classification, restrictionRecord.index(), options);
         Map<String, JunctionSignalDescriptor> junctionsByNodeId = new TreeMap<>();
         for (JunctionSignalDescriptor j : junctions) {
-            junctionsByNodeId.put(OsmGeneratedIds.nodeId(j.primaryOsmNodeId()), j);
+            // Index every cluster member, not just the primary, so any member node
+            // resolves back to its (possibly multi-node) junction.
+            for (String osmId : j.osmNodeIds()) {
+                junctionsByNodeId.put(OsmGeneratedIds.nodeId(osmId), j);
+            }
         }
 
         int collapsed = 0;
@@ -178,11 +186,7 @@ public final class OsmSignalAwareSimplifier {
             return;
         }
 
-        List<String> fwd = way.nodeRefs();
-        Map<String, Integer> posOf = new HashMap<>();
-        for (int i = 0; i < fwd.size(); i++) {
-            posOf.put(fwd.get(i), i);
-        }
+        int m = way.nodeRefs().size();
 
         List<Integer> kept = new ArrayList<>();
         for (int i = 0; i < n; i++) {
@@ -237,12 +241,11 @@ public final class OsmSignalAwareSimplifier {
 
             List<OsmLinkRef> sourceSegments = new ArrayList<>();
             for (int i = p; i < q; i++) {
-                String a = ordered.get(i);
-                String b = ordered.get(i + 1);
-                int pa = posOf.get(a);
-                int pb = posOf.get(b);
-                int seg = Math.min(pa, pb);
-                boolean segFwd = pb > pa;
+                // Position-based forward index (robust to repeated/closed-node ways).
+                int ia = forward ? i : (m - 1 - i);
+                int ib = forward ? (i + 1) : (m - 2 - i);
+                int seg = Math.min(ia, ib);
+                boolean segFwd = ib > ia;
                 sourceSegments.add(new OsmLinkRef(
                         OsmGeneratedIds.linkId(way.id(), seg, segFwd), way.id(), seg, segFwd));
             }
@@ -270,16 +273,30 @@ public final class OsmSignalAwareSimplifier {
         }
     }
 
-    /** Always copy lane-relevant way tags onto the merged link so lane data survives simplification. */
+    /**
+     * Always copy lane-relevant way tags onto the merged link so lane data survives simplification.
+     *
+     * <p>Review: these values are carried through as <em>raw whole-way OSM source data</em>. A single
+     * merged link can span several physical spans and directions, so the original way tags do NOT
+     * describe any particular approach or span of the merged link. We therefore annotate the link
+     * with an explicit scope/applicability marker so downstream signal-IO consumers treat them as
+     * raw provenance, not as resolved per-approach / per-span lane assignments.
+     */
     private static void copyLaneTags(Link link, OsmWayRecord way) {
         String[] laneKeys = {"lanes", "lanes:forward", "lanes:backward",
                 "turn:lanes", "turn:lanes:forward", "turn:lanes:backward",
                 "bus:lanes", "psv:lanes", "taxi:lanes", "bicycle:lanes"};
+        boolean any = false;
         for (String key : laneKeys) {
             String value = way.tags().get(key);
             if (value != null) {
                 link.getAttributes().putAttribute("osm:tag:" + key, value);
+                any = true;
             }
+        }
+        if (any) {
+            link.getAttributes().putAttribute("osm:laneTags.scope", "raw-source");
+            link.getAttributes().putAttribute("osm:laneTags.applicability", "whole-way");
         }
     }
 
@@ -345,7 +362,7 @@ public final class OsmSignalAwareSimplifier {
 
     /** Enumerate signalized junctions and their controlled movements from the collapsed network. */
     private static List<JunctionSignalDescriptor> buildJunctions(
-            Network network, Map<String, OsmNodeRecord> nodes,
+            Network network, Map<String, OsmNodeRecord> nodes, Map<String, OsmWayRecord> ways,
             Map<String, OsmNodeClassification> classification,
             TurnRestrictionIndex index, OsmSimplifyOptions options) {
 
@@ -357,8 +374,9 @@ public final class OsmSignalAwareSimplifier {
             }
         }
 
-        List<List<String>> clusters =
-                cluster(signalized, nodes, options.junctionClusterDistanceMeters());
+        List<List<String>> clusters = cluster(
+                signalized, network, ways,
+                options.junctionClusterDistanceMeters(), options.maxClusterHops());
 
         List<JunctionSignalDescriptor> result = new ArrayList<>();
         for (List<String> cluster : clusters) {
@@ -367,26 +385,75 @@ public final class OsmSignalAwareSimplifier {
         return result;
     }
 
-    /** Greedy proximity clustering of signalized nodes; each group sorted, groups ordered by min id. */
-    private static List<List<String>> cluster(List<String> ids, Map<String, OsmNodeRecord> nodes,
-                                              double threshold) {
-        int n = ids.size();
+    /**
+     * Topology-gated clustering of signalized nodes.
+     *
+     * <p>With a non-positive threshold (the default) no clustering happens and every signalized
+     * node is its own junction. With a positive threshold, two signalized nodes cluster only if a
+     * plausible path of <em>junction-internal</em> roads connects them, capped by
+     * {@code maxHops} and total length, and never transiting another signalized node.
+     *
+     * <p>Review: raw Euclidean proximity plus transitive union-find merged distinct intersections.
+     * Here the connectivity basis is topological and OSM-idiomatic: only {@code highway=link}
+     * (intersection-box) roads connect two signalized nodes into one junction. A normal street
+     * between two separate intersections is therefore never a clustering edge, and a signalized
+     * node is never traversed, so A-B-C chaining across separate intersections is impossible.
+     */
+    private static List<List<String>> cluster(List<String> osmIds, Network network,
+                                              Map<String, OsmWayRecord> ways,
+                                              double threshold, int maxHops) {
+        int n = osmIds.size();
+        List<List<String>> out = new ArrayList<>();
+        if (threshold <= 0.0) {
+            for (String osmId : osmIds) {
+                List<String> singleton = new ArrayList<>();
+                singleton.add(osmId);
+                out.add(singleton);
+            }
+            return out;
+        }
+
+        // Directed adjacency restricted to junction-internal (highway=link) roads, deterministic.
+        Map<String, List<String>> adj = new TreeMap<>();
+        Map<String, Double> edgeLen = new HashMap<>();
+        for (Link link : network.getLinks().values()) {
+            if (!isInternalJunctionLink(link, ways)) {
+                continue;
+            }
+            String a = link.getFromNode().getId().toString();
+            String b = link.getToNode().getId().toString();
+            if (a.equals(b)) {
+                continue;
+            }
+            adj.computeIfAbsent(a, k -> new ArrayList<>()).add(b);
+            edgeLen.put(a + "|" + b, link.getLength());
+        }
+        for (List<String> v : adj.values()) {
+            v.sort(String::compareTo);
+        }
+
+        Set<String> signalNetIds = new HashSet<>();
+        for (String osmId : osmIds) {
+            signalNetIds.add(OsmGeneratedIds.nodeId(osmId));
+        }
+
         int[] parent = new int[n];
         for (int i = 0; i < n; i++) {
             parent[i] = i;
         }
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
-                if (distance(nodes, ids.get(i), ids.get(j)) <= threshold) {
+                String a = OsmGeneratedIds.nodeId(osmIds.get(i));
+                String b = OsmGeneratedIds.nodeId(osmIds.get(j));
+                if (connectedWithinJunctionBox(a, b, signalNetIds, adj, edgeLen, threshold, maxHops)) {
                     union(parent, i, j);
                 }
             }
         }
         Map<Integer, List<String>> byRoot = new TreeMap<>();
         for (int i = 0; i < n; i++) {
-            byRoot.computeIfAbsent(find(parent, i), k -> new ArrayList<>()).add(ids.get(i));
+            byRoot.computeIfAbsent(find(parent, i), k -> new ArrayList<>()).add(osmIds.get(i));
         }
-        List<List<String>> out = new ArrayList<>();
         for (List<String> grp : byRoot.values()) {
             grp.sort(String::compareTo);
             out.add(grp);
@@ -407,12 +474,62 @@ public final class OsmSignalAwareSimplifier {
         p[find(p, a)] = find(p, b);
     }
 
-    private static double distance(Map<String, OsmNodeRecord> nodes, String a, String b) {
-        OsmNodeRecord ra = nodes.get(a);
-        OsmNodeRecord rb = nodes.get(b);
-        double dx = ra.projectedCoord().getX() - rb.projectedCoord().getX();
-        double dy = ra.projectedCoord().getY() - rb.projectedCoord().getY();
-        return Math.sqrt(dx * dx + dy * dy);
+    /**
+     * True when the link's source OSM way is a {@code highway=link} road, i.e. an intersection-box
+     * internal road. Such links are the only ones treated as "inside the same junction".
+     */
+    private static boolean isInternalJunctionLink(Link link, Map<String, OsmWayRecord> ways) {
+        Object wayId = link.getAttributes().getAttribute("osm:wayId");
+        if (wayId == null) {
+            return false;
+        }
+        OsmWayRecord way = ways.get(String.valueOf(wayId));
+        return way != null && "link".equals(way.tags().get("highway"));
+    }
+
+    /**
+     * True if a path of total length &le; {@code threshold} and at most {@code maxHops} links
+     * connects {@code a} to {@code b} without transiting any signalized node other than {@code b}.
+     * Models "the same intersection box" rather than raw Euclidean proximity.
+     */
+    private static boolean connectedWithinJunctionBox(
+            String a, String b, Set<String> signalNetIds,
+            Map<String, List<String>> adj, Map<String, Double> edgeLen,
+            double threshold, int maxHops) {
+        if (a.equals(b)) {
+            return true;
+        }
+        Map<String, double[]> best = new HashMap<>();
+        PriorityQueue<String> pq = new PriorityQueue<>((x, y) -> {
+            int d = Double.compare(best.get(x)[0], best.get(y)[0]);
+            return d != 0 ? d : x.compareTo(y);
+        });
+        best.put(a, new double[]{0.0, 0});
+        pq.add(a);
+        while (!pq.isEmpty()) {
+            String u = pq.poll();
+            double[] st = best.get(u);
+            for (String v : adj.getOrDefault(u, List.of())) {
+                if (v.equals(a)) {
+                    continue;
+                }
+                // May only pass THROUGH non-signalized nodes; {@code b} is the sole allowed signal sink.
+                if (signalNetIds.contains(v) && !v.equals(b)) {
+                    continue;
+                }
+                double nd = st[0] + edgeLen.getOrDefault(u + "|" + v, 0.0);
+                int nh = (int) st[1] + 1;
+                if (nd > threshold || nh > maxHops) {
+                    continue;
+                }
+                double[] pv = best.get(v);
+                if (pv == null || nd < pv[0]) {
+                    best.put(v, new double[]{nd, nh});
+                    pq.add(v);
+                }
+            }
+        }
+        return best.containsKey(b);
     }
 
     private static JunctionSignalDescriptor buildOneJunction(
@@ -423,6 +540,11 @@ public final class OsmSignalAwareSimplifier {
         for (String osmId : cluster) {
             clusterNetNodeIds.add(OsmGeneratedIds.nodeId(osmId));
         }
+        Map<String, Integer> memberIdx = new HashMap<>();
+        for (int i = 0; i < cluster.size(); i++) {
+            memberIdx.put(OsmGeneratedIds.nodeId(cluster.get(i)), i);
+        }
+        boolean[][] reach = memberReachability(cluster, network);
 
         List<Link> incoming = new ArrayList<>();
         List<Link> outgoing = new ArrayList<>();
@@ -442,8 +564,16 @@ public final class OsmSignalAwareSimplifier {
 
         List<SignalizedMovement> movements = new ArrayList<>();
         for (Link in : incoming) {
+            Integer inM = memberIdx.get(in.getToNode().getId().toString());
             for (Link out : outgoing) {
                 if (in.getId().equals(out.getId())) {
+                    continue;
+                }
+                // Review: a movement is only physically valid when the departure member is
+                // reachable from the arrival member within the junction cluster. This replaces
+                // the raw Cartesian incoming x outgoing product that fabricated phantom turns.
+                Integer outM = memberIdx.get(out.getFromNode().getId().toString());
+                if (inM == null || outM == null || !reach[inM][outM]) {
                     continue;
                 }
                 Set<String> controlled = new TreeSet<>(in.getAllowedModes());
@@ -498,8 +628,59 @@ public final class OsmSignalAwareSimplifier {
         return sb.toString();
     }
 
-    /** Best-effort turn classification from arrival and departure geometry. */
+    /**
+     * Directed reachability within the cluster's induced member subgraph. {@code reach[i][j]} is
+     * true when member {@code i} can reach member {@code j} following link direction, or is the
+     * same member. Used to reject physically impossible cross-node movements.
+     */
+    private static boolean[][] memberReachability(List<String> cluster, Network network) {
+        int n = cluster.size();
+        Map<String, Integer> idx = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            idx.put(OsmGeneratedIds.nodeId(cluster.get(i)), i);
+        }
+        List<List<Integer>> adj = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            adj.add(new ArrayList<>());
+        }
+        for (Link link : network.getLinks().values()) {
+            Integer fi = idx.get(link.getFromNode().getId().toString());
+            Integer ti = idx.get(link.getToNode().getId().toString());
+            if (fi != null && ti != null && fi.intValue() != ti.intValue()) {
+                adj.get(fi).add(ti);
+            }
+        }
+        boolean[][] reach = new boolean[n][n];
+        for (int s = 0; s < n; s++) {
+            Deque<Integer> dq = new ArrayDeque<>();
+            boolean[] seen = new boolean[n];
+            dq.add(s);
+            seen[s] = true;
+            reach[s][s] = true;
+            while (!dq.isEmpty()) {
+                int u = dq.poll();
+                for (int v : adj.get(u)) {
+                    if (!seen[v]) {
+                        seen[v] = true;
+                        reach[s][v] = true;
+                        dq.add(v);
+                    }
+                }
+            }
+        }
+        return reach;
+    }
+
+    /**
+     * Best-effort turn classification from arrival and departure geometry. Review: only the two
+     * endpoint nodes are meaningful when the turn actually happens at one node; for a
+     * multi-node clustered movement the arrival and departure occur at different nodes, so we
+     * report {@code UNKNOWN} rather than a bogus angle between unrelated vectors.
+     */
     private static OsmTurnType turnType(Link in, Link out) {
+        if (!in.getToNode().getId().equals(out.getFromNode().getId())) {
+            return OsmTurnType.UNKNOWN;
+        }
         Coord prev = in.getFromNode().getCoord();
         Coord cur = in.getToNode().getCoord();
         Coord dep = out.getFromNode().getCoord();
@@ -540,8 +721,10 @@ public final class OsmSignalAwareSimplifier {
                         "Junction " + j.junctionId() + " has no outgoing links"));
             }
             for (String in : j.incomingLinks()) {
+                // An approach counts as legal if ANY outgoing movement is legal for at least one
+                // controlled mode (a bus-legal, car-restricted movement is a usable approach).
                 boolean anyLegal =
-                        j.movementsForIncoming(in).stream().anyMatch(SignalizedMovement::fullyLegal);
+                        j.movementsForIncoming(in).stream().anyMatch(SignalizedMovement::anyLegal);
                 if (!anyLegal) {
                     issues.add(issue(OsmIssueSeverity.WARNING, "approach-no-legal-outgoing",
                             "Junction " + j.junctionId() + " approach " + in
