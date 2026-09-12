@@ -307,7 +307,25 @@ final class SignalReadyFixtures {
     }
 
     /**
-     * Two adjacent collinear streets meeting at a degree-2 boundary node M with DIFFERENT lane data.
+     * Three signalized intersections A-B-C 50 m apart, connected by junction-internal link roads:
+     * A-link-B and B-link-C each qualify within a 60 m threshold, but A-link-...-C (100 m) does not.
+     * Review #1: pairwise union-find would glue all three; whole-cluster validation must keep A and
+     * C apart (A-B and B-C clusters, or singletons, but never {A,B,C}) because A-C does not qualify.
+     */
+    static OsmImportResult threeLinkedSignalsTransitiveChain() {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("A", node("A", 100, 100, "highway", "traffic_signals"));
+        nodes.put("B", node("B", 150, 100, "highway", "traffic_signals"));
+        nodes.put("C", node("C", 200, 100, "highway", "traffic_signals"));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("21", way("21", List.of("A", "B"), "highway", "link"));
+        ways.put("22", way("22", List.of("B", "C"), "highway", "link"));
+
+        return result(nodes, ways);
+    }
+
+    /** Two adjacent collinear streets meeting at a degree-2 boundary node M with DIFFERENT lane data.
      * M must survive (shared by multiple ways) so the two links keep their distinct lane semantics.
      */
     static OsmImportResult semanticBoundaryNode() {

@@ -21,6 +21,7 @@ public final class JunctionSignalDescriptor {
     private final String provenanceSummary;
     private final List<String> incomingLinks;
     private final List<String> outgoingLinks;
+    private final List<String> internalLinks;
     private final List<SignalizedMovement> movements;
 
     public JunctionSignalDescriptor(
@@ -33,6 +34,21 @@ public final class JunctionSignalDescriptor {
             List<String> incomingLinks,
             List<String> outgoingLinks,
             List<SignalizedMovement> movements) {
+        this(junctionId, primaryOsmNodeId, osmNodeIds, confirmedSignalized, signalConfidence,
+                provenanceSummary, incomingLinks, outgoingLinks, List.of(), movements);
+    }
+
+    public JunctionSignalDescriptor(
+            String junctionId,
+            String primaryOsmNodeId,
+            List<String> osmNodeIds,
+            boolean confirmedSignalized,
+            int signalConfidence,
+            String provenanceSummary,
+            List<String> incomingLinks,
+            List<String> outgoingLinks,
+            List<String> internalLinks,
+            List<SignalizedMovement> movements) {
         this.junctionId = Objects.requireNonNull(junctionId, "junctionId");
         this.primaryOsmNodeId = Objects.requireNonNull(primaryOsmNodeId, "primaryOsmNodeId");
         this.osmNodeIds = List.copyOf(new TreeSet<>(osmNodeIds));
@@ -41,6 +57,7 @@ public final class JunctionSignalDescriptor {
         this.provenanceSummary = Objects.requireNonNull(provenanceSummary, "provenanceSummary");
         this.incomingLinks = List.copyOf(new TreeSet<>(incomingLinks));
         this.outgoingLinks = List.copyOf(new TreeSet<>(outgoingLinks));
+        this.internalLinks = List.copyOf(new TreeSet<>(internalLinks));
         List<SignalizedMovement> sorted = new ArrayList<>(movements);
         sorted.sort((a, b) -> a.movementId().compareTo(b.movementId()));
         this.movements = List.copyOf(sorted);
@@ -76,6 +93,15 @@ public final class JunctionSignalDescriptor {
 
     public List<String> outgoingLinks() {
         return outgoingLinks;
+    }
+
+    /**
+     * Junction-internal connector links (the {@code *_link} roads inside the junction box). These
+     * are deliberately NOT part of {@link #incomingLinks()} / {@link #outgoingLinks()}: they carry
+     * traffic through the junction but are not signal-facing approaches or departures.
+     */
+    public List<String> internalLinks() {
+        return internalLinks;
     }
 
     public List<SignalizedMovement> movements() {

@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -374,15 +375,29 @@ public final class OsmSignalAwareSimplifier {
             }
         }
 
-        List<List<String>> clusters = cluster(
+        List<Cluster> clusters = cluster(
                 signalized, network, ways,
                 options.junctionClusterDistanceMeters(), options.maxClusterHops());
 
         List<JunctionSignalDescriptor> result = new ArrayList<>();
-        for (List<String> cluster : clusters) {
-            result.add(buildOneJunction(network, nodes, ways, cluster.get(0), cluster, index));
+        for (Cluster cluster : clusters) {
+            result.add(buildOneJunction(network, nodes, ways, cluster.members(), index,
+                    cluster.witnesses()));
         }
         return result;
+    }
+
+    /**
+     * A junction cluster plus the per-pair internal witness paths that justified its membership.
+     * Each witness is a node-id path (forward direction preserved) that movement reachability is
+     * restricted to, so movement reachability uses exactly the internal paths that clustering
+     * accepted rather than an unconstrained global BFS (Review #2).
+     */
+    record Cluster(List<String> members, List<List<String>> witnesses) {
+        Cluster {
+            members = List.copyOf(members);
+            witnesses = List.copyOf(witnesses);
+        }
     }
 
     /**
@@ -400,68 +415,166 @@ public final class OsmSignalAwareSimplifier {
      * two separate intersections is therefore never a clustering edge, and a signalized node is
      * never traversed, so A-B-C chaining across separate intersections is impossible.
      */
-    private static List<List<String>> cluster(List<String> osmIds, Network network,
-                                              Map<String, OsmWayRecord> ways,
-                                              double threshold, int maxHops) {
+    private static List<Cluster> cluster(List<String> osmIds, Network network,
+                                         Map<String, OsmWayRecord> ways,
+                                         double threshold, int maxHops) {
         int n = osmIds.size();
-        List<List<String>> out = new ArrayList<>();
+        List<Cluster> out = new ArrayList<>();
         if (threshold <= 0.0) {
             for (String osmId : osmIds) {
                 List<String> singleton = new ArrayList<>();
                 singleton.add(osmId);
-                out.add(singleton);
+                out.add(new Cluster(singleton, List.of()));
             }
             return out;
         }
 
-        // Directed adjacency over junction-internal link-road roads — the SAME basis used by movement
-        // reachability (Reviews #1/#2), so clustering and movement enumeration see one junction graph.
         Map<String, List<String>> adj = internalAdjacency(network, ways);
-        Map<String, Double> edgeLen = new HashMap<>();
-        for (Link link : network.getLinks().values()) {
-            if (!isInternalJunctionLink(link, ways)) {
-                continue;
-            }
-            String a = link.getFromNode().getId().toString();
-            String b = link.getToNode().getId().toString();
-            if (!a.equals(b)) {
-                edgeLen.put(a + "|" + b, link.getLength());
-            }
-        }
-
+        Map<String, Double> len = internalEdgeLengths(network, ways);
         Set<String> signalNetIds = new HashSet<>();
         for (String osmId : osmIds) {
             signalNetIds.add(OsmGeneratedIds.nodeId(osmId));
         }
 
-        int[] parent = new int[n];
-        for (int i = 0; i < n; i++) {
-            parent[i] = i;
-        }
+        // Candidate merge relations: an internal path (no other signal in between) of length <=
+        // threshold and <= maxHops, in each direction independently (membership is direction
+        // independent; movement direction is preserved by keeping both directed witness paths).
+        List<Edge> edges = new ArrayList<>();
+        Set<Long> qualifying = new HashSet<>();
         for (int i = 0; i < n; i++) {
             for (int j = i + 1; j < n; j++) {
                 String a = OsmGeneratedIds.nodeId(osmIds.get(i));
                 String b = OsmGeneratedIds.nodeId(osmIds.get(j));
-                // Review #3: junction MEMBERSHIP is a physical/topological relation and must not
-                // depend on which signal node sorts first. Treat internal connectivity as
-                // direction-independent (either-direction); movement LEGALITY stays directional and is
-                // handled later by memberReachability.
-                if (connectedWithinJunctionBox(a, b, signalNetIds, adj, edgeLen, threshold, maxHops)
-                        || connectedWithinJunctionBox(b, a, signalNetIds, adj, edgeLen, threshold, maxHops)) {
-                    union(parent, i, j);
+                List<String> ab = shortestInternalPath(a, b, signalNetIds, adj, len, threshold, maxHops);
+                List<String> ba = shortestInternalPath(b, a, signalNetIds, adj, len, threshold, maxHops);
+                if (ab == null && ba == null) {
+                    continue;
                 }
+                double best = Double.MAX_VALUE;
+                if (ab != null) {
+                    best = Math.min(best, pathLength(ab, len));
+                }
+                if (ba != null) {
+                    best = Math.min(best, pathLength(ba, len));
+                }
+                edges.add(new Edge(i, j, best, ab, ba));
+                qualifying.add(pair(i, j));
             }
         }
+        edges.sort(Comparator.comparingDouble(Edge::length)
+                .thenComparingInt(Edge::i).thenComparingInt(Edge::j));
+
+        // Agglomerate shortest pairs first, but a merge is accepted only when EVERY cross pair
+        // between the two components qualifies. This makes each cluster a clique of mutually
+        // qualifying members, so A-B and B-C qualifying can never glue A-C into one junction when
+        // A-C does not itself qualify (Review #1: no transitive chaining).
+        int[] parent = new int[n];
+        for (int i = 0; i < n; i++) {
+            parent[i] = i;
+        }
+        for (Edge e : edges) {
+            int ri = find(parent, e.i());
+            int rj = find(parent, e.j());
+            if (ri == rj) {
+                continue;
+            }
+            List<Integer> a = component(parent, ri, n);
+            List<Integer> b = component(parent, rj, n);
+            if (allCrossPairsQualify(a, b, qualifying) && internallyConnected(a, b, edges)) {
+                union(parent, ri, rj);
+            }
+        }
+
         Map<Integer, List<String>> byRoot = new TreeMap<>();
         for (int i = 0; i < n; i++) {
             byRoot.computeIfAbsent(find(parent, i), k -> new ArrayList<>()).add(osmIds.get(i));
         }
         for (List<String> grp : byRoot.values()) {
             grp.sort(String::compareTo);
-            out.add(grp);
+            if (grp.size() == 1) {
+                out.add(new Cluster(grp, List.of()));
+                continue;
+            }
+            Set<Integer> memberIdx = new HashSet<>();
+            for (String m : grp) {
+                memberIdx.add(osmIds.indexOf(m));
+            }
+            List<List<String>> witnesses = new ArrayList<>();
+            Set<Integer> visited = new HashSet<>();
+            Deque<Integer> dq = new ArrayDeque<>();
+            int start = memberIdx.iterator().next();
+            visited.add(start);
+            dq.add(start);
+            while (!dq.isEmpty()) {
+                int cur = dq.poll();
+                for (Edge e : edges) {
+                    int other = e.i() == cur ? e.j() : (e.j() == cur ? e.i() : -1);
+                    if (other < 0 || !memberIdx.contains(other) || visited.contains(other)) {
+                        continue;
+                    }
+                    if (e.pathForward() != null) {
+                        witnesses.add(e.pathForward());
+                    }
+                    if (e.pathBackward() != null) {
+                        witnesses.add(e.pathBackward());
+                    }
+                    visited.add(other);
+                    dq.add(other);
+                }
+            }
+            out.add(new Cluster(grp, witnesses));
         }
-        out.sort(Comparator.comparing(grp -> grp.get(0)));
+        out.sort(Comparator.comparing(c -> c.members().get(0)));
         return out;
+    }
+
+    private record Edge(int i, int j, double length, List<String> pathForward, List<String> pathBackward) { }
+
+    private static long pair(int i, int j) {
+        int lo = Math.min(i, j);
+        int hi = Math.max(i, j);
+        return ((long) lo << 32) | (hi & 0xffffffffL);
+    }
+
+    private static List<Integer> component(int[] parent, int root, int n) {
+        List<Integer> members = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            if (find(parent, i) == root) {
+                members.add(i);
+            }
+        }
+        return members;
+    }
+
+    private static boolean allCrossPairsQualify(List<Integer> a, List<Integer> b, Set<Long> qualifying) {
+        for (int x : a) {
+            for (int y : b) {
+                if (!qualifying.contains(pair(x, y))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** Sanity check that the two components are joined by at least one qualifying edge. */
+    private static boolean internallyConnected(List<Integer> a, List<Integer> b, List<Edge> edges) {
+        Set<Integer> set = new HashSet<>(a);
+        set.addAll(b);
+        for (Edge e : edges) {
+            if (set.contains(e.i()) && set.contains(e.j())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static double pathLength(List<String> path, Map<String, Double> len) {
+        double total = 0.0;
+        for (int i = 0; i + 1 < path.size(); i++) {
+            total += len.getOrDefault(path.get(i) + "|" + path.get(i + 1), 0.0);
+        }
+        return total;
     }
 
     private static int find(int[] p, int i) {
@@ -501,18 +614,21 @@ public final class OsmSignalAwareSimplifier {
     }
 
     /**
-     * True if a path of total length &le; {@code threshold} and at most {@code maxHops} links
-     * connects {@code a} to {@code b} without transiting any signalized node other than {@code b}.
-     * Models "the same intersection box" rather than raw Euclidean proximity.
+     * Shortest directed path (by internal-link length, then hop count) from {@code a} to {@code b}
+     * over junction-internal roads, capped by {@code threshold} total length and {@code maxHops},
+     * never transiting another signalized node. Returns the node-id path (including endpoints), or
+     * {@code null} if none exists. The path is the "junction box" witness used for both clustering
+     * acceptance and movement reachability.
      */
-    private static boolean connectedWithinJunctionBox(
-            String a, String b, Set<String> signalNetIds,
-            Map<String, List<String>> adj, Map<String, Double> edgeLen,
-            double threshold, int maxHops) {
+    private static List<String> shortestInternalPath(String a, String b, Set<String> signalNetIds,
+                                                     Map<String, List<String>> adj,
+                                                     Map<String, Double> len,
+                                                     double threshold, int maxHops) {
         if (a.equals(b)) {
-            return true;
+            return List.of(a);
         }
         Map<String, double[]> best = new HashMap<>();
+        Map<String, String> prev = new HashMap<>();
         PriorityQueue<String> pq = new PriorityQueue<>((x, y) -> {
             int d = Double.compare(best.get(x)[0], best.get(y)[0]);
             return d != 0 ? d : x.compareTo(y);
@@ -521,16 +637,19 @@ public final class OsmSignalAwareSimplifier {
         pq.add(a);
         while (!pq.isEmpty()) {
             String u = pq.poll();
+            if (u.equals(b)) {
+                break;
+            }
             double[] st = best.get(u);
             for (String v : adj.getOrDefault(u, List.of())) {
                 if (v.equals(a)) {
                     continue;
                 }
-                // May only pass THROUGH non-signalized nodes; {@code b} is the sole allowed signal sink.
+                // May only pass THROUGH non-signalized nodes; {@code b} is the sole allowed sink.
                 if (signalNetIds.contains(v) && !v.equals(b)) {
                     continue;
                 }
-                double nd = st[0] + edgeLen.getOrDefault(u + "|" + v, 0.0);
+                double nd = st[0] + len.getOrDefault(u + "|" + v, 0.0);
                 int nh = (int) st[1] + 1;
                 if (nd > threshold || nh > maxHops) {
                     continue;
@@ -538,16 +657,45 @@ public final class OsmSignalAwareSimplifier {
                 double[] pv = best.get(v);
                 if (pv == null || nd < pv[0]) {
                     best.put(v, new double[]{nd, nh});
+                    prev.put(v, u);
                     pq.add(v);
                 }
             }
         }
-        return best.containsKey(b);
+        if (!best.containsKey(b)) {
+            return null;
+        }
+        LinkedList<String> path = new LinkedList<>();
+        for (String cur = b; cur != null; cur = prev.get(cur)) {
+            path.addFirst(cur);
+        }
+        return path;
+    }
+
+    /** Directed length of every junction-internal link, keyed {@code from|to} (min over parallels). */
+    private static Map<String, Double> internalEdgeLengths(Network network, Map<String, OsmWayRecord> ways) {
+        Map<String, Double> len = new HashMap<>();
+        for (Link link : network.getLinks().values()) {
+            if (!isInternalJunctionLink(link, ways)) {
+                continue;
+            }
+            String a = link.getFromNode().getId().toString();
+            String b = link.getToNode().getId().toString();
+            if (a.equals(b)) {
+                continue;
+            }
+            String key = a + "|" + b;
+            Double cur = len.get(key);
+            if (cur == null || link.getLength() < cur) {
+                len.put(key, link.getLength());
+            }
+        }
+        return len;
     }
 
     private static JunctionSignalDescriptor buildOneJunction(
             Network network, Map<String, OsmNodeRecord> nodes, Map<String, OsmWayRecord> ways,
-            String primary, List<String> cluster, TurnRestrictionIndex index) {
+            List<String> cluster, TurnRestrictionIndex index, List<List<String>> witnesses) {
 
         Set<String> clusterNetNodeIds = new TreeSet<>();
         for (String osmId : cluster) {
@@ -557,11 +705,32 @@ public final class OsmSignalAwareSimplifier {
         for (int i = 0; i < cluster.size(); i++) {
             memberIdx.put(OsmGeneratedIds.nodeId(cluster.get(i)), i);
         }
-        boolean[][] reach = memberReachability(cluster, network, ways);
+        boolean[][] reach = witnessReachability(cluster, witnesses);
+
+        // Review #4: internal junction-box links (the `*_link` connectors that justify clustering)
+        // must not be advertised as signal-facing approaches/departures. A link is internal only when
+        // BOTH endpoints lie inside the junction box, i.e. are cluster members or non-signal nodes on
+        // an accepted internal witness path. A `*_link` leaving a junction to an external node is a
+        // real boundary approach/departure, not an internal connector.
+        Set<String> internalNodes = new TreeSet<>(clusterNetNodeIds);
+        for (List<String> path : witnesses) {
+            internalNodes.addAll(path);
+        }
+        Set<String> internalNetLinks = new TreeSet<>();
+        for (Link link : network.getLinks().values()) {
+            String from = link.getFromNode().getId().toString();
+            String to = link.getToNode().getId().toString();
+            if (internalNodes.contains(from) && internalNodes.contains(to)) {
+                internalNetLinks.add(link.getId().toString());
+            }
+        }
 
         List<Link> incoming = new ArrayList<>();
         List<Link> outgoing = new ArrayList<>();
         for (Link link : network.getLinks().values()) {
+            if (internalNetLinks.contains(link.getId().toString())) {
+                continue;
+            }
             if (clusterNetNodeIds.contains(link.getToNode().getId().toString())) {
                 incoming.add(link);
             }
@@ -582,9 +751,8 @@ public final class OsmSignalAwareSimplifier {
                 if (in.getId().equals(out.getId())) {
                     continue;
                 }
-                // Review: a movement is only physically valid when the departure member is
-                // reachable from the arrival member within the junction cluster. This replaces
-                // the raw Cartesian incoming x outgoing product that fabricated phantom turns.
+                // A movement is only physically valid when the departure member is reachable from
+                // the arrival member through the witness paths that justified clustering.
                 Integer outM = memberIdx.get(out.getFromNode().getId().toString());
                 if (inM == null || outM == null || !reach[inM][outM]) {
                     continue;
@@ -607,9 +775,11 @@ public final class OsmSignalAwareSimplifier {
             }
         }
 
+        String primary = cluster.get(0);
         return new JunctionSignalDescriptor(
                 "signal_" + primary, primary, cluster, true, confidenceFor(nodes.get(primary)),
-                provenanceFor(primary, cluster, nodes.get(primary)), inIds, outIds, movements);
+                provenanceFor(primary, cluster, nodes.get(primary)), inIds, outIds,
+                new ArrayList<>(internalNetLinks), movements);
     }
 
     private static int confidenceFor(OsmNodeRecord rec) {
@@ -642,23 +812,24 @@ public final class OsmSignalAwareSimplifier {
     }
 
     /**
-     * Directed reachability between cluster members through the <em>internal-junction subgraph</em>
-     * — the same junction-internal (link-road) edges that justify clustering. Review #2: the
-     * previous version only considered direct member-to-member links, so a member pair joined via a
-     * non-signal internal node (e.g. {@code A -> X -> B}) was accepted as one cluster but its
-     * A-to-B movement was dropped. Traversing the full internal subgraph (including non-signal
-     * nodes such as ramp/turn-lane nodes) and projecting back to members makes movement reachability
-     * consistent with cluster formation. Still directional, so a one-way internal path does not
-     * yield a reverse movement.
+     * Directed reachability between cluster members restricted to the internal witness paths that
+     * justified the cluster (Review #2). Each witness is a directed node-id path; a directed edge
+     * is admitted only when it is a consecutive step of some accepted witness, so reachability can
+     * never leave the junction box or transit another signal through a path that clustering did not
+     * accept. Directional, so a one-way witness yields only its forward movement.
      */
-    private static boolean[][] memberReachability(List<String> cluster, Network network,
-                                                   Map<String, OsmWayRecord> ways) {
+    static boolean[][] witnessReachability(List<String> cluster, List<List<String>> witnesses) {
         int n = cluster.size();
         Map<String, Integer> idx = new HashMap<>();
         for (int i = 0; i < n; i++) {
             idx.put(OsmGeneratedIds.nodeId(cluster.get(i)), i);
         }
-        Map<String, List<String>> adj = internalAdjacency(network, ways);
+        Map<String, Set<String>> witnessAdj = new HashMap<>();
+        for (List<String> path : witnesses) {
+            for (int i = 0; i + 1 < path.size(); i++) {
+                witnessAdj.computeIfAbsent(path.get(i), k -> new TreeSet<>()).add(path.get(i + 1));
+            }
+        }
         boolean[][] reach = new boolean[n][n];
         for (int s = 0; s < n; s++) {
             String start = OsmGeneratedIds.nodeId(cluster.get(s));
@@ -669,7 +840,7 @@ public final class OsmSignalAwareSimplifier {
             reach[s][s] = true;
             while (!dq.isEmpty()) {
                 String u = dq.poll();
-                for (String v : adj.getOrDefault(u, List.of())) {
+                for (String v : witnessAdj.getOrDefault(u, Set.of())) {
                     if (!seen.add(v)) {
                         continue;
                     }

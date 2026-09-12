@@ -260,6 +260,62 @@ final class JunctionSignalDescriptorTest {
         assertFalse(j.hasMovement("sim_10_f_an_A", "sim_12_f_B_bs"));
     }
 
+    /**
+     * Review BLOCKER: a transitive A-B-C chain joined by junction-internal {@code *_link} roads
+     * where adjacent pairs qualify within the threshold but A-C does not. A whole-cluster check must
+     * never glue A-C together (the old pairwise union-find would).
+     */
+    @Test
+    void threeLinkedSignalsDoNotChainTransitively() {
+        OsmSimplifiedNetwork s =
+                simplify(SignalReadyFixtures.threeLinkedSignalsTransitiveChain(),
+                        new OsmSimplifyOptions(60.0, false, 35.0, Set.of()));
+        JunctionSignalDescriptor jA = s.junctionAt("osm_node_A");
+        JunctionSignalDescriptor jC = s.junctionAt("osm_node_C");
+        assertNotNull(jA);
+        assertNotNull(jC);
+        assertNotSame(jA, jC, "A and C must not share a junction: A-C does not qualify");
+        assertFalse(jA.osmNodeIds().contains("C"), "A's junction must not contain C");
+    }
+
+    /**
+     * Review #2: movement reachability must be restricted to the witness paths that justified the
+     * cluster, not an unconstrained global BFS. Without witnesses, cross-member movement is absent.
+     */
+    @Test
+    void witnessReachabilityIsRestrictedToAcceptedPaths() {
+        boolean[][] none = OsmSignalAwareSimplifier.witnessReachability(
+                List.of("A", "B"), List.of());
+        assertTrue(none[0][0]);
+        assertFalse(none[0][1], "no witness path => A cannot reach B");
+        assertFalse(none[1][0]);
+
+        boolean[][] viaX = OsmSignalAwareSimplifier.witnessReachability(
+                List.of("A", "B"), List.of(List.of("osm_node_A", "osm_node_X", "osm_node_B")));
+        assertTrue(viaX[0][1], "accepted witness A->X->B gives A->B");
+        assertFalse(viaX[1][0], "direction is preserved: B cannot reach A");
+    }
+
+    /**
+     * Review #4: internal junction-box connector links must not be advertised as signal approaches
+     * or departures.
+     */
+    @Test
+    void internalJunctionLinksAreNotApproachesOrDepartures() {
+        OsmSimplifiedNetwork s =
+                simplify(SignalReadyFixtures.wideIntersectionViaInternalNode(),
+                        new OsmSimplifyOptions(40.0, false, 35.0, Set.of()));
+        JunctionSignalDescriptor j = s.junctionAt("osm_node_A");
+        assertNotNull(j);
+        assertFalse(j.internalLinks().isEmpty(), "internal A->X/X->B connectors must be recorded");
+        for (String internal : j.internalLinks()) {
+            assertFalse(j.incomingLinks().contains(internal),
+                    "internal link exposed as incoming: " + internal);
+            assertFalse(j.outgoingLinks().contains(internal),
+                    "internal link exposed as outgoing: " + internal);
+        }
+    }
+
     private static SignalizedMovement movement(JunctionSignalDescriptor j, String in, String out) {
         return j.movements().stream()
                 .filter(m -> m.incomingLinkId().equals(in) && m.outgoingLinkId().equals(out))

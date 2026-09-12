@@ -55,9 +55,13 @@ final class OsmCityFixtureIntegrationTest {
     }
 
     private static OsmSimplifiedNetwork simplify(OsmImportResult r) {
+        return simplify(r, OsmSimplifyOptions.defaults());
+    }
+
+    private static OsmSimplifiedNetwork simplify(OsmImportResult r, OsmSimplifyOptions options) {
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmNetworkBuildResult mat = new OsmMatsimNetworkBuilder().build(r, cfg);
-        return OsmSignalAwareSimplifier.simplify(mat, r, cfg, OsmSimplifyOptions.defaults());
+        return OsmSignalAwareSimplifier.simplify(mat, r, cfg, options);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -147,6 +151,63 @@ final class OsmCityFixtureIntegrationTest {
         // The overwhelming majority of real signalized junctions must have both arms.
         assertTrue(withBothArms >= total * 0.9,
                 city + ": only " + withBothArms + "/" + total + " junctions have both arms");
+    }
+
+    /**
+     * Review #3: the default options do not cluster, so the multi-node junction logic is not
+     * otherwise exercised by real data. Re-run each city with clustering enabled and assert the
+     * resulting junctions (including any multi-node clusters and their cross-node movements) remain
+     * structurally coherent and deterministic.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("cities")
+    void clusteringEnabledOnRealDataStaysCoherent(String city) throws IOException {
+        OsmImportResult raw = importCity(city);
+        OsmSimplifyOptions clustering = new OsmSimplifyOptions(40.0, false, 25.0, Set.of());
+        OsmSimplifiedNetwork s = simplify(raw, clustering);
+        Network net = s.network();
+
+        int multiNode = 0;
+        for (JunctionSignalDescriptor j : s.signalizedJunctions()) {
+            if (j.osmNodeIds().size() > 1) {
+                multiNode++;
+            }
+            // Every advertised boundary approach/departure resolves and is not an internal connector.
+            for (String linkId : j.incomingLinks()) {
+                assertTrue(net.getLinks().containsKey(com.citymodeler.matsim.models.api.Id.create(linkId, Link.class)),
+                        city + ": clustered junction incoming link missing " + linkId);
+                assertFalse(j.internalLinks().contains(linkId), city + ": internal link advertised as approach");
+            }
+            for (String linkId : j.outgoingLinks()) {
+                assertTrue(net.getLinks().containsKey(com.citymodeler.matsim.models.api.Id.create(linkId, Link.class)),
+                        city + ": clustered junction outgoing link missing " + linkId);
+                assertFalse(j.internalLinks().contains(linkId), city + ": internal link advertised as departure");
+            }
+            // Movements resolve; cross-node movements (arrival node != departure node) are allowed.
+            for (SignalizedMovement m : j.movements()) {
+                Link in = net.getLinks().get(com.citymodeler.matsim.models.api.Id.create(m.incomingLinkId(), Link.class));
+                Link out = net.getLinks().get(com.citymodeler.matsim.models.api.Id.create(m.outgoingLinkId(), Link.class));
+                assertNotNull(in, city + ": movement incoming missing " + m.incomingLinkId());
+                assertNotNull(out, city + ": movement outgoing missing " + m.outgoingLinkId());
+                if (in.getToNode().getId().equals(out.getFromNode().getId())) {
+                    // same-node movement: links meet directly
+                    continue;
+                }
+                // cross-node movement: the arrival and departure are distinct cluster members joined
+                // internally, so both must be real junctions members of this descriptor.
+                assertTrue(j.osmNodeIds().contains(in.getToNode().getId().toString().replace("osm_node_", "")),
+                        city + ": cross-node movement arrival not a cluster member");
+                assertTrue(j.osmNodeIds().contains(out.getFromNode().getId().toString().replace("osm_node_", "")),
+                        city + ": cross-node movement departure not a cluster member");
+            }
+        }
+
+        // Determinism under clustering too.
+        OsmSimplifiedNetwork s2 = simplify(raw, clustering);
+        assertEquals(s.network().getLinks().keySet(), s2.network().getLinks().keySet(),
+                city + ": non-deterministic clustered links");
+        assertEquals(s.signalizedJunctions().size(), s2.signalizedJunctions().size(),
+                city + ": non-deterministic clustered junctions (" + multiNode + " multi-node)");
     }
 
     @ParameterizedTest(name = "{0}")
