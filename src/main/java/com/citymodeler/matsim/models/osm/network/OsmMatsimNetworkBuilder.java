@@ -22,13 +22,14 @@ public final class OsmMatsimNetworkBuilder {
         List<OsmImportIssue> issues = new ArrayList<>(collapsed.issues());
         addWayWarnings(importResult, config, issues);
 
-        // Flatten the contracted provenance: every original atomic source segment becomes a
-        // linkRef keyed by its own id (the link ids of the collapsed network are derived separately).
+        // Every emitted network link maps to a representative source segment (the first in travel
+        // order), re-keyed to the network link id. This works in every geometry mode and lets a
+        // consumer resolve a real link back to the OSM way and travel direction that produced it.
         Map<String, OsmLinkRef> linkRefsByLinkId = new LinkedHashMap<>();
-        for (OsmCollapsedLink collapsedLink : collapsed.collapsedLinksByLinkId().values()) {
-            for (OsmLinkRef ref : collapsedLink.sourceSegments()) {
-                linkRefsByLinkId.put(ref.linkId(), ref);
-            }
+        for (Map.Entry<String, OsmCollapsedLink> entry : collapsed.collapsedLinksByLinkId().entrySet()) {
+            OsmLinkRef source = entry.getValue().sourceSegments().get(0);
+            linkRefsByLinkId.put(entry.getKey(), new OsmLinkRef(
+                    entry.getKey(), source.osmWayId(), source.segmentIndex(), source.forward()));
         }
         Map<String, List<String>> linkIdsByOsmWayId = collapsed.linkIdsByOsmWayId();
 

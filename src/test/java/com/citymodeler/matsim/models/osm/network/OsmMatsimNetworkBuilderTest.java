@@ -102,11 +102,13 @@ final class OsmMatsimNetworkBuilderTest {
         assertEquals("4", built.cleanedNetwork().getLinks().values().iterator().next()
                 .getAttributes().getAttribute("osm:segmentCount"));
 
-        // linkRefsByLinkId is flattened from the collapsed links' source segments: 4 atomic
-        // segments x 2 travel directions, all indexed by their atomic id.
-        assertEquals(8, built.linkRefsByLinkId().size());
-        assertTrue(built.linkRefsByLinkId().containsKey("osm_way_10_0_f"));
-        assertTrue(built.linkRefsByLinkId().containsKey("osm_way_10_3_r"));
+        // linkRefsByLinkId is keyed by the ACTUAL emitted network link id and points at a
+        // representative source segment (the first in travel order): here both sim_10_f_N0_N4
+        // and sim_10_r_N0_N4 resolve back to way 10.
+        assertEquals(2, built.linkRefsByLinkId().size());
+        assertTrue(built.linkRefsByLinkId().containsKey("sim_10_f_N0_N4"));
+        assertTrue(built.linkRefsByLinkId().containsKey("sim_10_r_N0_N4"));
+        assertEquals("10", built.linkRefsByLinkId().get("sim_10_f_N0_N4").osmWayId());
 
         // linkIdsByOsmWayId indexes the two emitted merged links under the sole source way.
         assertEquals(2, built.linkIdsByOsmWayId().get("10").size());
