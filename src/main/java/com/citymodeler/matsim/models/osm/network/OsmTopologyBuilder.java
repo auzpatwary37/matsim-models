@@ -165,7 +165,9 @@ public final class OsmTopologyBuilder {
                     continue;
                 }
                 emitLink(network, start, end, chainForward, firstSeg, sourceSegments, pts,
-                        config, wayRecords, rawTagsKept, collapsedLinks, linkIdsByOsmWayId, geometry);            }
+                        config, wayRecords, rawTagsKept, keepAllGeometryNodes,
+                        collapsedLinks, linkIdsByOsmWayId, geometry);
+            }
         }
 
         network.postProcess();
@@ -187,6 +189,7 @@ public final class OsmTopologyBuilder {
                                  List<OsmLinkRef> sourceSegments, List<Coord> pts,
                                  OsmNetworkBuildConfig config,
                                  Map<String, OsmWayRecord> wayRecords, boolean rawTagsKept,
+                                 boolean keepAllGeometryNodes,
                                  Map<String, OsmCollapsedLink> collapsedLinks,
                                  Map<String, List<String>> linkIdsByOsmWayId,
                                  Map<String, OsmPolyline> geometry) {
@@ -211,14 +214,20 @@ public final class OsmTopologyBuilder {
 
         double lanes = firstSegment.lanes(traversalForward);
         double capacity = lanes * firstSegment.capacityPerLane();
-        String linkId = OsmGeneratedIds.simplifiedLinkId(firstWayId, forward, canonicalFrom, canonicalTo);
+        // MATERIALIZE keeps one link per atomic OSM segment (today's behavior); the contracted
+        // modes use a deterministic id derived from the canonical physical span + first source way.
+        String linkId = keepAllGeometryNodes
+                ? OsmGeneratedIds.linkId(firstSegment.wayId(), firstSegment.segmentIndex(), traversalForward)
+                : OsmGeneratedIds.simplifiedLinkId(firstWayId, forward, canonicalFrom, canonicalTo);
         Link link = network.createLink(linkId,
                 OsmGeneratedIds.nodeId(startOsm), OsmGeneratedIds.nodeId(endOsm),
                 length, capacity, firstSegment.speed(traversalForward), lanes,
                 firstSegment.modes(traversalForward));
 
         link.getAttributes().putAttribute("osm:wayId", firstWayId);
-        link.getAttributes().putAttribute("osm:simplified", "true");
+        if (!keepAllGeometryNodes) {
+            link.getAttributes().putAttribute("osm:simplified", "true");
+        }
         link.getAttributes().putAttribute("osm:segmentCount", String.valueOf(sourceSegments.size()));
 
         // Rule and tags come from the canonical first source way; every segment in a contracted

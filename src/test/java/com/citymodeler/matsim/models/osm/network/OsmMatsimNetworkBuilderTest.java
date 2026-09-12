@@ -75,4 +75,43 @@ final class OsmMatsimNetworkBuilderTest {
         assertTrue(busLink.getAllowedModes().contains("bus"));
         assertTrue(busLink.getAllowedModes().contains("pt"));
     }
+
+    @Test
+    void preservesGeometryModeContractsTopology() {
+        // 5 collinear nodes, one way; default (PRESERVE) must collapse to 2 nodes.
+        var ns = new java.util.TreeMap<String, com.citymodeler.matsim.models.osm.model.OsmNodeRecord>();
+        for (int i = 0; i < 5; i++) {
+            ns.put("N" + i, new com.citymodeler.matsim.models.osm.model.OsmNodeRecord(
+                    "N" + i, i, 0, new com.citymodeler.matsim.models.api.Coord(i, 0),
+                    com.citymodeler.matsim.models.osm.OsmTagSet.empty()));
+        }
+        var ws = new java.util.TreeMap<String, com.citymodeler.matsim.models.osm.model.OsmWayRecord>();
+        ws.put("10", new com.citymodeler.matsim.models.osm.model.OsmWayRecord("10",
+                java.util.List.of("N0", "N1", "N2", "N3", "N4"),
+                com.citymodeler.matsim.models.osm.OsmTagSet.of(java.util.Map.of("highway", "residential"))));
+        var r = new com.citymodeler.matsim.models.osm.OsmImportResult(ns, ws,
+                new java.util.TreeMap<>(), java.util.List.of(),
+                com.citymodeler.matsim.models.osm.OsmProvenance.defaultFor("f.osm", "EPSG:3857"));
+
+        var built = new com.citymodeler.matsim.models.osm.network.OsmMatsimNetworkBuilder()
+                .build(r, com.citymodeler.matsim.models.osm.network.OsmNetworkBuildConfig.defaultConfig());
+
+        assertEquals(2, built.cleanedNetwork().getNodes().size());
+        assertEquals(2, built.cleanedNetwork().getLinks().size()); // fwd + rev
+        // 5 collinear OSM nodes form 4 atomic segments; contraction folds all four into one link.
+        assertEquals("4", built.cleanedNetwork().getLinks().values().iterator().next()
+                .getAttributes().getAttribute("osm:segmentCount"));
+
+        // linkRefsByLinkId is flattened from the collapsed links' source segments: 4 atomic
+        // segments x 2 travel directions, all indexed by their atomic id.
+        assertEquals(8, built.linkRefsByLinkId().size());
+        assertTrue(built.linkRefsByLinkId().containsKey("osm_way_10_0_f"));
+        assertTrue(built.linkRefsByLinkId().containsKey("osm_way_10_3_r"));
+
+        // linkIdsByOsmWayId indexes the two emitted merged links under the sole source way.
+        assertEquals(2, built.linkIdsByOsmWayId().get("10").size());
+
+        // The geometry sidecar is populated for the contracted link in a non-materialize mode.
+        assertTrue(built.geometryStore().geometryForLink("sim_10_f_N0_N4").isPresent());
+    }
 }
