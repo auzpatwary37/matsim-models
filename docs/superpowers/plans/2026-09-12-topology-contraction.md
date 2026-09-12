@@ -32,7 +32,7 @@
 **Interfaces:**
 - Consumes: `OsmImportResult`, `OsmNetworkBuildConfig`, `OsmWayRule`, `OsmModeAccessResolver.DirectionDecision`, `OsmSpeedResolver`, `OsmLaneResolver`, `OsmNodeRecord`.
 - Produces:
-  - `record OsmSegmentGraph.Segment(String wayId, int segmentIndex, String nodeA, String nodeB, Set<String> modes, double speed, double lanes, double capacityPerLane, boolean forwardAllowed, boolean backwardAllowed)`
+  - `record OsmSegmentGraph.Segment(String wayId, int segmentIndex, String nodeA, String nodeB, Set<String> forwardModes, Set<String> backwardModes, double forwardSpeed, double backwardSpeed, double forwardLanes, double backwardLanes, double capacityPerLane, boolean forwardAllowed, boolean backwardAllowed)` — **directional**: fields are per-direction, accessed via `modes(boolean forward)` / `speed(boolean forward)` / `lanes(boolean forward)`; mode sets are stored as `Collections.unmodifiableSet(new TreeSet<>(...))`.
   - `static OsmSegmentGraph build(OsmImportResult, OsmNetworkBuildConfig)`
   - `List<Segment> segmentsFrom(String osmNodeId)`
   - `Set<String> nodeIds()`
@@ -160,16 +160,34 @@ import com.citymodeler.matsim.models.osm.model.OsmWayRecord;
  */
 public final class OsmSegmentGraph {
 
-    /** One consecutive OSM node pair of a way, with resolved directed routing attributes. */
+    /** One consecutive OSM node pair of a way, with resolved DIRECTIONAL routing attributes. */
     public record Segment(
             String wayId, int segmentIndex, String nodeA, String nodeB,
-            Set<String> modes, double speed, double lanes, double capacityPerLane,
+            Set<String> forwardModes, Set<String> backwardModes,
+            double forwardSpeed, double backwardSpeed,
+            double forwardLanes, double backwardLanes, double capacityPerLane,
             boolean forwardAllowed, boolean backwardAllowed) {
         public Segment {
             Objects.requireNonNull(wayId, "wayId");
             Objects.requireNonNull(nodeA, "nodeA");
             Objects.requireNonNull(nodeB, "nodeB");
-            modes = Set.copyOf(modes);
+            forwardModes = Collections.unmodifiableSet(new TreeSet<>(forwardModes));
+            backwardModes = Collections.unmodifiableSet(new TreeSet<>(backwardModes));
+        }
+
+        /** Modes permitted in the given travel direction (nodeA->nodeB when {@code forward}). */
+        public Set<String> modes(boolean forward) {
+            return forward ? forwardModes : backwardModes;
+        }
+
+        /** Free speed in the given travel direction (nodeA->nodeB when {@code forward}). */
+        public double speed(boolean forward) {
+            return forward ? forwardSpeed : backwardSpeed;
+        }
+
+        /** Lanes in the given travel direction (nodeA->nodeB when {@code forward}). */
+        public double lanes(boolean forward) {
+            return forward ? forwardLanes : backwardLanes;
         }
     }
 
@@ -210,24 +228,28 @@ public final class OsmSegmentGraph {
                 if (importResult.nodes().get(a) == null || importResult.nodes().get(b) == null) {
                     continue;
                 }
-                Set<String> modes = new TreeSet<>();
+                Set<String> forwardModes = new TreeSet<>();
+                Set<String> backwardModes = new TreeSet<>();
                 boolean fwd = false;
                 boolean bwd = false;
                 for (OsmModeAccessResolver.DirectionDecision d : decisions) {
                     if (d.allowedModes().isEmpty()) {
                         continue;
                     }
-                    if (d.forward()) { fwd = true; modes.addAll(d.allowedModes()); }
-                    if (d.backward()) { bwd = true; modes.addAll(d.allowedModes()); }
+                    if (d.forward()) { fwd = true; forwardModes.addAll(d.allowedModes()); }
+                    if (d.backward()) { bwd = true; backwardModes.addAll(d.allowedModes()); }
                 }
-                if (modes.isEmpty()) {
+                if (forwardModes.isEmpty() && backwardModes.isEmpty()) {
                     continue;
                 }
                 boolean oneway = !(fwd && bwd);
-                double resolvedSpeed = speed.resolve(way, rule, true);
-                double resolvedLanes = lanes.resolve(way, rule, true, oneway);
-                out.add(new Segment(way.id(), i, a, b, modes, resolvedSpeed, resolvedLanes,
-                        rule.capacityPerLane(), fwd, bwd));
+                double forwardSpeed = speed.resolve(way, rule, true);
+                double backwardSpeed = speed.resolve(way, rule, false);
+                double forwardLanes = lanes.resolve(way, rule, true, oneway);
+                double backwardLanes = lanes.resolve(way, rule, false, oneway);
+                out.add(new Segment(way.id(), i, a, b,
+                        forwardModes, backwardModes, forwardSpeed, backwardSpeed,
+                        forwardLanes, backwardLanes, rule.capacityPerLane(), fwd, bwd));
             }
         }
         out.sort(Comparator.comparing((Segment s) -> s.wayId())
@@ -291,7 +313,7 @@ git commit -m "feat(osm): atomic segment graph for topology contraction"
 - Consumes: `OsmSegmentGraph`, `OsmImportResult`, `OsmNetworkBuildConfig`, `OsmNodeClassification`.
 - Produces:
   - `OsmNodeReason` values: `SIGNALIZED, TURN_RESTRICTION_VIA, TRANSIT_STOP, BARRIER, CROSSING, SHARP_BEND, EXPLICIT_PRESERVE, SEMANTIC_NODE_TAG` (removed: `WAY_ENDPOINT`, `SHARED_BY_MULTIPLE_WAYS`).
-  - `static Map<String, OsmNodeClassification> OsmNodeClassifier.classify(OsmImportResult, Set<String> acceptedWayIds, Set<String> transitStopNodes, Set<String> restrictionViaNodes, boolean preserveSharpBends, double sharpBendAngleDegrees, Set<String> explicitPreserveNodes, boolean preserveCrossingNodes)`
+  - `static Map<String, OsmNodeClassification> OsmNodeClassifier.classifyIntrinsic(OsmImportResult, Set<String> acceptedWayIds, Set<String> transitStopNodes, Set<String> restrictionViaNodes, boolean preserveSharpBends, double sharpBendAngleDegrees, Set<String> explicitPreserveNodes, boolean preserveCrossingNodes, boolean preserveBarrierNodes)` (the legacy `classify(...)` 7/8-arg entry point was deleted in Task 5; Task 6 added the 9th `preserveBarrierNodes` boolean)
   - `static Set<String> OsmRoutingNodeSelector.select(OsmSegmentGraph graph, Map<String, OsmNodeClassification> classification, boolean keepAll)`
   - `static boolean contractible(OsmSegmentGraph g, String nodeId)`
 
@@ -349,7 +371,7 @@ class OsmRoutingNodeSelectorTest {
 
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
-        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classify(
+        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classifyIntrinsic(
                 result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false);
 
         assertTrue(OsmRoutingNodeSelector.contractible(g, "B"));
@@ -369,7 +391,7 @@ class OsmRoutingNodeSelectorTest {
 
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
-        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classify(
+        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classifyIntrinsic(
                 result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false);
 
         assertFalse(OsmRoutingNodeSelector.contractible(g, "B"));
@@ -389,7 +411,7 @@ class OsmRoutingNodeSelectorTest {
 
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
-        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classify(
+        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classifyIntrinsic(
                 result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false);
 
         assertFalse(OsmRoutingNodeSelector.contractible(g, "B"));
@@ -408,7 +430,7 @@ class OsmRoutingNodeSelectorTest {
 
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
-        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classify(
+        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classifyIntrinsic(
                 result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false);
 
         assertFalse(OsmRoutingNodeSelector.contractible(g, "B"));
@@ -453,10 +475,10 @@ public enum OsmNodeReason {
 }
 ```
 
-`OsmNodeClassifier.classify` — change the signature to add `boolean preserveCrossingNodes`, and emit only intrinsic reasons (remove `WAY_ENDPOINT` and `SHARED_BY_MULTIPLE_WAYS`):
+`OsmNodeClassifier.classifyIntrinsic` — intrinsic-only entry point; change the signature to add `boolean preserveCrossingNodes`, and emit only intrinsic reasons (remove `WAY_ENDPOINT` and `SHARED_BY_MULTIPLE_WAYS`). Task 6 later appends a 9th `boolean preserveBarrierNodes`; the legacy `classify(...)` name/arity is gone:
 
 ```java
-    public static Map<String, OsmNodeClassification> classify(
+    public static Map<String, OsmNodeClassification> classifyIntrinsic(
             OsmImportResult importResult,
             Set<String> acceptedWayIds,
             Set<String> transitStopNodes,
@@ -464,7 +486,8 @@ public enum OsmNodeReason {
             boolean preserveSharpBends,
             double sharpBendAngleDegrees,
             Set<String> explicitPreserveNodes,
-            boolean preserveCrossingNodes) {
+            boolean preserveCrossingNodes,
+            boolean preserveBarrierNodes) {
 ```
 
 Inside the per-node loop replace the reason block with:
@@ -575,9 +598,12 @@ public final class OsmRoutingNodeSelector {
     }
 
     private static boolean compatible(OsmSegmentGraph.Segment a, OsmSegmentGraph.Segment b) {
-        return a.modes().equals(b.modes())
-                && Double.compare(a.speed(), b.speed()) == 0
-                && Double.compare(a.lanes(), b.lanes()) == 0
+        return a.forwardModes().equals(b.forwardModes())
+                && a.backwardModes().equals(b.backwardModes())
+                && Double.compare(a.forwardSpeed(), b.forwardSpeed()) == 0
+                && Double.compare(a.backwardSpeed(), b.backwardSpeed()) == 0
+                && Double.compare(a.forwardLanes(), b.forwardLanes()) == 0
+                && Double.compare(a.backwardLanes(), b.backwardLanes()) == 0
                 && Double.compare(a.capacityPerLane(), b.capacityPerLane()) == 0
                 && a.forwardAllowed() == b.forwardAllowed()
                 && a.backwardAllowed() == b.backwardAllowed();
@@ -597,7 +623,7 @@ The existing test `keepsEndpointsSharedSignalizedAndViaNodesCollapsesPlainInteri
         assertTrue(out.get("Wm").reasons().isEmpty());
 ```
 
-Also update every `OsmNodeClassifier.classify(...)` call in tests to the new 8-arg form (append `false`), and any production call (Task 5 does the simplifier call).
+Also update every `OsmNodeClassifier.classifyIntrinsic(...)` call in tests to the new 8-arg form (append `false`), and any production call (Task 5 does the simplifier call). (Task 6 appends the 9th `preserveBarrierNodes` argument, making the final call 9-arg.)
 
 - [ ] **Step 5: Run tests**
 
@@ -851,10 +877,10 @@ public record CollapsedTopology(
                 }
             }
         }
-        Map<String, OsmNodeClassification> classification = OsmNodeClassifier.classify(
+        Map<String, OsmNodeClassification> classification = OsmNodeClassifier.classifyIntrinsic(
                 importResult, acceptedWayIds, stopNodes, viaNodes,
                 false, config.sharpBendAngleDegrees(), config.explicitOsmNodeIdsToKeep(),
-                config.preserveCrossingNodes());
+                config.preserveCrossingNodes(), config.preserveBarrierNodes());
         Set<String> routing = OsmRoutingNodeSelector.select(graph, classification, keepAllGeometryNodes);
         routing = anchorCycles(graph, routing);
         // ... emit nodes and merged links ...
@@ -897,10 +923,10 @@ public record CollapsedTopology(
         // only the plain build() path honors MATERIALIZE_GEOMETRY_NODES as keep-all.
         boolean keepAll = !signalReady
                 && config.geometryMode() == OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES;
-        Map<String, OsmNodeClassification> classification = OsmNodeClassifier.classify(
+        Map<String, OsmNodeClassification> classification = OsmNodeClassifier.classifyIntrinsic(
                 importResult, acceptedWayIds, stopNodes, viaNodes,
                 false, config.sharpBendAngleDegrees(), config.explicitOsmNodeIdsToKeep(),
-                config.preserveCrossingNodes());
+                config.preserveCrossingNodes(), config.preserveBarrierNodes());
         Set<String> routing = OsmRoutingNodeSelector.select(graph, classification, keepAll);
         routing = anchorCycles(graph, routing); // ensure every component has a routing node
 
@@ -932,7 +958,7 @@ git commit -m "feat(osm): cross-way topology contraction engine + multi-way coll
 
 **Interfaces:**
 - Consumes: `OsmTopologyBuilder`, `CollapsedTopology`.
-- Produces: `build()` returns a contracted `Network` for `PRESERVE_AS_LINK_GEOMETRY` / `ROUTING_NODES_ONLY`; unchanged one-node-per-OSM-node for `MATERIALIZE_GEOMETRY_NODES`. `linkRefsByLinkId` is derived from the collapsed links.
+- Produces: `build()` returns a contracted `Network` for `PRESERVE_AS_LINK_GEOMETRY` / `ROUTING_NODES_ONLY`; unchanged one-node-per-OSM-node for `MATERIALIZE_GEOMETRY_NODES`. `linkRefsByLinkId` is derived from the collapsed links and is keyed by the actual network link id (`value.linkId() == key`).
 
 - [ ] **Step 1: Write the failing test** (append to `OsmMatsimNetworkBuilderTest`)
 
@@ -1039,7 +1065,7 @@ Expected: FAIL — node `osm_node_B` still present.
 
 - [ ] **Step 3: Implement**
 
-Replace the network-building portion of `simplify()` (the accepted-way loop + `processChain` + node loop) with a call to `OsmTopologyBuilder.buildSignalReady(importResult, config, options)` (use the passed `importResult`). Consume `CollapsedTopology.network()`, `geometry()`, `collapsedLinksByLinkId()`, `linkIdsByOsmWayId()`, `classification()`. Delete `processChain`, `copyLaneTags` duplication is retained but applied inside the engine, so keep a single copy in the engine. Then proceed to restriction reading, junction building, and report using the engine's network/classification. Update the classify call to the new 8-arg signature.
+Replace the network-building portion of `simplify()` (the accepted-way loop + `processChain` + node loop) with a call to `OsmTopologyBuilder.buildSignalReady(importResult, config, options)` (use the passed `importResult`). Consume `CollapsedTopology.network()`, `geometry()`, `collapsedLinksByLinkId()`, `linkIdsByOsmWayId()`, `classification()`. Delete `processChain`, `copyLaneTags` duplication is retained but applied inside the engine, so keep a single copy in the engine. Then proceed to restriction reading, junction building, and report using the engine's network/classification. Update the classifier call to `classifyIntrinsic` (8-arg at this task; the 9th `preserveBarrierNodes` arrives in Task 6).
 
 - [ ] **Step 4: Run the signal-ready tests**
 
@@ -1059,12 +1085,12 @@ git commit -m "refactor(osm): signal-ready simplification uses shared contractio
 
 **Files:**
 - Modify: `OsmNetworkBuildConfig.java` (already carries `preserveBarrierNodes`, `preserveCrossingNodes` from Task 2)
-- Modify: `OsmRoutingNodeSelector.java` to honor `preserveBarrierNodes=false` by dropping `BARRIER` (default keeps barriers)
+- Modify: `OsmNodeClassifier.java` — `classifyIntrinsic(...)` gains the 9th `boolean preserveBarrierNodes`; emit `BARRIER` only when true (default keeps barriers). No barrier logic in the selector.
 - Test: `OsmRoutingNodeSelectorTest.java` (append)
 
 **Interfaces:**
 - Consumes: the config flags.
-- Produces: `select(...)` takes the classification already filtered by the classifier's crossing flag; barrier retention is controlled by `preserveBarrierNodes`.
+- Produces: `classifyIntrinsic(...)` takes both flags — it emits `CROSSING` only when `preserveCrossingNodes` and `BARRIER` only when `preserveBarrierNodes` (the barrier flag is the 9th, added here). `select(...)` consumes the already-filtered classification; no barrier logic lives in the selector.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1080,7 +1106,7 @@ git commit -m "refactor(osm): signal-ready simplification uses shared contractio
         ways.put("11", way("11", List.of("B", "C"), "highway", "residential"));
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
-        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classify(
+        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classifyIntrinsic(
                 result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false);
         assertTrue(OsmRoutingNodeSelector.contractible(g, "B"));
     }
@@ -1096,7 +1122,7 @@ git commit -m "refactor(osm): signal-ready simplification uses shared contractio
         ways.put("11", way("11", List.of("B", "C"), "highway", "residential"));
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
-        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classify(
+        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classifyIntrinsic(
                 result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false);
         assertFalse(OsmRoutingNodeSelector.contractible(g, "B"));
     }
@@ -1203,6 +1229,6 @@ git commit -m "docs: post-contraction network-size comparison"
 
 **Placeholder scan:** no "TBD"/"handle edge cases"/"similar to Task N"; every code step shows concrete code. Task 3's chain-walk is described with a complete method contract and the invariants it must satisfy; the implementer writes the loop against the stated rule (emit one link per maximal routing-node-to-routing-node chain per allowed direction, one `OsmCollapsedLink`, indexed under every source way, geometry concatenated).
 
-**Type consistency:** `OsmCollapsedLink` loses `wayId` and gains `sourceOsmWayIds()`/`firstOsmWayId()` consistently across Tasks 3–5; `classify(...)` 8-arg signature is used in Tasks 2/5/6; `OsmRoutingNodeSelector.select/contractible` names are stable; `simplifiedLinkId(firstWayId, forward, from, to)` matches the existing `OsmGeneratedIds` signature.
+**Type consistency:** `OsmCollapsedLink` is the 5-arg record `(linkId, forward, fromOsmNode, toOsmNode, sourceSegments)` with derived `sourceOsmWayIds()`/`firstOsmWayId()` consistently across Tasks 3–5; the classifier entry point is `OsmNodeClassifier.classifyIntrinsic(...)` — intrinsic-only, 8-arg in Tasks 2/5 and gaining a 9th `preserveBarrierNodes` boolean in Task 6 (the legacy `classify(...)` was deleted); `OsmNetworkBuildResult.linkRefsByLinkId` is keyed by the **actual network link id** (`value.linkId() == key`); `OsmRoutingNodeSelector.select/contractible` names are stable; `simplifiedLinkId(firstWayId, forward, from, to)` matches the existing `OsmGeneratedIds` signature.
 
 **Known churn:** `OsmNodeClassifierTest`, `OsmMatsimNetworkBuilderTest`, `OsmNetworkEdgeCasesTest`, `OsmGridIntegrationTest`, `OsmSignalAwareSimplifierTest`, `OsmBoundaryFilterTest` may assert uncollapsed counts; Tasks 4/5 call these out. `OsmNetworkSimplifier` is deleted in Task 5; confirm no remaining references.
