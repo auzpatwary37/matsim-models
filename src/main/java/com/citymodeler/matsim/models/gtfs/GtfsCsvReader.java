@@ -80,39 +80,34 @@ public final class GtfsCsvReader {
     private static String readLogicalLine(BufferedReader br) throws IOException {
         String line = br.readLine();
         if (line == null) return null;
-        // Handle quoted fields spanning multiple lines
-        int quoteCount = countUnescapedQuotes(line);
-        while (quoteCount % 2 == 1) {
+        // A logical record continues onto the next physical line only while we end inside an
+        // unterminated quoted field. This is a boolean "still open?" test, not a quote count.
+        while (endsInsideQuotedField(line)) {
             String next = br.readLine();
             if (next == null) break;
             line = line + "\n" + next;
-            quoteCount += countUnescapedQuotes(next);
         }
         return line;
     }
 
-    private static int countUnescapedQuotes(String s) {
-        int count = 0;
+    /** True if the physical line ends while still inside an unterminated quoted field. */
+    private static boolean endsInsideQuotedField(String s) {
         boolean inQuotes = false;
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             if (inQuotes) {
                 if (c == '"') {
                     if (i + 1 < s.length() && s.charAt(i + 1) == '"') {
-                        i++; // doubled quote, skip
+                        i++; // doubled quote: escaped quote, stay inside
                     } else {
                         inQuotes = false;
                     }
                 }
-            } else {
-                if (c == '"') {
-                    inQuotes = true;
-                    count++;
-                }
+            } else if (c == '"') {
+                inQuotes = true;
             }
         }
-        // Return the number of opening quotes (odd count means we're inside a quote)
-        return inQuotes ? count + 1 : count;
+        return inQuotes;
     }
 
     static List<String> parseLine(String line) {

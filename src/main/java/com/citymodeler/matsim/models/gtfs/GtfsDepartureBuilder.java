@@ -138,9 +138,17 @@ public final class GtfsDepartureBuilder {
         for (int j = 0; j < n; j++) {
             double arrOff = arrivals[j] - base;
             double depOff = departures[j] - base;
-            if (arrOff < -0.001 || depOff < -0.001) {
-                throw new IllegalStateException(
-                        "Negative offset at stop index " + j + " (arr=" + arrOff + ", dep=" + depOff + ")");
+            // The route's time origin is the first stop's DEPARTURE. A real feed may dwell at the
+            // origin (arrival < departure), which would make the origin arrival offset negative; the
+            // vehicle is simply present at the departure instant, so the origin arrival is clamped to
+            // the trip origin rather than treated as a fatal feed error. (The published transit DTD
+            // defines these offsets as additions to the route departure time, and permits the first
+            // stop's arrival offset to be omitted.)
+            if (arrOff < 0) {
+                arrOff = 0;
+            }
+            if (depOff < 0) {
+                depOff = 0;
             }
             if (depOff < arrOff - 0.001) {
                 throw new IllegalStateException(
