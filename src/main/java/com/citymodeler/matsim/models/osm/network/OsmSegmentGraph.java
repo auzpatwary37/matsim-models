@@ -14,16 +14,34 @@ import com.citymodeler.matsim.models.osm.model.OsmWayRecord;
  */
 public final class OsmSegmentGraph {
 
-    /** One consecutive OSM node pair of a way, with resolved directed routing attributes. */
+    /** One consecutive OSM node pair of a way, with resolved DIRECTIONAL routing attributes. */
     public record Segment(
             String wayId, int segmentIndex, String nodeA, String nodeB,
-            Set<String> modes, double speed, double lanes, double capacityPerLane,
+            Set<String> forwardModes, Set<String> backwardModes,
+            double forwardSpeed, double backwardSpeed,
+            double forwardLanes, double backwardLanes, double capacityPerLane,
             boolean forwardAllowed, boolean backwardAllowed) {
         public Segment {
             Objects.requireNonNull(wayId, "wayId");
             Objects.requireNonNull(nodeA, "nodeA");
             Objects.requireNonNull(nodeB, "nodeB");
-            modes = Collections.unmodifiableSet(new TreeSet<>(modes));
+            forwardModes = Collections.unmodifiableSet(new TreeSet<>(forwardModes));
+            backwardModes = Collections.unmodifiableSet(new TreeSet<>(backwardModes));
+        }
+
+        /** Modes permitted in the given travel direction (nodeA->nodeB when {@code forward}). */
+        public Set<String> modes(boolean forward) {
+            return forward ? forwardModes : backwardModes;
+        }
+
+        /** Free speed in the given travel direction (nodeA->nodeB when {@code forward}). */
+        public double speed(boolean forward) {
+            return forward ? forwardSpeed : backwardSpeed;
+        }
+
+        /** Lanes in the given travel direction (nodeA->nodeB when {@code forward}). */
+        public double lanes(boolean forward) {
+            return forward ? forwardLanes : backwardLanes;
         }
     }
 
@@ -64,24 +82,28 @@ public final class OsmSegmentGraph {
                 if (importResult.nodes().get(a) == null || importResult.nodes().get(b) == null) {
                     continue;
                 }
-                Set<String> modes = new TreeSet<>();
+                Set<String> forwardModes = new TreeSet<>();
+                Set<String> backwardModes = new TreeSet<>();
                 boolean fwd = false;
                 boolean bwd = false;
                 for (OsmModeAccessResolver.DirectionDecision d : decisions) {
                     if (d.allowedModes().isEmpty()) {
                         continue;
                     }
-                    if (d.forward()) { fwd = true; modes.addAll(d.allowedModes()); }
-                    if (d.backward()) { bwd = true; modes.addAll(d.allowedModes()); }
+                    if (d.forward()) { fwd = true; forwardModes.addAll(d.allowedModes()); }
+                    if (d.backward()) { bwd = true; backwardModes.addAll(d.allowedModes()); }
                 }
-                if (modes.isEmpty()) {
+                if (forwardModes.isEmpty() && backwardModes.isEmpty()) {
                     continue;
                 }
                 boolean oneway = !(fwd && bwd);
-                double resolvedSpeed = speed.resolve(way, rule, true);
-                double resolvedLanes = lanes.resolve(way, rule, true, oneway);
-                out.add(new Segment(way.id(), i, a, b, modes, resolvedSpeed, resolvedLanes,
-                        rule.capacityPerLane(), fwd, bwd));
+                double forwardSpeed = speed.resolve(way, rule, true);
+                double backwardSpeed = speed.resolve(way, rule, false);
+                double forwardLanes = lanes.resolve(way, rule, true, oneway);
+                double backwardLanes = lanes.resolve(way, rule, false, oneway);
+                out.add(new Segment(way.id(), i, a, b,
+                        forwardModes, backwardModes, forwardSpeed, backwardSpeed,
+                        forwardLanes, backwardLanes, rule.capacityPerLane(), fwd, bwd));
             }
         }
         out.sort(Comparator.comparing((Segment s) -> s.wayId())

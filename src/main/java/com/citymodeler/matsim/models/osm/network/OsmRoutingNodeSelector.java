@@ -61,9 +61,12 @@ public final class OsmRoutingNodeSelector {
     }
 
     private static boolean compatible(OsmSegmentGraph.Segment a, OsmSegmentGraph.Segment b) {
-        return a.modes().equals(b.modes())
-                && Double.compare(a.speed(), b.speed()) == 0
-                && Double.compare(a.lanes(), b.lanes()) == 0
+        return a.forwardModes().equals(b.forwardModes())
+                && a.backwardModes().equals(b.backwardModes())
+                && Double.compare(a.forwardSpeed(), b.forwardSpeed()) == 0
+                && Double.compare(a.backwardSpeed(), b.backwardSpeed()) == 0
+                && Double.compare(a.forwardLanes(), b.forwardLanes()) == 0
+                && Double.compare(a.backwardLanes(), b.backwardLanes()) == 0
                 && Double.compare(a.capacityPerLane(), b.capacityPerLane()) == 0
                 && a.forwardAllowed() == b.forwardAllowed()
                 && a.backwardAllowed() == b.backwardAllowed();

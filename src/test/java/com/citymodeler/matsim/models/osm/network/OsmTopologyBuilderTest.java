@@ -107,4 +107,52 @@ class OsmTopologyBuilderTest {
                 OsmNetworkBuildConfig.materializeGeometryConfig(), true);
         assertEquals(3, t.network().getNodes().size());
     }
+
+    /** Finding 1: reverse links must carry the way's backward-resolved freespeed/lanes. */
+    @Test
+    void reverseLinkCarriesBackwardResolvedAttributes() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0)); ns.put("B", n("B", 100)); ns.put("C", n("C", 200));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B", "C"), OsmTagSet.of(Map.of(
+                "highway", "residential",
+                "maxspeed:forward", "30", "maxspeed:backward", "50",
+                "lanes:forward", "1", "lanes:backward", "2"))));
+
+        Network net = OsmTopologyBuilder.build(res(ns, ws),
+                OsmNetworkBuildConfig.materializeGeometryConfig(), false).network();
+
+        var fwd = net.getLinks().get(com.citymodeler.matsim.models.api.Id.createLinkId("sim_10_f_A_C"));
+        var rev = net.getLinks().get(com.citymodeler.matsim.models.api.Id.createLinkId("sim_10_r_A_C"));
+        assertNotNull(fwd);
+        assertNotNull(rev);
+        assertEquals(30.0 / 3.6, fwd.getFreespeed(), 1e-9);
+        assertEquals(50.0 / 3.6, rev.getFreespeed(), 1e-9);
+        assertEquals(1.0, fwd.getNumberOfLanes(), 1e-9);
+        assertEquals(2.0, rev.getNumberOfLanes(), 1e-9);
+    }
+
+    /** Finding 2: both directions share canonical ids/provenance, independent of travel order. */
+    @Test
+    void bothDirectionsShareCanonicalProvenanceAcrossWays() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0)); ns.put("B", n("B", 100)); ns.put("C", n("C", 200));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", w("10", List.of("A", "B")));
+        ws.put("11", w("11", List.of("B", "C")));
+
+        Network net = OsmTopologyBuilder.build(res(ns, ws),
+                OsmNetworkBuildConfig.materializeGeometryConfig(), false).network();
+
+        var fwd = net.getLinks().get(com.citymodeler.matsim.models.api.Id.createLinkId("sim_10_f_A_C"));
+        var rev = net.getLinks().get(com.citymodeler.matsim.models.api.Id.createLinkId("sim_10_r_A_C"));
+        assertNotNull(fwd);
+        assertNotNull(rev);
+        assertEquals("10", fwd.getAttributes().getAttribute("osm:wayId"));
+        assertEquals("10", rev.getAttributes().getAttribute("osm:wayId"));
+        assertEquals("osm_node_A", fwd.getFromNode().getId().toString());
+        assertEquals("osm_node_C", fwd.getToNode().getId().toString());
+        assertEquals("osm_node_C", rev.getFromNode().getId().toString());
+        assertEquals("osm_node_A", rev.getToNode().getId().toString());
+    }
 }

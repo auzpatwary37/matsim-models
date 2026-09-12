@@ -165,8 +165,7 @@ public final class OsmTopologyBuilder {
                     continue;
                 }
                 emitLink(network, start, end, chainForward, firstSeg, sourceSegments, pts,
-                        config, wayRecords, rawTagsKept, collapsedLinks, linkIdsByOsmWayId, geometry);
-            }
+                        config, wayRecords, rawTagsKept, collapsedLinks, linkIdsByOsmWayId, geometry);            }
         }
 
         network.postProcess();
@@ -175,9 +174,16 @@ public final class OsmTopologyBuilder {
                 classification, new TreeSet<>(routing), issues);
     }
 
-    /** Emits one merged {@link Link} plus its provenance, geometry and per-way index entries. */
+    /**
+     * Emits one merged {@link Link} plus its provenance, geometry and per-way index entries.
+     *
+     * <p>{@code traversalForward} is whether the first source segment is traversed nodeA->nodeB
+     * (used only to pick the correct DIRECTIONAL routing attributes). Link id, {@code osm:wayId}
+     * and the collapsed link's endpoints are canonicalized per physical span, so the two travel
+     * directions of one merged link share the same ids/provenance.
+     */
     private static void emitLink(Network network, String startOsm, String endOsm,
-                                 boolean forward, OsmSegmentGraph.Segment firstSegment,
+                                 boolean traversalForward, OsmSegmentGraph.Segment firstSegment,
                                  List<OsmLinkRef> sourceSegments, List<Coord> pts,
                                  OsmNetworkBuildConfig config,
                                  Map<String, OsmWayRecord> wayRecords, boolean rawTagsKept,
@@ -195,20 +201,28 @@ public final class OsmTopologyBuilder {
             return;
         }
 
-        String firstWayId = firstSegment.wayId();
-        String linkId = OsmGeneratedIds.simplifiedLinkId(firstWayId, forward, startOsm, endOsm);
-        double lanes = firstSegment.lanes();
+        // Direction-independent canonical span: the two travel directions of one physical merged
+        // link must derive the same link id and the same source-way provenance.
+        String canonicalFrom = startOsm.compareTo(endOsm) <= 0 ? startOsm : endOsm;
+        String canonicalTo = startOsm.equals(canonicalFrom) ? endOsm : startOsm;
+        boolean forward = startOsm.equals(canonicalFrom);
+        String firstWayId = (forward ? sourceSegments.get(0)
+                : sourceSegments.get(sourceSegments.size() - 1)).osmWayId();
+
+        double lanes = firstSegment.lanes(traversalForward);
         double capacity = lanes * firstSegment.capacityPerLane();
+        String linkId = OsmGeneratedIds.simplifiedLinkId(firstWayId, forward, canonicalFrom, canonicalTo);
         Link link = network.createLink(linkId,
                 OsmGeneratedIds.nodeId(startOsm), OsmGeneratedIds.nodeId(endOsm),
-                length, capacity, firstSegment.speed(), lanes, firstSegment.modes());
+                length, capacity, firstSegment.speed(traversalForward), lanes,
+                firstSegment.modes(traversalForward));
 
         link.getAttributes().putAttribute("osm:wayId", firstWayId);
         link.getAttributes().putAttribute("osm:simplified", "true");
         link.getAttributes().putAttribute("osm:segmentCount", String.valueOf(sourceSegments.size()));
 
-        // Rule and tags come from the first source way; every segment in a contracted chain shares
-        // routing attributes by construction of the selector, so the first way is representative.
+        // Rule and tags come from the canonical first source way; every segment in a contracted
+        // chain shares routing attributes by construction of the selector, so it is representative.
         OsmWayRecord firstWay = wayRecords.get(firstWayId);
         if (firstWay != null) {
             OsmWayRule rule = config.resolveRule(firstWay.tags());
@@ -225,7 +239,7 @@ public final class OsmTopologyBuilder {
         }
 
         OsmCollapsedLink collapsed = new OsmCollapsedLink(
-                linkId, forward, startOsm, endOsm, sourceSegments);
+                linkId, forward, canonicalFrom, canonicalTo, sourceSegments);
         collapsedLinks.put(linkId, collapsed);
         geometry.put(linkId, new OsmPolyline(pts));
         for (String wayId : collapsed.sourceOsmWayIds()) {
