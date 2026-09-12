@@ -207,6 +207,95 @@ class OsmTopologyBuilderTest {
         assertEquals(2, net.getNodes().size());
     }
 
+    /**
+     * Builds a fixture with three separate link components: a 6-direct-link car junction
+     * (A-B, B-C, B-D sharing node B), a 2-direct-link isolated car stub (X-Y), and a 2-direct-link
+     * isolated busway stub (P-Q). The car junction survives the cleaner's size rule on its own;
+     * the small stubs exercise the transit-vs-non-transit contract.
+     */
+    private static OsmImportResult cleanupFixture() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0));
+        ns.put("B", n("B", 100));
+        ns.put("C", n("C", 200));
+        ns.put("D", n("D", 300));
+        ns.put("X", n("X", 100000));
+        ns.put("Y", n("Y", 100100));
+        ns.put("P", n("P", 200000));
+        ns.put("Q", n("Q", 200100));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", w("10", List.of("A", "B")));
+        ws.put("11", w("11", List.of("B", "C")));
+        ws.put("12", w("12", List.of("B", "D")));
+        ws.put("13", w("13", List.of("X", "Y")));
+        ws.put("14", new OsmWayRecord("14", List.of("P", "Q"),
+                OsmTagSet.of(Map.of("highway", "busway"))));
+        return res(ns, ws);
+    }
+
+    /** Cleanup is off by default, so the isolated non-transit stub must survive. */
+    @Test
+    void cleanupDisabledByDefaultKeepsIsolatedNonTransitStub() {
+        CollapsedTopology t = OsmTopologyBuilder.build(cleanupFixture(),
+                OsmNetworkBuildConfig.defaultConfig(), false);
+        assertTrue(t.network().getNodes().containsKey(
+                com.citymodeler.matsim.models.api.Id.create("osm_node_X",
+                        com.citymodeler.matsim.models.network.Node.class)));
+        assertEquals(6 + 2 + 2, t.network().getLinks().size());
+    }
+
+    /**
+     * With cleanup enabled the 2-direct-link non-transit X-Y stub is removed while the equally
+     * small busway P-Q stub survives because it carries transit modes.
+     */
+    @Test
+    void cleanupEnabledRemovesNonTransitStubAndKeepsTransitStub() {
+        CollapsedTopology t = OsmTopologyBuilder.build(cleanupFixture(),
+                OsmNetworkBuildConfig.defaultConfigWithCleanup(), false);
+
+        Set<String> nodeIds = t.network().getNodes().keySet().stream()
+                .map(Object::toString).collect(java.util.stream.Collectors.toSet());
+        assertFalse(nodeIds.contains("osm_node_X"), "non-transit stub node X must be removed");
+        assertFalse(nodeIds.contains("osm_node_Y"), "non-transit stub node Y must be removed");
+        assertTrue(nodeIds.contains("osm_node_P"), "transit stub node P must survive");
+        assertTrue(nodeIds.contains("osm_node_Q"), "transit stub node Q must survive");
+        assertTrue(nodeIds.contains("osm_node_A"), "main component node A must survive");
+        assertTrue(nodeIds.contains("osm_node_B"), "main component node B must survive");
+        // main junction (6 directed) + busway stub (2 directed); X-Y stub (2) removed.
+        assertEquals(8, t.network().getLinks().size());
+    }
+
+    /** Provenance maps must not retain removed links or nodes after cleanup. */
+    @Test
+    void cleanupEnabledReconcilesProvenanceMaps() {
+        CollapsedTopology t = OsmTopologyBuilder.build(cleanupFixture(),
+                OsmNetworkBuildConfig.defaultConfigWithCleanup(), false);
+
+        for (String linkId : t.collapsedLinksByLinkId().keySet()) {
+            assertTrue(t.network().getLinks().containsKey(
+                            com.citymodeler.matsim.models.api.Id.create(linkId,
+                                    com.citymodeler.matsim.models.network.Link.class)),
+                    "collapsed link " + linkId + " has no surviving network link");
+            assertTrue(t.geometry().containsKey(linkId), "geometry missing for " + linkId);
+        }
+        for (String linkId : t.geometry().keySet()) {
+            assertTrue(t.collapsedLinksByLinkId().containsKey(linkId),
+                    "geometry " + linkId + " has no collapsed link");
+        }
+        assertFalse(t.linkIdsByOsmWayId().containsKey("13"),
+                "removed stub way 13 must not remain indexed");
+        for (Map.Entry<String, List<String>> e : t.linkIdsByOsmWayId().entrySet()) {
+            for (String linkId : e.getValue()) {
+                assertTrue(t.collapsedLinksByLinkId().containsKey(linkId),
+                        "way " + e.getKey() + " indexes removed link " + linkId);
+            }
+        }
+        assertFalse(t.routingNodeIds().contains("X"), "removed routing node X must be dropped");
+        assertFalse(t.routingNodeIds().contains("Y"), "removed routing node Y must be dropped");
+        assertFalse(t.classification().containsKey("X"), "removed classification X must be dropped");
+        assertFalse(t.classification().containsKey("Y"), "removed classification Y must be dropped");
+    }
+
     /** Engine-level directionality: a bidirectional road emits opposite directed links. */
     @Test
     void bidirectionalRoadYieldsOppositeDirectedLinks() {

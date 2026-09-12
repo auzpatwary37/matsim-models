@@ -14,11 +14,13 @@ public final class OsmNetworkBuildConfig {
     private final Map<String, OsmWayRule> rulesByKeyValue;
     private final boolean preserveCrossingNodes;
     private final boolean preserveBarrierNodes;
+    private final boolean cleanupIsolatedComponents;
 
     private OsmNetworkBuildConfig(OsmGeometryMode geometryMode, boolean preserveTransitStopNodes,
                                    Set<String> explicitOsmNodeIdsToKeep, double sharpBendAngleDegrees,
                                    Map<String, OsmWayRule> rulesByKeyValue,
-                                   boolean preserveCrossingNodes, boolean preserveBarrierNodes) {
+                                   boolean preserveCrossingNodes, boolean preserveBarrierNodes,
+                                   boolean cleanupIsolatedComponents) {
         this.geometryMode = geometryMode;
         this.preserveTransitStopNodes = preserveTransitStopNodes;
         this.explicitOsmNodeIdsToKeep = Set.copyOf(explicitOsmNodeIdsToKeep);
@@ -26,16 +28,23 @@ public final class OsmNetworkBuildConfig {
         this.rulesByKeyValue = rulesByKeyValue;
         this.preserveCrossingNodes = preserveCrossingNodes;
         this.preserveBarrierNodes = preserveBarrierNodes;
+        this.cleanupIsolatedComponents = cleanupIsolatedComponents;
     }
 
     public static OsmNetworkBuildConfig materializeGeometryConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
-                true, Set.of(), 35.0, defaultRules(), false, true);
+                true, Set.of(), 35.0, defaultRules(), false, true, false);
     }
 
     public static OsmNetworkBuildConfig defaultConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
-                true, Set.of(), 35.0, defaultRules(), false, true);
+                true, Set.of(), 35.0, defaultRules(), false, true, false);
+    }
+
+    /** Default contraction config that additionally removes isolated non-transit components. */
+    public static OsmNetworkBuildConfig defaultConfigWithCleanup() {
+        return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
+                true, Set.of(), 35.0, defaultRules(), false, true, true);
     }
 
     public OsmGeometryMode geometryMode() {
@@ -60,6 +69,10 @@ public final class OsmNetworkBuildConfig {
 
     public boolean preserveBarrierNodes() {
         return preserveBarrierNodes;
+    }
+
+    public boolean cleanupIsolatedComponents() {
+        return cleanupIsolatedComponents;
     }
 
     public OsmWayRule resolveRule(OsmTagSet tags) {

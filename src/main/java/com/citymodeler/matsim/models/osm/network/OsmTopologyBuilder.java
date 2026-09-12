@@ -15,6 +15,7 @@ import com.citymodeler.matsim.models.api.Coord;
 import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
 import com.citymodeler.matsim.models.network.Network;
+import com.citymodeler.matsim.models.network.Node;
 import com.citymodeler.matsim.models.osm.OsmElementType;
 import com.citymodeler.matsim.models.osm.OsmImportIssue;
 import com.citymodeler.matsim.models.osm.OsmImportResult;
@@ -189,8 +190,53 @@ public final class OsmTopologyBuilder {
 
         network.postProcess();
 
+        if (config.cleanupIsolatedComponents()) {
+            OsmNetworkCleaner.CleanResult cleaned = OsmNetworkCleaner.clean(network, true);
+            issues.addAll(cleaned.issues());
+            reconcileAfterCleanup(network, collapsedLinks, linkIdsByOsmWayId, geometry,
+                    classification, routing);
+        }
+
         return new CollapsedTopology(network, collapsedLinks, linkIdsByOsmWayId, geometry,
                 classification, new TreeSet<>(routing), issues);
+    }
+
+    /**
+     * Drops provenance, geometry, per-way index and classification entries that the optional
+     * isolated-component cleanup removed from the network, so {@link CollapsedTopology} never
+     * exposes links or nodes that no longer exist. Deterministic: the network maps are
+     * {@link java.util.LinkedHashMap}s traversed in insertion order.
+     */
+    private static void reconcileAfterCleanup(Network network,
+                                              Map<String, OsmCollapsedLink> collapsedLinks,
+                                              Map<String, List<String>> linkIdsByOsmWayId,
+                                              Map<String, OsmPolyline> geometry,
+                                              Map<String, OsmNodeClassification> classification,
+                                              Set<String> routing) {
+        Set<String> survivingLinkIds = new HashSet<>();
+        for (Id<Link> linkId : network.getLinks().keySet()) {
+            survivingLinkIds.add(linkId.toString());
+        }
+        collapsedLinks.keySet().retainAll(survivingLinkIds);
+        geometry.keySet().retainAll(survivingLinkIds);
+
+        for (String wayId : new ArrayList<>(linkIdsByOsmWayId.keySet())) {
+            List<String> ids = linkIdsByOsmWayId.get(wayId);
+            ids.retainAll(survivingLinkIds);
+            if (ids.isEmpty()) {
+                linkIdsByOsmWayId.remove(wayId);
+            }
+        }
+
+        Set<String> survivingOsmNodeIds = new HashSet<>();
+        for (Id<Node> nodeId : network.getNodes().keySet()) {
+            String id = nodeId.toString();
+            if (id.startsWith("osm_node_")) {
+                survivingOsmNodeIds.add(id.substring("osm_node_".length()));
+            }
+        }
+        routing.retainAll(survivingOsmNodeIds);
+        classification.keySet().retainAll(survivingOsmNodeIds);
     }
 
     /**
