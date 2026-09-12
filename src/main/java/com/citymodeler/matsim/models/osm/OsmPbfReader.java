@@ -56,6 +56,43 @@ final class OsmPbfReader {
                 List.copyOf(collector.issues), provenance);
     }
 
+    /**
+     * Returns a diagnostic when the DenseNodes parallel arrays disagree in length, or {@code null}
+     * when they are structurally valid. Malformed/truncated input is reported, not thrown.
+     */
+    static String denseArrayMismatch(int ids, int lats, int lons) {
+        if (lats == ids && lons == ids) {
+            return null;
+        }
+        return "DenseNodes parallel arrays differ in length: ids=" + ids
+                + " lats=" + lats + " lons=" + lons + "; skipping block";
+    }
+
+    /**
+     * Consume the packed {@code keys_vals} stream for one dense node from {@code kvIdx}. The stream
+     * is {@code (keyId, valueId)* 0}; a lone key with no following value means the stream is
+     * truncated, which is appended to {@code truncation} and stops consumption deterministically.
+     * Returns the index just past the consumed tags.
+     */
+    static int parseDenseTags(List<Integer> keysVals, int kvIdx, Map<String, String> tags,
+                              java.util.function.IntFunction<String> stringById,
+                              List<String> truncation) {
+        while (kvIdx < keysVals.size()) {
+            int key = keysVals.get(kvIdx++);
+            if (key == 0) {
+                break; // end of this node's tags: ((keyId valueId) 0)*
+            }
+            if (kvIdx >= keysVals.size()) {
+                truncation.add("DenseNodes keys_vals ended after key " + key
+                        + " without its value; tags dropped");
+                break;
+            }
+            int val = keysVals.get(kvIdx++);
+            tags.put(stringById.apply(key), stringById.apply(val));
+        }
+        return kvIdx;
+    }
+
     private static final class Collector extends BinaryParser {
 
         final Map<String, OsmNodeRecord> nodes = new LinkedHashMap<>();
@@ -83,10 +120,21 @@ final class OsmPbfReader {
             List<Long> lons = dense.getLonList();
             List<Integer> keysVals = dense.getKeysValsList();
 
-            long latAccum = 0, lonAccum = 0;
+            // Valid PBF guarantees these parallel arrays have identical length; a mismatch means a
+            // malformed/truncated block. Report it explicitly instead of throwing mid-iteration.
+            String mismatch = denseArrayMismatch(ids.size(), lats.size(), lons.size());
+            if (mismatch != null) {
+                issues.add(new OsmImportIssue(
+                        OsmIssueSeverity.WARNING, "pbf-malformed-dense-block", mismatch, null));
+                return;
+            }
+
+            long idAccum = 0, latAccum = 0, lonAccum = 0;
             int kvIdx = 0;
             for (int i = 0; i < ids.size(); i++) {
-                long id = ids.get(i);
+                // Dense node ids are delta-encoded within the block, like lat/lon.
+                idAccum += ids.get(i);
+                long id = idAccum;
                 latAccum += lats.get(i);
                 lonAccum += lons.get(i);
                 double lat = parseLat(latAccum);
@@ -98,14 +146,12 @@ final class OsmPbfReader {
 
                 try {
                     Map<String, String> tags = new HashMap<>();
-                    // OSM PBF spec: ((keyId valueId) 0)* — single zero terminates each node's tags
-                    while (kvIdx < keysVals.size()) {
-                        int first = keysVals.get(kvIdx++);
-                        if (first == 0) {
-                            break; // end of this node's tags
-                        }
-                        int valIdx = keysVals.get(kvIdx++);
-                        tags.put(getStringById(first), getStringById(valIdx));
+                    List<String> truncation = new ArrayList<>();
+                    kvIdx = parseDenseTags(keysVals, kvIdx, tags, this::getStringById, truncation);
+                    for (String t : truncation) {
+                        issues.add(new OsmImportIssue(
+                                OsmIssueSeverity.WARNING, "pbf-malformed-tag-stream",
+                                t + " (node id " + id + ")", null));
                     }
 
                     Coord projected = project(lon, lat, String.valueOf(id));
@@ -119,6 +165,26 @@ final class OsmPbfReader {
                             null));
                 }
             }
+        }
+
+        /**
+         * Returns a diagnostic when the DenseNodes parallel arrays disagree in length, or
+         * {@code null} when they are structurally valid.
+         */
+        static String denseArrayMismatch(int ids, int lats, int lons) {
+            return OsmPbfReader.denseArrayMismatch(ids, lats, lons);
+        }
+
+        /**
+         * Consume the packed {@code keys_vals} stream for one dense node from {@code kvIdx}. The
+         * stream is {@code (keyId, valueId)* 0}; a lone key with no following value means the stream
+         * is truncated, which is appended to {@code truncation} and stops consumption
+         * deterministically. Returns the index just past the consumed tags.
+         */
+        static int parseDenseTags(List<Integer> keysVals, int kvIdx, Map<String, String> tags,
+                                  java.util.function.IntFunction<String> stringById,
+                                  List<String> truncation) {
+            return OsmPbfReader.parseDenseTags(keysVals, kvIdx, tags, stringById, truncation);
         }
 
         @Override
