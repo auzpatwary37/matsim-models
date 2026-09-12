@@ -155,4 +155,49 @@ class OsmTopologyBuilderTest {
         assertEquals("osm_node_C", rev.getFromNode().getId().toString());
         assertEquals("osm_node_A", rev.getToNode().getId().toString());
     }
+
+    /** Engine-level directionality: a oneway road yields exactly one directed link. */
+    @Test
+    void onewayRoadYieldsSingleDirectedLink() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0)); ns.put("B", n("B", 100)); ns.put("C", n("C", 200));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B", "C"),
+                OsmTagSet.of(Map.of("highway", "residential", "oneway", "yes"))));
+
+        Network net = OsmTopologyBuilder.build(res(ns, ws),
+                OsmNetworkBuildConfig.materializeGeometryConfig(), false).network();
+
+        assertEquals(1, net.getLinks().size(), "oneway road must produce exactly one directed link");
+        var fwd = net.getLinks().get(com.citymodeler.matsim.models.api.Id.create(
+                "sim_10_f_A_C", com.citymodeler.matsim.models.network.Link.class));
+        assertNotNull(fwd, "the single link is the forward direction A->C");
+        assertEquals("osm_node_A", fwd.getFromNode().getId().toString());
+        assertEquals("osm_node_C", fwd.getToNode().getId().toString());
+        assertEquals(2, net.getNodes().size());
+    }
+
+    /** Engine-level directionality: a bidirectional road emits opposite directed links. */
+    @Test
+    void bidirectionalRoadYieldsOppositeDirectedLinks() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0)); ns.put("B", n("B", 100)); ns.put("C", n("C", 200));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", w("10", List.of("A", "B", "C"))); // no oneway -> bidirectional
+
+        Network net = OsmTopologyBuilder.build(res(ns, ws),
+                OsmNetworkBuildConfig.materializeGeometryConfig(), false).network();
+
+        assertEquals(2, net.getLinks().size());
+        var fwd = net.getLinks().get(com.citymodeler.matsim.models.api.Id.create(
+                "sim_10_f_A_C", com.citymodeler.matsim.models.network.Link.class));
+        var rev = net.getLinks().get(com.citymodeler.matsim.models.api.Id.create(
+                "sim_10_r_A_C", com.citymodeler.matsim.models.network.Link.class));
+        assertNotNull(fwd); assertNotNull(rev);
+        // Each MATSim link is directed: opposite endpoints.
+        assertEquals("osm_node_A", fwd.getFromNode().getId().toString());
+        assertEquals("osm_node_C", fwd.getToNode().getId().toString());
+        assertEquals("osm_node_C", rev.getFromNode().getId().toString());
+        assertEquals("osm_node_A", rev.getToNode().getId().toString());
+    }
 }
