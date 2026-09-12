@@ -79,6 +79,14 @@ public final class GtfsServiceSelector {
                 yield date != null ? Set.of(date) : Set.of();
             }
         };
+        // Surface any structurally invalid calendar rows (span/ordering) as warnings (Review #2).
+        List<String> calendarDiagnostics = new ArrayList<>();
+        for (GtfsCalendarRow row : feed.calendarRows()) {
+            activeDatesForService(row.serviceId(), feed, calendarDiagnostics);
+        }
+        for (String d : new java.util.LinkedHashSet<>(calendarDiagnostics)) {
+            warnings.add(feed.feedId() + ": " + d);
+        }
         return new ServiceSelection(dates, warnings, fatal);
     }
 
@@ -152,20 +160,62 @@ public final class GtfsServiceSelector {
                 .orElse(null);
     }
 
+    /**
+     * Single source of truth for "is the given service active on the given date?", used both by the
+     * date-selection step and the downstream departure loop so the two never disagree (Review #1).
+     *
+     * <p>An always-active feed (no calendar data with {@code assumeAlwaysActive=true}) treats every
+     * service as active on every selected date. Otherwise the normal calendar/calendar_dates rules
+     * apply.
+     */
+    public static boolean serviceActiveOnDate(GtfsFeed feed, String serviceId, LocalDate date,
+                                              GtfsImportConfig config) {
+        boolean noCalendar = feed.calendarRows().isEmpty() && feed.calendarDatesRows().isEmpty();
+        if (noCalendar) {
+            return config.assumeAlwaysActive();
+        }
+        if (serviceId == null) {
+            return true;
+        }
+        return activeDatesForService(serviceId, feed).contains(date);
+    }
+
     public static Set<LocalDate> activeDatesForService(String serviceId, GtfsFeed feed) {
+        return activeDatesForService(serviceId, feed, null);
+    }
+
+    /**
+     * Materialize active dates for a service. When {@code diagnostics} is supplied, structurally
+     * invalid calendar rows (end before start, or a declared span beyond {@link #MAX_CALENDAR_DAYS})
+     * are reported explicitly instead of being silently dropped (Review #2).
+     */
+    public static Set<LocalDate> activeDatesForService(String serviceId, GtfsFeed feed,
+                                                       List<String> diagnostics) {
         Set<LocalDate> dates = new TreeSet<>();
         for (GtfsCalendarRow row : feed.calendarRows()) {
             if (!row.serviceId().equals(serviceId)) continue;
             LocalDate start = parseDate(row.startDate());
             LocalDate end = parseDate(row.endDate());
             if (start == null || end == null) continue;
-            int[] flags = row.weekdayFlags();
-            LocalDate cursor = start;
-            // No arbitrary truncation: a valid calendar must be materialized in full. Guard only
-            // against a nonsensical declared span (data corruption), never against legitimate length.
-            if (start.until(end, java.time.temporal.ChronoUnit.DAYS) > MAX_CALENDAR_DAYS) {
+            if (end.isBefore(start)) {
+                if (diagnostics != null) {
+                    diagnostics.add("service " + serviceId + ": calendar end date " + row.endDate()
+                            + " is before start date " + row.startDate() + "; ignoring row");
+                }
                 continue;
             }
+            // No arbitrary truncation: a valid calendar must be materialized in full. A declared
+            // span beyond the guard is a data-integrity problem and is reported, never silently lost.
+            if (start.until(end, java.time.temporal.ChronoUnit.DAYS) > MAX_CALENDAR_DAYS) {
+                if (diagnostics != null) {
+                    diagnostics.add("service " + serviceId + ": calendar span " + row.startDate()
+                            + ".." + row.endDate() + " exceeds " + MAX_CALENDAR_DAYS
+                            + " days; ignoring row");
+                }
+                continue;
+            }
+            int[] flags = row.weekdayFlags();
+            LocalDate cursor = start;
             while (!cursor.isAfter(end)) {
                 int idx = cursor.getDayOfWeek().getValue() - 1;
                 if (idx >= 0 && idx < 7 && flags[idx] == 1) {

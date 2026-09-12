@@ -173,7 +173,9 @@ public final class GtfsTransitScheduleBuilder {
             for (GroupEntry ge : groupEntries) {
                 for (LocalDate date : dates) {
                     String serviceId = ge.trip().serviceId();
-                    if (serviceId != null && !GtfsServiceSelector.activeDatesForService(serviceId, feed).contains(date)) {
+                    // Same policy as date selection (Review #1): an always-active feed must not be
+                    // filtered out here just because it has no calendar rows.
+                    if (!GtfsServiceSelector.serviceActiveOnDate(feed, serviceId, date, config)) {
                         continue;
                     }
                     List<GtfsFrequencyRow> freqs = feed.frequencyRows().stream()
