@@ -268,7 +268,7 @@ public final class OsmSignalAwareSimplifier {
             }
 
             collapsedLinks.put(linkId,
-                    new OsmCollapsedLink(linkId, way.id(), forward, fromOsm, toOsm, sourceSegments));
+                    new OsmCollapsedLink(linkId, forward, fromOsm, toOsm, sourceSegments));
             geometry.put(linkId, new OsmPolyline(pts));
             linkIdsByOsmWayId.computeIfAbsent(way.id(), key -> new ArrayList<>()).add(linkId);
         }
