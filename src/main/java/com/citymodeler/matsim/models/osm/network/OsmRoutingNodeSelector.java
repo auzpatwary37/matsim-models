@@ -45,7 +45,7 @@ public final class OsmRoutingNodeSelector {
         }
         OsmSegmentGraph.Segment s1 = incident.get(0);
         OsmSegmentGraph.Segment s2 = incident.get(1);
-        if (!compatible(s1, s2)) {
+        if (!compatible(graph, s1, s2, nodeId)) {
             return false;
         }
         String p = graph.other(s1, nodeId);
@@ -60,15 +60,27 @@ public final class OsmRoutingNodeSelector {
         return pToQ || qToP;
     }
 
-    private static boolean compatible(OsmSegmentGraph.Segment a, OsmSegmentGraph.Segment b) {
-        return a.forwardModes().equals(b.forwardModes())
-                && a.backwardModes().equals(b.backwardModes())
-                && Double.compare(a.forwardSpeed(), b.forwardSpeed()) == 0
-                && Double.compare(a.backwardSpeed(), b.backwardSpeed()) == 0
-                && Double.compare(a.forwardLanes(), b.forwardLanes()) == 0
-                && Double.compare(a.backwardLanes(), b.backwardLanes()) == 0
+    /**
+     * Attribute compatibility in PHYSICAL direction. The two segments are aligned to a common
+     * travel direction through the shared node before their directional tuples are compared, so a
+     * segment stored in the opposite orientation is compared (and later emitted) with its
+     * forward/backward values swapped rather than mismatching on storage order.
+     */
+    private static boolean compatible(OsmSegmentGraph graph, OsmSegmentGraph.Segment a,
+                                      OsmSegmentGraph.Segment b, String sharedNode) {
+        String p = graph.other(a, sharedNode);
+        String q = graph.other(b, sharedNode);
+        boolean aForward = a.nodeA().equals(p) && a.nodeB().equals(sharedNode);
+        // Align b to the same physical orientation as a (p -> sharedNode -> q).
+        boolean bForward = b.nodeA().equals(sharedNode) && b.nodeB().equals(q);
+        return a.modes(aForward).equals(b.modes(bForward))
+                && a.modes(!aForward).equals(b.modes(!bForward))
+                && Double.compare(a.speed(aForward), b.speed(bForward)) == 0
+                && Double.compare(a.speed(!aForward), b.speed(!bForward)) == 0
+                && Double.compare(a.lanes(aForward), b.lanes(bForward)) == 0
+                && Double.compare(a.lanes(!aForward), b.lanes(!bForward)) == 0
                 && Double.compare(a.capacityPerLane(), b.capacityPerLane()) == 0
-                && a.forwardAllowed() == b.forwardAllowed()
-                && a.backwardAllowed() == b.backwardAllowed();
+                && a.allowsTravel(aForward) == b.allowsTravel(bForward)
+                && a.allowsTravel(!aForward) == b.allowsTravel(!bForward);
     }
 }

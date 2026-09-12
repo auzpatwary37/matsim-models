@@ -190,6 +190,11 @@ public final class OsmTopologyBuilder {
 
         network.postProcess();
 
+        // A routing node can survive on a degenerate span (emitLink returns early for zero-length
+        // or duplicate canonical spans with no incident link). Reconcile UNCONDITIONALLY so the
+        // routing set and classification never advertise a node the network cannot route through.
+        reconcileIsolatedRoutingNodes(network, routing, classification, issues);
+
         if (config.cleanupIsolatedComponents()) {
             OsmNetworkCleaner.CleanResult cleaned = OsmNetworkCleaner.clean(network, true);
             issues.addAll(cleaned.issues());
@@ -199,6 +204,33 @@ public final class OsmTopologyBuilder {
 
         return new CollapsedTopology(network, collapsedLinks, linkIdsByOsmWayId, geometry,
                 classification, new TreeSet<>(routing), issues);
+    }
+
+    /**
+     * Drops routing nodes (and their classification) that no emitted network link references, e.g.
+     * a node left stranded when a degenerate zero-length/duplicate span was skipped during emit.
+     * Emits one deterministic WARNING per dropped node. Independent of the optional component
+     * cleanup: the invariant that a routing node is routable must always hold.
+     */
+    private static void reconcileIsolatedRoutingNodes(Network network,
+                                                      Set<String> routing,
+                                                      Map<String, OsmNodeClassification> classification,
+                                                      List<OsmImportIssue> issues) {
+        Set<String> referencedNodeIds = new TreeSet<>();
+        for (Link link : network.getLinks().values()) {
+            referencedNodeIds.add(link.getFromNodeId().toString());
+            referencedNodeIds.add(link.getToNodeId().toString());
+        }
+        for (String osmNodeId : new TreeSet<>(routing)) {
+            String generated = OsmGeneratedIds.nodeId(osmNodeId);
+            if (!referencedNodeIds.contains(generated)) {
+                routing.remove(osmNodeId);
+                classification.remove(osmNodeId);
+                issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, "isolated-routing-node",
+                        "Routing node " + generated + " has no incident emitted link "
+                                + "(degenerate span); dropping it from the routing set", null));
+            }
+        }
     }
 
     /**
@@ -276,6 +308,10 @@ public final class OsmTopologyBuilder {
         String firstWayId = (forward ? sourceSegments.get(0)
                 : sourceSegments.get(sourceSegments.size() - 1)).osmWayId();
 
+        // The emitted link is always from startOsm to endOsm and the first source segment is the one
+        // incident to startOsm, so traversalForward already selects the attributes that apply to the
+        // emitted from->to travel direction (nodeA->nodeB of the first segment when true). A segment
+        // stored in the opposite orientation to the chain is thus inverted automatically.
         double lanes = firstSegment.lanes(traversalForward);
         double capacity = lanes * firstSegment.capacityPerLane();
         // MATERIALIZE keeps one link per atomic OSM segment (today's behavior); the contracted

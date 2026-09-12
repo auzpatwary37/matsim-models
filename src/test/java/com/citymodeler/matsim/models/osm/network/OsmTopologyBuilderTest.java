@@ -7,11 +7,17 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 
 import com.citymodeler.matsim.models.api.Coord;
+import com.citymodeler.matsim.models.api.Id;
+import com.citymodeler.matsim.models.network.Link;
 import com.citymodeler.matsim.models.network.Network;
+import com.citymodeler.matsim.models.network.Node;
+import com.citymodeler.matsim.models.osm.OsmElementType;
 import com.citymodeler.matsim.models.osm.OsmImportResult;
 import com.citymodeler.matsim.models.osm.OsmProvenance;
 import com.citymodeler.matsim.models.osm.OsmTagSet;
 import com.citymodeler.matsim.models.osm.model.OsmNodeRecord;
+import com.citymodeler.matsim.models.osm.model.OsmRelationMemberRecord;
+import com.citymodeler.matsim.models.osm.model.OsmRelationRecord;
 import com.citymodeler.matsim.models.osm.model.OsmWayRecord;
 
 class OsmTopologyBuilderTest {
@@ -23,7 +29,11 @@ class OsmTopologyBuilderTest {
         return new OsmWayRecord(id, refs, OsmTagSet.of(Map.of("highway", "residential")));
     }
     private static OsmImportResult res(Map<String, OsmNodeRecord> ns, Map<String, OsmWayRecord> ws) {
-        return new OsmImportResult(ns, ws, new TreeMap<>(), List.of(),
+        return res(ns, ws, new TreeMap<>());
+    }
+    private static OsmImportResult res(Map<String, OsmNodeRecord> ns, Map<String, OsmWayRecord> ws,
+                                       Map<String, OsmRelationRecord> rels) {
+        return new OsmImportResult(ns, ws, rels, List.of(),
                 OsmProvenance.defaultFor("f.osm", "EPSG:3857"));
     }
     /** Topology signature: sorted "from->to" for every link, independent of ids. */
@@ -318,5 +328,145 @@ class OsmTopologyBuilderTest {
         assertEquals("osm_node_C", fwd.getToNode().getId().toString());
         assertEquals("osm_node_C", rev.getFromNode().getId().toString());
         assertEquals("osm_node_A", rev.getToNode().getId().toString());
+    }
+
+    /**
+     * IMPORTANT #3a: two adjacent ways whose STORED orientations oppose but whose PHYSICAL
+     * directional attributes match. way10 is stored A->B (fwd 30 / bwd 50); way11 is stored C->B
+     * with the tags swapped (fwd 50 / bwd 30), so the physical continuation of A->B is B->C at
+     * 30 km/h and the physical continuation of B->A is C->B at 50 km/h. B is therefore genuinely
+     * contractible, and the two emitted directed links must carry the physically correct speeds,
+     * inverting way11's stored attributes. The pre-fix code compared stored orientation directly
+     * and treated the pair as incompatible (or, with equal stored tags, merged and dropped a
+     * direction); either way it failed to produce A->C=30 and C->A=50.
+     */
+    @Test
+    void opposingStoredOrientationMergesWithInvertedDirectionalAttributes() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0)); ns.put("B", n("B", 100)); ns.put("C", n("C", 200));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B"), OsmTagSet.of(Map.of(
+                "highway", "residential",
+                "maxspeed:forward", "30", "maxspeed:backward", "50"))));
+        // Stored C->B; its forward (C->B physically) is 50 and its backward (B->C physically) is 30.
+        ws.put("11", new OsmWayRecord("11", List.of("C", "B"), OsmTagSet.of(Map.of(
+                "highway", "residential",
+                "maxspeed:forward", "50", "maxspeed:backward", "30"))));
+
+        Network net = OsmTopologyBuilder.build(res(ns, ws),
+                OsmNetworkBuildConfig.materializeGeometryConfig(), false).network();
+
+        assertEquals(2, net.getLinks().size(), "B is physically compatible and must contract");
+        Link fwd = net.getLinks().get(Id.create("sim_10_f_A_C", Link.class));
+        Link rev = net.getLinks().get(Id.create("sim_10_r_A_C", Link.class));
+        assertNotNull(fwd);
+        assertNotNull(rev);
+        assertEquals(30.0 / 3.6, fwd.getFreespeed(), 1e-9, "A->C is the 30 km/h direction");
+        assertEquals(50.0 / 3.6, rev.getFreespeed(), 1e-9, "C->A is the 50 km/h direction");
+    }
+
+    /**
+     * IMPORTANT #3b: the same opposing stored orientation with IDENTICAL directional tags has a
+     * physical property change at B (A->B is 30 km/h, B->C is way11's 50 km/h), so the existing
+     * property-change rule must retain B. The pre-fix code compared the stored orientations
+     * directly, saw two equal tuples, and incorrectly contracted B.
+     */
+    @Test
+    void opposingStoredOrientationPropertyChangeKeepsNode() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0)); ns.put("B", n("B", 100)); ns.put("C", n("C", 200));
+        OsmTagSet directional = OsmTagSet.of(Map.of(
+                "highway", "residential",
+                "maxspeed:forward", "30", "maxspeed:backward", "50"));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B"), directional));
+        ws.put("11", new OsmWayRecord("11", List.of("C", "B"), directional));
+
+        Network net = OsmTopologyBuilder.build(res(ns, ws),
+                OsmNetworkBuildConfig.materializeGeometryConfig(), false).network();
+
+        assertTrue(net.getNodes().containsKey(Id.create("osm_node_B", Node.class)),
+                "physical speed change at B must retain B");
+        // A->B: way10 stored forward = 30. B->C: way11 stored backward = 50.
+        assertEquals(30.0 / 3.6,
+                net.getLinks().get(Id.create("sim_10_f_A_B", Link.class)).getFreespeed(), 1e-9);
+        assertEquals(50.0 / 3.6,
+                net.getLinks().get(Id.create("sim_11_f_B_C", Link.class)).getFreespeed(), 1e-9);
+    }
+
+    /**
+     * IMPORTANT #2: a turn-restriction whose {@code via} member is a WAY must keep EVERY node of
+     * that via way as a routing node — the interior of the restriction chain must never be swallowed
+     * into one merged link. Here via way 20 is a degree-2 chain V1-V2 between the from way (10) and
+     * the to way (30); both V1 and V2 must survive.
+     */
+    @Test
+    void viaWayRestrictionKeepsEveryInteriorChainNode() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0)); ns.put("V1", n("V1", 100));
+        ns.put("V2", n("V2", 200)); ns.put("C", n("C", 300));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", w("10", List.of("A", "V1")));
+        ws.put("20", w("20", List.of("V1", "V2")));
+        ws.put("30", w("30", List.of("V2", "C")));
+        Map<String, OsmRelationRecord> rels = new TreeMap<>();
+        rels.put("r1", new OsmRelationRecord("r1", List.of(
+                new OsmRelationMemberRecord(OsmElementType.WAY, "10", "from"),
+                new OsmRelationMemberRecord(OsmElementType.WAY, "20", "via"),
+                new OsmRelationMemberRecord(OsmElementType.WAY, "30", "to")),
+                OsmTagSet.of(Map.of("type", "restriction", "restriction", "no_left_turn"))));
+
+        CollapsedTopology t = OsmTopologyBuilder.buildSignalReady(
+                res(ns, ws, rels), OsmNetworkBuildConfig.materializeGeometryConfig(),
+                OsmSimplifyOptions.defaults());
+
+        assertTrue(t.routingNodeIds().contains("V1"), "via-way interior node V1 must survive");
+        assertTrue(t.routingNodeIds().contains("V2"), "via-way interior node V2 must survive");
+        assertTrue(t.network().getNodes().containsKey(Id.create("osm_node_V1", Node.class)));
+        assertTrue(t.network().getNodes().containsKey(Id.create("osm_node_V2", Node.class)));
+        // The chain must not be swallowed: no A->C merged link may exist.
+        assertFalse(t.collapsedLinksByLinkId().containsKey("sim_10_f_A_C"));
+        // Bidirectional ways: A<->V1, V1<->V2, V2<->C = 6 directed links.
+        assertEquals(6, t.network().getLinks().size(),
+                "three retained degree-2 nodes chain into three directed link pairs; no A->C shortcut");
+    }
+
+    /**
+     * IMPORTANT #4: a routing node must never survive with no incident emitted link. Here B is kept
+     * intrinsically (barrier) but the whole way is geometrically degenerate (A, B, C all zero
+     * length), so both zero-length spans are dropped by emitLink. The unconditional reconcile must
+     * drop the now-isolated routing nodes and emit a deterministic WARNING; the pre-fix code left
+     * B (and A, C) in the routing set with zero incident links.
+     */
+    @Test
+    void isolatedRoutingNodesAreReconciledOut() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0));
+        ns.put("B", new OsmNodeRecord("B", 0, 0, new Coord(0, 0),
+                OsmTagSet.of(Map.of("barrier", "gate"))));
+        ns.put("C", n("C", 0));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B", "C"),
+                OsmTagSet.of(Map.of("highway", "residential", "oneway", "yes"))));
+
+        CollapsedTopology t = OsmTopologyBuilder.build(res(ns, ws),
+                OsmNetworkBuildConfig.materializeGeometryConfig(), false);
+
+        assertEquals(0, t.network().getLinks().size(), "fully degenerate way emits no link");
+        Set<String> referenced = new TreeSet<>();
+        for (Link l : t.network().getLinks().values()) {
+            referenced.add(l.getFromNode().getId().toString());
+            referenced.add(l.getToNode().getId().toString());
+        }
+        for (String osmId : t.routingNodeIds()) {
+            assertTrue(referenced.contains("osm_node_" + osmId),
+                    "routing node " + osmId + " has no incident emitted link");
+        }
+        assertFalse(t.routingNodeIds().contains("B"),
+                "isolated intrinsic routing node B must be reconciled out");
+        assertFalse(t.classification().containsKey("B"),
+                "classification must be reconciled with the routing set");
+        assertTrue(t.issues().stream().anyMatch(i -> "isolated-routing-node".equals(i.code())),
+                "a deterministic isolated-routing-node WARNING must be emitted");
     }
 }

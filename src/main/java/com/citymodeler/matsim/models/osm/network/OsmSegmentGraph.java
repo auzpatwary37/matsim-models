@@ -43,6 +43,11 @@ public final class OsmSegmentGraph {
         public double lanes(boolean forward) {
             return forward ? forwardLanes : backwardLanes;
         }
+
+        /** True when travel is permitted in the given direction (nodeA->nodeB when {@code forward}). */
+        public boolean allowsTravel(boolean forward) {
+            return forward ? forwardAllowed : backwardAllowed;
+        }
     }
 
     private final List<Segment> segments;

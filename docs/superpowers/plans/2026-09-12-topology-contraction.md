@@ -32,7 +32,7 @@
 **Interfaces:**
 - Consumes: `OsmImportResult`, `OsmNetworkBuildConfig`, `OsmWayRule`, `OsmModeAccessResolver.DirectionDecision`, `OsmSpeedResolver`, `OsmLaneResolver`, `OsmNodeRecord`.
 - Produces:
-  - `record OsmSegmentGraph.Segment(String wayId, int segmentIndex, String nodeA, String nodeB, Set<String> forwardModes, Set<String> backwardModes, double forwardSpeed, double backwardSpeed, double forwardLanes, double backwardLanes, double capacityPerLane, boolean forwardAllowed, boolean backwardAllowed)` — **directional**: fields are per-direction, accessed via `modes(boolean forward)` / `speed(boolean forward)` / `lanes(boolean forward)`; mode sets are stored as `Collections.unmodifiableSet(new TreeSet<>(...))`.
+  - `record OsmSegmentGraph.Segment(String wayId, int segmentIndex, String nodeA, String nodeB, Set<String> forwardModes, Set<String> backwardModes, double forwardSpeed, double backwardSpeed, double forwardLanes, double backwardLanes, double capacityPerLane, boolean forwardAllowed, boolean backwardAllowed)` — **directional**: fields are per-direction, accessed via `modes(boolean forward)` / `speed(boolean forward)` / `lanes(boolean forward)` / `allowsTravel(boolean forward)`; mode sets are stored as `Collections.unmodifiableSet(new TreeSet<>(...))`. The stored `nodeA->nodeB` order is an arbitrary per-way orientation: consumers that compare or emit across a shared node MUST align to physical travel direction rather than compare stored orientation (see the orientation-aligned `compatible(...)` in Task 2).
   - `static OsmSegmentGraph build(OsmImportResult, OsmNetworkBuildConfig)`
   - `List<Segment> segmentsFrom(String osmNodeId)`
   - `Set<String> nodeIds()`
@@ -597,16 +597,28 @@ public final class OsmRoutingNodeSelector {
         return pToQ || qToP;
     }
 
-    private static boolean compatible(OsmSegmentGraph.Segment a, OsmSegmentGraph.Segment b) {
-        return a.forwardModes().equals(b.forwardModes())
-                && a.backwardModes().equals(b.backwardModes())
-                && Double.compare(a.forwardSpeed(), b.forwardSpeed()) == 0
-                && Double.compare(a.backwardSpeed(), b.backwardSpeed()) == 0
-                && Double.compare(a.forwardLanes(), b.forwardLanes()) == 0
-                && Double.compare(a.backwardLanes(), b.backwardLanes()) == 0
+    /**
+     * Attribute compatibility in PHYSICAL direction. The two segments are aligned to a common
+     * travel direction through the shared node before their directional tuples are compared, so a
+     * segment stored in the opposite orientation is compared (and later emitted) with its
+     * forward/backward values swapped rather than mismatching on storage order.
+     */
+    private static boolean compatible(OsmSegmentGraph graph, OsmSegmentGraph.Segment a,
+                                      OsmSegmentGraph.Segment b, String sharedNode) {
+        String p = graph.other(a, sharedNode);
+        String q = graph.other(b, sharedNode);
+        boolean aForward = a.nodeA().equals(p) && a.nodeB().equals(sharedNode);
+        // Align b to the same physical orientation as a (p -> sharedNode -> q).
+        boolean bForward = b.nodeA().equals(sharedNode) && b.nodeB().equals(q);
+        return a.modes(aForward).equals(b.modes(bForward))
+                && a.modes(!aForward).equals(b.modes(!bForward))
+                && Double.compare(a.speed(aForward), b.speed(bForward)) == 0
+                && Double.compare(a.speed(!aForward), b.speed(!bForward)) == 0
+                && Double.compare(a.lanes(aForward), b.lanes(bForward)) == 0
+                && Double.compare(a.lanes(!aForward), b.lanes(!bForward)) == 0
                 && Double.compare(a.capacityPerLane(), b.capacityPerLane()) == 0
-                && a.forwardAllowed() == b.forwardAllowed()
-                && a.backwardAllowed() == b.backwardAllowed();
+                && a.allowsTravel(aForward) == b.allowsTravel(bForward)
+                && a.allowsTravel(!aForward) == b.allowsTravel(!bForward);
     }
 }
 ```
