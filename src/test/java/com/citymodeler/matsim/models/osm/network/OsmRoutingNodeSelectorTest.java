@@ -48,7 +48,7 @@ class OsmRoutingNodeSelectorTest {
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
         Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classifyIntrinsic(
-                result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false);
+                result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false, true);
 
         assertTrue(OsmRoutingNodeSelector.contractible(g, "B"));
         assertEquals(Set.of("A", "C"), OsmRoutingNodeSelector.select(g, cls, false));
@@ -68,7 +68,7 @@ class OsmRoutingNodeSelectorTest {
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
         Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classifyIntrinsic(
-                result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false);
+                result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false, true);
 
         assertFalse(OsmRoutingNodeSelector.contractible(g, "B"));
         assertTrue(OsmRoutingNodeSelector.select(g, cls, false).contains("B"));
@@ -88,7 +88,7 @@ class OsmRoutingNodeSelectorTest {
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
         Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classifyIntrinsic(
-                result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false);
+                result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false, true);
 
         // contractible(...) is purely structural (no access to node tags); the signal is kept by
         // select(...) via the intrinsic classification reason.
@@ -110,7 +110,7 @@ class OsmRoutingNodeSelectorTest {
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
         Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classifyIntrinsic(
-                result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false);
+                result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false, true);
 
         assertFalse(OsmRoutingNodeSelector.contractible(g, "B"));
     }
@@ -125,5 +125,95 @@ class OsmRoutingNodeSelectorTest {
         OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
         OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
         assertEquals(Set.of("A", "B"), OsmRoutingNodeSelector.select(g, Map.of(), true));
+    }
+
+    private static Map<String, OsmNodeClassification> classify(Map<String, OsmNodeRecord> nodes,
+                                                               Map<String, OsmWayRecord> ways,
+                                                               boolean preserveCrossing,
+                                                               boolean preserveBarrier) {
+        return OsmNodeClassifier.classifyIntrinsic(
+                result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(),
+                preserveCrossing, preserveBarrier);
+    }
+
+    private static OsmSegmentGraph segmentGraph(Map<String, OsmNodeRecord> nodes,
+                                                Map<String, OsmWayRecord> ways) {
+        return OsmSegmentGraph.build(result(nodes, ways), OsmNetworkBuildConfig.materializeGeometryConfig());
+    }
+
+    /**
+     * A crossing node is metadata by default: with preserveCrossingNodes=false it carries no CROSSING
+     * reason and is dissolved as a plain degree-2 node.
+     */
+    @Test
+    void crossingDoesNotSplitRoutingByDefault() {
+        Map<String, OsmNodeRecord> nodes = new java.util.TreeMap<>();
+        nodes.put("A", node("A", 0));
+        nodes.put("B", node("B", 100, "crossing", "marked"));
+        nodes.put("C", node("C", 200));
+        Map<String, OsmWayRecord> ways = new java.util.TreeMap<>();
+        ways.put("10", way("10", List.of("A", "B"), "highway", "residential"));
+        ways.put("11", way("11", List.of("B", "C"), "highway", "residential"));
+
+        OsmSegmentGraph g = segmentGraph(nodes, ways);
+        Map<String, OsmNodeClassification> cls = classify(nodes, ways, false, true);
+
+        assertFalse(cls.get("B").reasons().contains(OsmNodeReason.CROSSING));
+        assertFalse(OsmRoutingNodeSelector.select(g, cls, false).contains("B"));
+    }
+
+    /** With preserveCrossingNodes=true the crossing gains its reason and is retained as a routing node. */
+    @Test
+    void crossingNodeIsKeptWhenConfigured() {
+        Map<String, OsmNodeRecord> nodes = new java.util.TreeMap<>();
+        nodes.put("A", node("A", 0));
+        nodes.put("B", node("B", 100, "crossing", "marked"));
+        nodes.put("C", node("C", 200));
+        Map<String, OsmWayRecord> ways = new java.util.TreeMap<>();
+        ways.put("10", way("10", List.of("A", "B"), "highway", "residential"));
+        ways.put("11", way("11", List.of("B", "C"), "highway", "residential"));
+
+        OsmSegmentGraph g = segmentGraph(nodes, ways);
+        Map<String, OsmNodeClassification> cls = classify(nodes, ways, true, true);
+
+        assertTrue(cls.get("B").reasons().contains(OsmNodeReason.CROSSING));
+        assertTrue(OsmRoutingNodeSelector.select(g, cls, false).contains("B"));
+    }
+
+    /** A barrier node splits routing by default (preserveBarrierNodes=true). */
+    @Test
+    void barrierSplitsRoutingByDefault() {
+        Map<String, OsmNodeRecord> nodes = new java.util.TreeMap<>();
+        nodes.put("A", node("A", 0));
+        nodes.put("B", node("B", 100, "barrier", "gate"));
+        nodes.put("C", node("C", 200));
+        Map<String, OsmWayRecord> ways = new java.util.TreeMap<>();
+        ways.put("10", way("10", List.of("A", "B"), "highway", "residential"));
+        ways.put("11", way("11", List.of("B", "C"), "highway", "residential"));
+
+        OsmSegmentGraph g = segmentGraph(nodes, ways);
+        Map<String, OsmNodeClassification> cls = classify(nodes, ways, false, true);
+
+        assertTrue(cls.get("B").reasons().contains(OsmNodeReason.BARRIER));
+        assertTrue(OsmRoutingNodeSelector.select(g, cls, false).contains("B"));
+    }
+
+    /** With preserveBarrierNodes=false the barrier carries no reason and is dissolved. */
+    @Test
+    void barrierNodeIsContractibleWhenNotPreserved() {
+        Map<String, OsmNodeRecord> nodes = new java.util.TreeMap<>();
+        nodes.put("A", node("A", 0));
+        nodes.put("B", node("B", 100, "barrier", "gate"));
+        nodes.put("C", node("C", 200));
+        Map<String, OsmWayRecord> ways = new java.util.TreeMap<>();
+        ways.put("10", way("10", List.of("A", "B"), "highway", "residential"));
+        ways.put("11", way("11", List.of("B", "C"), "highway", "residential"));
+
+        OsmSegmentGraph g = segmentGraph(nodes, ways);
+        Map<String, OsmNodeClassification> cls = classify(nodes, ways, false, false);
+
+        assertFalse(cls.get("B").reasons().contains(OsmNodeReason.BARRIER));
+        assertFalse(cls.get("B").reasons().contains(OsmNodeReason.SEMANTIC_NODE_TAG));
+        assertFalse(OsmRoutingNodeSelector.select(g, cls, false).contains("B"));
     }
 }

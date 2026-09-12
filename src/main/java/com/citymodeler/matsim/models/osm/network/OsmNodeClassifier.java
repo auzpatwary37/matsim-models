@@ -37,7 +37,8 @@ public final class OsmNodeClassifier {
             boolean preserveSharpBends,
             double sharpBendAngleDegrees,
             Set<String> explicitPreserveNodes,
-            boolean preserveCrossingNodes) {
+            boolean preserveCrossingNodes,
+            boolean preserveBarrierNodes) {
 
         Map<String, Set<String>> nodeWays = new TreeMap<>();
         Map<String, OsmWayRecord> accepted = new TreeMap<>();
@@ -86,7 +87,7 @@ public final class OsmNodeClassifier {
             if (transitStopNodes.contains(nodeId)) {
                 addReason(reasons, seen, OsmNodeReason.TRANSIT_STOP);
             }
-            if (rec != null && isBarrier(rec.tags())) {
+            if (preserveBarrierNodes && rec != null && isBarrier(rec.tags())) {
                 addReason(reasons, seen, OsmNodeReason.BARRIER);
             }
             if (preserveCrossingNodes && rec != null && rec.tags().get("crossing") != null) {
@@ -121,7 +122,7 @@ public final class OsmNodeClassifier {
         return ts != null && !"no".equals(ts) && !"none".equals(ts) && !"0".equals(ts);
     }
 
-    /** True when the node carries a control / stop / barrier / transit node tag (excluding crossing). */
+    /** True when the node carries a control / stop / transit node tag (excluding crossing / barrier). */
     static boolean hasIntrinsicSemanticTag(OsmTagSet t) {
         if (t.has("highway", "stop") || t.has("highway", "give_way")) {
             return true;
@@ -129,10 +130,7 @@ public final class OsmNodeClassifier {
         if (t.has("highway", "bus_stop") || t.has("highway", "tram_stop")) {
             return true;
         }
-        if (t.get("public_transport") != null || t.get("railway") != null) {
-            return true;
-        }
-        return t.get("barrier") != null || t.get("bollard") != null;
+        return t.get("public_transport") != null || t.get("railway") != null;
     }
 
     /** True when the node is tagged as a physical barrier. */

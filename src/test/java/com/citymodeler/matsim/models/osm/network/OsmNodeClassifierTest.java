@@ -37,7 +37,7 @@ final class OsmNodeClassifierTest {
                                                               Set<String> explicit,
                                                               boolean preserveCrossing) {
         return OsmNodeClassifier.classifyIntrinsic(
-                res, res.ways().keySet(), stopNodes, viaNodes, false, 30.0, explicit, preserveCrossing);
+                res, res.ways().keySet(), stopNodes, viaNodes, false, 30.0, explicit, preserveCrossing, true);
     }
 
     @Test

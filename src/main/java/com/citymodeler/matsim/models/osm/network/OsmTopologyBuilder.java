@@ -101,7 +101,7 @@ public final class OsmTopologyBuilder {
         Map<String, OsmNodeClassification> classification = OsmNodeClassifier.classifyIntrinsic(
                 importResult, acceptedWayIds, stopNodes, viaNodes,
                 preserveSharpBends, sharpBendAngleDegrees, explicitPreserve,
-                config.preserveCrossingNodes());
+                config.preserveCrossingNodes(), config.preserveBarrierNodes());
 
         Set<String> routing = OsmRoutingNodeSelector.select(graph, classification, keepAllGeometryNodes);
         routing = anchorCycles(graph, routing);
