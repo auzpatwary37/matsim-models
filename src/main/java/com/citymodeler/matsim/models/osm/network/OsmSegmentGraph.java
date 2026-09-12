@@ -23,7 +23,7 @@ public final class OsmSegmentGraph {
             Objects.requireNonNull(wayId, "wayId");
             Objects.requireNonNull(nodeA, "nodeA");
             Objects.requireNonNull(nodeB, "nodeB");
-            modes = Set.copyOf(modes);
+            modes = Collections.unmodifiableSet(new TreeSet<>(modes));
         }
     }
 
