@@ -83,10 +83,12 @@ final class OsmPbfReader {
             List<Long> lons = dense.getLonList();
             List<Integer> keysVals = dense.getKeysValsList();
 
-            long latAccum = 0, lonAccum = 0;
+            long idAccum = 0, latAccum = 0, lonAccum = 0;
             int kvIdx = 0;
             for (int i = 0; i < ids.size(); i++) {
-                long id = ids.get(i);
+                // Dense node ids are delta-encoded within the block, like lat/lon.
+                idAccum += ids.get(i);
+                long id = idAccum;
                 latAccum += lats.get(i);
                 lonAccum += lons.get(i);
                 double lat = parseLat(latAccum);
@@ -98,11 +100,15 @@ final class OsmPbfReader {
 
                 try {
                     Map<String, String> tags = new HashMap<>();
-                    // OSM PBF spec: ((keyId valueId) 0)* — single zero terminates each node's tags
+                    // OSM PBF spec: ((keyId valueId) 0)* — a single zero terminates each node's tags.
+                    // Keys and values come in pairs before the terminator.
                     while (kvIdx < keysVals.size()) {
                         int first = keysVals.get(kvIdx++);
                         if (first == 0) {
                             break; // end of this node's tags
+                        }
+                        if (kvIdx >= keysVals.size()) {
+                            break; // truncated tag list; stop rather than over-run
                         }
                         int valIdx = keysVals.get(kvIdx++);
                         tags.put(getStringById(first), getStringById(valIdx));
