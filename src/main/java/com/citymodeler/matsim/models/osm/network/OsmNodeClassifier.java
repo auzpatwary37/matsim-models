@@ -104,6 +104,94 @@ public final class OsmNodeClassifier {
         return out;
     }
 
+    /**
+     * Intrinsic-only classification: reasons that are true of the node itself, independent of
+     * structural degree. Used by OsmRoutingNodeSelector; the legacy classify(...) is retained until
+     * Task 5 rewires the signal-aware simplifier.
+     */
+    public static Map<String, OsmNodeClassification> classifyIntrinsic(
+            OsmImportResult importResult,
+            Set<String> acceptedWayIds,
+            Set<String> transitStopNodes,
+            Set<String> restrictionViaNodes,
+            boolean preserveSharpBends,
+            double sharpBendAngleDegrees,
+            Set<String> explicitPreserveNodes,
+            boolean preserveCrossingNodes) {
+
+        Map<String, Set<String>> nodeWays = new TreeMap<>();
+        Map<String, OsmWayRecord> accepted = new TreeMap<>();
+
+        for (String wayId : new TreeSet<>(acceptedWayIds)) {
+            OsmWayRecord w = importResult.ways().get(wayId);
+            if (w == null || w.nodeRefs().size() < 2) {
+                continue;
+            }
+            accepted.put(wayId, w);
+            for (String n : new LinkedHashSet<>(w.nodeRefs())) {
+                nodeWays.computeIfAbsent(n, k -> new TreeSet<>()).add(wayId);
+            }
+        }
+
+        Set<String> sharpBends = new TreeSet<>();
+        if (preserveSharpBends) {
+            double threshold = 180.0 - sharpBendAngleDegrees;
+            for (OsmWayRecord w : accepted.values()) {
+                List<String> nr = w.nodeRefs();
+                for (int i = 1; i + 1 < nr.size(); i++) {
+                    OsmNodeRecord a = importResult.nodes().get(nr.get(i - 1));
+                    OsmNodeRecord b = importResult.nodes().get(nr.get(i));
+                    OsmNodeRecord c = importResult.nodes().get(nr.get(i + 1));
+                    if (a == null || b == null || c == null) {
+                        continue;
+                    }
+                    if (angleAtB(a, b, c) < threshold) {
+                        sharpBends.add(nr.get(i));
+                    }
+                }
+            }
+        }
+
+        Map<String, OsmNodeClassification> out = new TreeMap<>();
+        for (String nodeId : new TreeSet<>(nodeWays.keySet())) {
+            List<OsmNodeReason> reasons = new ArrayList<>();
+            Set<OsmNodeReason> seen = new TreeSet<>();
+            OsmNodeRecord rec = importResult.nodes().get(nodeId);
+            if (rec != null && isSignalized(rec.tags())) {
+                addReason(reasons, seen, OsmNodeReason.SIGNALIZED);
+            }
+            if (restrictionViaNodes.contains(nodeId)) {
+                addReason(reasons, seen, OsmNodeReason.TURN_RESTRICTION_VIA);
+            }
+            if (transitStopNodes.contains(nodeId)) {
+                addReason(reasons, seen, OsmNodeReason.TRANSIT_STOP);
+            }
+            if (rec != null && isBarrier(rec.tags())) {
+                addReason(reasons, seen, OsmNodeReason.BARRIER);
+            }
+            if (preserveCrossingNodes && rec != null && rec.tags().get("crossing") != null) {
+                addReason(reasons, seen, OsmNodeReason.CROSSING);
+            }
+            if (rec != null && hasIntrinsicSemanticTag(rec.tags())) {
+                addReason(reasons, seen, OsmNodeReason.SEMANTIC_NODE_TAG);
+            }
+            if (sharpBends.contains(nodeId)) {
+                addReason(reasons, seen, OsmNodeReason.SHARP_BEND);
+            }
+            if (explicitPreserveNodes.contains(nodeId)) {
+                addReason(reasons, seen, OsmNodeReason.EXPLICIT_PRESERVE);
+            }
+            out.put(nodeId, new OsmNodeClassification(nodeId, reasons));
+        }
+        return out;
+    }
+
+    private static void addReason(List<OsmNodeReason> reasons, Set<OsmNodeReason> seen, OsmNodeReason reason) {
+        if (seen.add(reason)) {
+            reasons.add(reason);
+        }
+    }
+
     /** True when the node is explicitly tagged as a traffic signal. */
     static boolean isSignalized(OsmTagSet t) {
         if (t.has("highway", "traffic_signals")) {
@@ -128,6 +216,25 @@ public final class OsmNodeClassifier {
             return true;
         }
         return t.get("crossing") != null;
+    }
+
+    /** True when the node carries a control / stop / barrier / transit node tag (excluding crossing). */
+    static boolean hasIntrinsicSemanticTag(OsmTagSet t) {
+        if (t.has("highway", "stop") || t.has("highway", "give_way")) {
+            return true;
+        }
+        if (t.has("highway", "bus_stop") || t.has("highway", "tram_stop")) {
+            return true;
+        }
+        if (t.get("public_transport") != null || t.get("railway") != null) {
+            return true;
+        }
+        return t.get("barrier") != null || t.get("bollard") != null;
+    }
+
+    /** True when the node is tagged as a physical barrier. */
+    static boolean isBarrier(OsmTagSet t) {
+        return t.get("barrier") != null || t.get("bollard") != null;
     }
 
     /** Interior angle (degrees, 0..180; 180 == straight) at b of the path a-b-c. */

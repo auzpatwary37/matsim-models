@@ -12,25 +12,30 @@ public final class OsmNetworkBuildConfig {
     private final Set<String> explicitOsmNodeIdsToKeep;
     private final double sharpBendAngleDegrees;
     private final Map<String, OsmWayRule> rulesByKeyValue;
+    private final boolean preserveCrossingNodes;
+    private final boolean preserveBarrierNodes;
 
     private OsmNetworkBuildConfig(OsmGeometryMode geometryMode, boolean preserveTransitStopNodes,
                                    Set<String> explicitOsmNodeIdsToKeep, double sharpBendAngleDegrees,
-                                   Map<String, OsmWayRule> rulesByKeyValue) {
+                                   Map<String, OsmWayRule> rulesByKeyValue,
+                                   boolean preserveCrossingNodes, boolean preserveBarrierNodes) {
         this.geometryMode = geometryMode;
         this.preserveTransitStopNodes = preserveTransitStopNodes;
         this.explicitOsmNodeIdsToKeep = Set.copyOf(explicitOsmNodeIdsToKeep);
         this.sharpBendAngleDegrees = sharpBendAngleDegrees;
         this.rulesByKeyValue = rulesByKeyValue;
+        this.preserveCrossingNodes = preserveCrossingNodes;
+        this.preserveBarrierNodes = preserveBarrierNodes;
     }
 
     public static OsmNetworkBuildConfig materializeGeometryConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
-                true, Set.of(), 35.0, defaultRules());
+                true, Set.of(), 35.0, defaultRules(), false, true);
     }
 
     public static OsmNetworkBuildConfig defaultConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
-                true, Set.of(), 35.0, defaultRules());
+                true, Set.of(), 35.0, defaultRules(), false, true);
     }
 
     public OsmGeometryMode geometryMode() {
@@ -47,6 +52,14 @@ public final class OsmNetworkBuildConfig {
 
     public double sharpBendAngleDegrees() {
         return sharpBendAngleDegrees;
+    }
+
+    public boolean preserveCrossingNodes() {
+        return preserveCrossingNodes;
+    }
+
+    public boolean preserveBarrierNodes() {
+        return preserveBarrierNodes;
     }
 
     public OsmWayRule resolveRule(OsmTagSet tags) {
