@@ -225,7 +225,7 @@ final class JunctionSignalDescriptorTest {
         // The non-signal internal node X is contracted into the merged A->B link.
         assertFalse(s.network().getNodes().containsKey(com.citymodeler.matsim.models.api.Id
                 .create("osm_node_X", com.citymodeler.matsim.models.network.Node.class)));
-        assertTrue(s.collapsedLink("sim_90_f_A_B").segmentCount() == 2);
+        assertEquals(2, s.collapsedLink("sim_90_f_A_B").segmentCount());
         JunctionSignalDescriptor j = s.junctionAt("osm_node_A");
         assertNotNull(j);
         // Bidirectional internal path: both cross-node directions are reachable.

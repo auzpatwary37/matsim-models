@@ -86,8 +86,10 @@ The last column is pt2MATSim run with `highway=service` kept, for a like-for-lik
    reason; motorway carriageway/continuation nodes carry none. pt2MATSim retains more motorway nodes
    (e.g. structure/interchange points). Policy choice, not a defect.
 4. **Accepted way classes.** pt2MATSim additionally materializes `path`, `pedestrian`, `platform`,
-   `construction`, and `track` (80 links total) that we do not admit to the car network; our missing
-   class is rail (9,833 vs 10,193). Policy choice on which way classes feed the network.
+   `construction`, and `track` (78 links total in the default column) that we do not admit to the car
+   network; our missing class is rail (9,833 vs 10,193). Policy choice on which way classes feed the
+   network. The `(rail/other)` bucket also contains a couple of ferry links (from `route=ferry`),
+   which is why it is labelled rail/other rather than rail alone.
 5. **Mean length.** Ours 161.7 m vs pt2MATSim 205.4 m is partly the short service aisles in our
    network and partly the extra rail; on the shared non-service scope the means differ by <4%
    (191.4 m vs 199.1 m).

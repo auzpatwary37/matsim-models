@@ -1,7 +1,6 @@
 package com.citymodeler.matsim.models.osm.network;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -85,7 +84,7 @@ public final class OsmLaneHintExtractor {
     public static Map<String, OsmIntersectionLaneHint> extractIntersectionLaneHints(
             OsmImportResult importResult, Network network, Map<String, OsmLaneHint> laneHints) {
 
-        Map<String, OsmIntersectionLaneHint> result = new HashMap<>();
+        Map<String, OsmIntersectionLaneHint> result = new TreeMap<>();
 
         for (var entry : network.getNodes().entrySet()) {
             String nodeId = entry.getKey().toString();
@@ -96,8 +95,8 @@ public final class OsmLaneHintExtractor {
 
             List<String> incomingIds = new ArrayList<>();
             List<String> outgoingIds = new ArrayList<>();
-            Map<String, Double> approachLanes = new HashMap<>();
-            Map<String, String> turnLanes = new HashMap<>();
+            Map<String, Double> approachLanes = new TreeMap<>();
+            Map<String, String> turnLanes = new TreeMap<>();
 
             for (Link link : inLinks) {
                 String lid = link.getId().toString();
