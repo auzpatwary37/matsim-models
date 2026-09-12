@@ -94,6 +94,23 @@ public final class OsmNetworkBuildConfig {
                 Set.of("car"), 1.0, 8.33, 300.0, false, false));
         rules.put("highway:service", new OsmWayRule("highway", "service", 9,
                 Set.of("car"), 1.0, 11.11, 600.0, false, false));
+        // Link roads: OSM tags ramps/connectors as the parent class with a _link suffix. Each is a
+        // distinct highway class, so each keeps its own hierarchy/modes/free-speed rather than one
+        // generic rule (Review #1: do not invent a synthetic generic highway=link as the signal).
+        // These are the connector/slip/internal roads at complex intersections.
+        rules.put("highway:motorway_link", new OsmWayRule("highway", "motorway_link", 1,
+                Set.of("car"), 3.0, 44.44, 1200.0, true, false));
+        rules.put("highway:trunk_link", new OsmWayRule("highway", "trunk_link", 2,
+                Set.of("car"), 3.0, 38.89, 1200.0, false, false));
+        rules.put("highway:primary_link", new OsmWayRule("highway", "primary_link", 3,
+                Set.of("car"), 2.0, 33.33, 900.0, false, false));
+        rules.put("highway:secondary_link", new OsmWayRule("highway", "secondary_link", 4,
+                Set.of("car"), 2.0, 27.78, 900.0, false, false));
+        rules.put("highway:tertiary_link", new OsmWayRule("highway", "tertiary_link", 5,
+                Set.of("car"), 1.0, 22.22, 600.0, false, false));
+        // Bare highway=link is the unclassified minor-link variant; still a valid internal road.
+        rules.put("highway:link", new OsmWayRule("highway", "link", 6,
+                Set.of("car"), 1.0, 13.89, 600.0, false, false));
         rules.put("highway:busway", new OsmWayRule("highway", "busway", 3,
                 Set.of("bus", "pt"), 1.0, 13.89, 600.0, false, true));
         rules.put("railway:rail", new OsmWayRule("railway", "rail", 1,
