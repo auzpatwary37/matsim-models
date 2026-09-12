@@ -34,9 +34,9 @@ public final class TransitScheduleClipper {
     private TransitScheduleClipper() {
     }
 
-    /** Result of clipping: the retained schedule and how much was dropped. */
+    /** Result of clipping: the retained schedule, drop counts, and vehicle ids still referenced. */
     public record ClipResult(TransitSchedule schedule, int stopsKept, int stopsDropped,
-                             int routesDropped) {
+                             int routesDropped, Set<String> retainedVehicleIds) {
     }
 
     public static ClipResult clipToNetwork(TransitSchedule source, Network network) {
@@ -80,6 +80,7 @@ public final class TransitScheduleClipper {
         }
 
         int routesDropped = 0;
+        Set<String> retainedVehicleIds = new HashSet<>();
         for (TransitLine line : source.getTransitLines().values()) {
             TransitLine nl = new TransitLine(line.getId());
             nl.setName(line.getName());
@@ -108,6 +109,9 @@ public final class TransitScheduleClipper {
                     var nd = new com.citymodeler.matsim.models.transit.Departure(d.getId(), d.getDepartureTime());
                     nd.setVehicleId(d.getVehicleId());
                     nr.addDeparture(nd);
+                    if (d.getVehicleId() != null) {
+                        retainedVehicleIds.add(d.getVehicleId());
+                    }
                 }
                 nl.addRoute(nr);
                 anyRoute = true;
@@ -117,7 +121,7 @@ public final class TransitScheduleClipper {
             }
         }
         out.postProcess();
-        return new ClipResult(out, kept, dropped, routesDropped);
+        return new ClipResult(out, kept, dropped, routesDropped, retainedVehicleIds);
     }
 
     private static Coord projected(TransitStopFacility f, CrsUtils.Projector projector) {

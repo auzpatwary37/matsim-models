@@ -34,7 +34,9 @@ import com.citymodeler.matsim.models.osm.network.OsmSignalAwareSimplifier;
 import com.citymodeler.matsim.models.osm.network.OsmSimplifiedNetwork;
 import com.citymodeler.matsim.models.osm.network.OsmSimplifyOptions;
 import com.citymodeler.matsim.models.transit.TransitSchedule;
+import com.citymodeler.matsim.models.vehicles.Vehicle;
 import com.citymodeler.matsim.models.vehicles.VehicleDefinitions;
+import com.citymodeler.matsim.models.vehicles.VehicleType;
 
 /**
  * End-to-end bundle production, mirroring the three-stage OSM+GTFS pipeline:
@@ -180,8 +182,8 @@ public final class OsmGtfsBundleRunner {
             VehicleDefinitions vehicleDefinitions = build.vehicles();
 
             // Clip GTFS to the network extent so out-of-area stops do not drive artificial-link
-            // fabrication. The clip is build-new; the vehicle set is unchanged (unused vehicles for
-            // dropped departures are harmless, and departures reference vehicles by id).
+            // fabrication. The clip is build-new; vehicles for dropped departures are pruned so the
+            // vehicle file contains exactly the vehicles the clipped schedule references.
             TransitScheduleClipper.ClipResult clip =
                     TransitScheduleClipper.clipToNetwork(unmapped, baseNetwork, clipMarginMeters);
             if (clip.stopsDropped() > 0) {
@@ -189,6 +191,7 @@ public final class OsmGtfsBundleRunner {
                         + clip.routesDropped() + " routes outside the network extent");
             }
             unmapped = clip.schedule();
+            vehicleDefinitions = pruneVehicles(vehicleDefinitions, clip.retainedVehicleIds());
 
             transitScheduleFile = outputDirectory.resolve(TRANSIT_SCHEDULE_FILE);
             vehiclesFile = outputDirectory.resolve(VEHICLES_FILE);
@@ -222,6 +225,24 @@ public final class OsmGtfsBundleRunner {
                 vehiclesFile, mappedNetworkFile, mappedScheduleFile, baseNodes, baseLinks,
                 facilities.getFacilities().size(), lines, routes, departures, vehicleTypes, vehicles,
                 mappedNodes, mappedLinks, List.copyOf(warnings));
+    }
+
+    /**
+     * Keep only vehicles whose ids are still referenced by the (clipped) schedule, so the vehicle
+     * file is consistent with the departures actually emitted. Vehicle types are retained.
+     */
+    private static VehicleDefinitions pruneVehicles(VehicleDefinitions all,
+                                                     java.util.Set<String> retainedVehicleIds) {
+        VehicleDefinitions pruned = new VehicleDefinitions();
+        for (VehicleType type : all.getVehicleTypes().values()) {
+            pruned.addVehicleType(type);
+        }
+        for (Vehicle v : all.getVehicles().values()) {
+            if (retainedVehicleIds.contains(v.getId().toString())) {
+                pruned.addVehicle(v);
+            }
+        }
+        return pruned;
     }
 
     private static int countRoutes(TransitSchedule schedule) {
