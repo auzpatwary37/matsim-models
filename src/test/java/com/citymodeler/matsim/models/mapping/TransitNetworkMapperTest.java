@@ -271,4 +271,51 @@ class TransitNetworkMapperTest {
         f.getAttributes().putAttribute("gtfs:lat", lat);
         return f;
     }
+
+    /**
+     * Regression: an unmapped WGS84 stop gets an artificial loop, and that loop's node must be in the
+     * NETWORK CRS (projected meters), never the raw WGS84 degrees. A degrees-valued loop node would
+     * sit ~6,000 km from the network it is added to.
+     */
+    @Test
+    void artificialLoopUsesProjectedNetworkCrsNotRawWgs84() {
+        Network net = new Network();
+        net.getAttributes().putAttribute("osm:targetCrs", "EPSG:3857");
+        // A network far from (0,0) so a raw-degree coordinate is obviously wrong.
+        Node a = new Node(Id.create("a", Node.class), new Coord(682000, 6376000));
+        Node b = new Node(Id.create("b", Node.class), new Coord(682100, 6376000));
+        net.addNode(a);
+        net.addNode(b);
+        net.addLink(new Link(Id.create("l1", Link.class), a.getId(), b.getId(),
+                100.0, 900.0, 13.9, 2.0, Set.of("car", "pt")));
+        net.postProcess();
+
+        TransitSchedule schedule = new TransitSchedule();
+        // Luxembourg City WGS84; no link anywhere near -> artificial loop.
+        TransitStopFacility stop = wgs84Stop("s1", 6.13, 49.61);
+        schedule.addStopFacility(stop);
+        TransitLine line = new TransitLine(Id.create("line1", TransitLine.class));
+        TransitRoute route = new TransitRoute(Id.create("route1", TransitRoute.class));
+        route.setTransportMode("pt");
+        route.addStop(new TransitRouteStop(Id.create("s1", TransitStopFacility.class), 0, 0, false));
+        line.addRoute(route);
+        schedule.addTransitLine(line);
+        schedule.postProcess();
+
+        // Tiny candidate radius so the distant stop definitely gets a loop.
+        TransitMappingConfig cfg = new TransitMappingConfig(1.0, 1.0, 1, 1000.0,
+                CandidateScoreWeights.defaults(), java.util.Map.of());
+        TransitMappingResult result = new TransitNetworkMapper(cfg, new LinkSpatialIndex(net, 100.0))
+                .map(schedule, net);
+
+        Node loopNode = result.mappedNetwork().getNodes().values().stream()
+                .filter(n -> n.getId().toString().startsWith("pt_loop_node_"))
+                .findFirst().orElseThrow(() -> new AssertionError("expected an artificial loop node"));
+        Coord c = loopNode.getCoord();
+        // Projected Luxembourg is ~x=682,000 / y=6,376,000 m; raw degrees would be ~6.13 / 49.61.
+        assertTrue(c.getX() > 1000 && c.getX() < 1_000_000,
+                "loop node x must be in projected meters, was " + c.getX());
+        assertTrue(c.getY() > 1_000_000,
+                "loop node y must be in projected meters, was " + c.getY());
+    }
 }
