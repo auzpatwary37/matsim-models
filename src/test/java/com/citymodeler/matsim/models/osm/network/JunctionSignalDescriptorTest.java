@@ -54,8 +54,8 @@ final class JunctionSignalDescriptorTest {
     void enumeratesIncomingAndOutgoingLinks() {
         OsmSimplifiedNetwork s = simplifyCrossroads();
         JunctionSignalDescriptor j = find(s, "N").orElseThrow();
-        assertEquals(List.of("sim_10_f_W_N", "sim_20_r_E_N", "sim_30_f_S_N"), j.incomingLinks());
-        assertEquals(List.of("sim_10_r_N_W", "sim_20_f_N_E", "sim_30_r_N_S"), j.outgoingLinks());
+        assertEquals(List.of("sim_10_r_N_W", "sim_20_f_E_N", "sim_30_r_N_S"), j.incomingLinks());
+        assertEquals(List.of("sim_10_f_N_W", "sim_20_r_E_N", "sim_30_f_N_S"), j.outgoingLinks());
     }
 
     @Test
@@ -64,21 +64,21 @@ final class JunctionSignalDescriptorTest {
         JunctionSignalDescriptor j = find(s, "N").orElseThrow();
         // 3 incoming x 3 outgoing = 9 turning movements (incoming/outgoing are disjoint).
         assertEquals(9, j.movements().size());
-        assertTrue(j.hasMovement("sim_10_f_W_N", "sim_20_f_N_E"));
-        assertFalse(j.hasMovement("sim_10_f_W_N", "sim_10_f_W_N"));
+        assertTrue(j.hasMovement("sim_10_r_N_W", "sim_20_r_E_N"));
+        assertFalse(j.hasMovement("sim_10_r_N_W", "sim_10_r_N_W"));
 
-        assertEquals(OsmTurnType.THROUGH, turn(j, "sim_10_f_W_N", "sim_20_f_N_E"));
-        assertEquals(OsmTurnType.RIGHT, turn(j, "sim_10_f_W_N", "sim_30_r_N_S"));
-        assertEquals(OsmTurnType.U_TURN, turn(j, "sim_10_f_W_N", "sim_10_r_N_W"));
-        assertEquals(OsmTurnType.RIGHT, turn(j, "sim_30_f_S_N", "sim_20_f_N_E"));
-        assertEquals(OsmTurnType.LEFT, turn(j, "sim_30_f_S_N", "sim_10_r_N_W"));
+        assertEquals(OsmTurnType.THROUGH, turn(j, "sim_10_r_N_W", "sim_20_r_E_N"));
+        assertEquals(OsmTurnType.RIGHT, turn(j, "sim_10_r_N_W", "sim_30_f_N_S"));
+        assertEquals(OsmTurnType.U_TURN, turn(j, "sim_10_r_N_W", "sim_10_f_N_W"));
+        assertEquals(OsmTurnType.RIGHT, turn(j, "sim_30_r_N_S", "sim_20_r_E_N"));
+        assertEquals(OsmTurnType.LEFT, turn(j, "sim_30_r_N_S", "sim_10_f_N_W"));
     }
 
     @Test
     void restrictionMakesMovementFullyRestricted() {
         OsmSimplifiedNetwork s = simplifyCrossroads();
         JunctionSignalDescriptor j = find(s, "N").orElseThrow();
-        SignalizedMovement m = movement(j, "sim_10_f_W_N", "sim_20_f_N_E");
+        SignalizedMovement m = movement(j, "sim_10_r_N_W", "sim_20_r_E_N");
         assertNotNull(m);
         assertTrue(m.fullyRestricted());
         assertTrue(m.restrictedModes().contains("car"));
@@ -159,11 +159,11 @@ final class JunctionSignalDescriptorTest {
                         new OsmSimplifyOptions(40.0, false, 35.0, Set.of()));
         JunctionSignalDescriptor j = s.junctionAt("osm_node_A");
         // Arrives at A, departs at B: reachable through the internal link, so present but UNKNOWN.
-        assertTrue(j.hasMovement("sim_10_f_an_A", "sim_12_f_B_bs"));
-        assertEquals(OsmTurnType.UNKNOWN, turn(j, "sim_10_f_an_A", "sim_12_f_B_bs"));
+        assertTrue(j.hasMovement("sim_10_r_A_an", "sim_12_f_B_bs"));
+        assertEquals(OsmTurnType.UNKNOWN, turn(j, "sim_10_r_A_an", "sim_12_f_B_bs"));
         // Arrives and departs at A: a real, geometry-derived turn type.
-        assertTrue(j.hasMovement("sim_10_f_an_A", "sim_11_r_A_aw"));
-        assertNotEquals(OsmTurnType.UNKNOWN, turn(j, "sim_10_f_an_A", "sim_11_r_A_aw"));
+        assertTrue(j.hasMovement("sim_10_r_A_an", "sim_11_f_A_aw"));
+        assertNotEquals(OsmTurnType.UNKNOWN, turn(j, "sim_10_r_A_an", "sim_11_f_A_aw"));
     }
 
     /** Review BLOCKER: a one-way internal link removes the directionally-impossible reverse movement. */
@@ -174,9 +174,9 @@ final class JunctionSignalDescriptorTest {
                         new OsmSimplifyOptions(40.0, false, 35.0, Set.of()));
         JunctionSignalDescriptor j = s.junctionAt("osm_node_A");
         // A -> B reachable (the one-way internal link direction).
-        assertTrue(j.hasMovement("sim_10_f_an_A", "sim_12_f_B_bs"));
+        assertTrue(j.hasMovement("sim_10_r_A_an", "sim_12_f_B_bs"));
         // B -> A is not reachable: the phantom reverse movement must be absent.
-        assertFalse(j.hasMovement("sim_12_r_bs_B", "sim_11_r_A_aw"));
+        assertFalse(j.hasMovement("sim_12_r_B_bs", "sim_11_f_A_aw"));
     }
 
     /**
@@ -212,9 +212,9 @@ final class JunctionSignalDescriptorTest {
     }
 
     /**
-     * Review #2: two signal corners joined only through a NON-signal internal node X. X must survive
-     * materialization, the pair must cluster, and the A-to-B cross-node movement must be emitted
-     * through A -> X -> B (no direct A-B link exists).
+     * Review #2: two signal corners joined only through a NON-signal internal node X. The cross-way
+     * contraction engine dissolves the degree-2 X into a single merged A->B internal link (that is
+     * its purpose), and the A-to-B cross-node movement must still be emitted through it.
      */
     @Test
     void viaInternalNodeClusterEmitsCrossNodeMovement() {
@@ -222,14 +222,15 @@ final class JunctionSignalDescriptorTest {
                 simplify(SignalReadyFixtures.wideIntersectionViaInternalNode(),
                         new OsmSimplifyOptions(40.0, false, 35.0, Set.of()));
         assertEquals(1, s.signalizedJunctions().size());
-        // The non-signal internal node survives, so the path really is A -> X -> B.
-        assertTrue(s.network().getNodes().containsKey(com.citymodeler.matsim.models.api.Id
+        // The non-signal internal node X is contracted into the merged A->B link.
+        assertFalse(s.network().getNodes().containsKey(com.citymodeler.matsim.models.api.Id
                 .create("osm_node_X", com.citymodeler.matsim.models.network.Node.class)));
+        assertTrue(s.collapsedLink("sim_90_f_A_B").segmentCount() == 2);
         JunctionSignalDescriptor j = s.junctionAt("osm_node_A");
         assertNotNull(j);
         // Bidirectional internal path: both cross-node directions are reachable.
-        assertTrue(j.hasMovement("sim_10_f_an_A", "sim_12_f_B_bs"));
-        assertTrue(j.hasMovement("sim_12_r_bs_B", "sim_11_r_A_aw"));
+        assertTrue(j.hasMovement("sim_10_r_A_an", "sim_12_f_B_bs"));
+        assertTrue(j.hasMovement("sim_12_r_B_bs", "sim_11_f_A_aw"));
     }
 
     /** Review #2: with a one-way internal path A -> X -> B, the impossible reverse movement is absent. */
@@ -240,8 +241,8 @@ final class JunctionSignalDescriptorTest {
                         new OsmSimplifyOptions(40.0, false, 35.0, Set.of()));
         JunctionSignalDescriptor j = s.junctionAt("osm_node_A");
         assertNotNull(j);
-        assertTrue(j.hasMovement("sim_10_f_an_A", "sim_12_f_B_bs"));
-        assertFalse(j.hasMovement("sim_12_r_bs_B", "sim_11_r_A_aw"));
+        assertTrue(j.hasMovement("sim_10_r_A_an", "sim_12_f_B_bs"));
+        assertFalse(j.hasMovement("sim_12_r_B_bs", "sim_11_f_A_aw"));
     }
 
     /**
@@ -259,8 +260,8 @@ final class JunctionSignalDescriptorTest {
         assertSame(s.junctionAt("osm_node_A"), s.junctionAt("osm_node_B"));
         JunctionSignalDescriptor j = s.junctionAt("osm_node_A");
         // B -> A is the only reachable cross-node direction.
-        assertTrue(j.hasMovement("sim_12_r_bs_B", "sim_11_r_A_aw"));
-        assertFalse(j.hasMovement("sim_10_f_an_A", "sim_12_f_B_bs"));
+        assertTrue(j.hasMovement("sim_12_r_B_bs", "sim_11_f_A_aw"));
+        assertFalse(j.hasMovement("sim_10_r_A_an", "sim_12_f_B_bs"));
     }
 
     /**
@@ -334,7 +335,7 @@ final class JunctionSignalDescriptorTest {
         assertTrue(j.osmNodeIds().containsAll(List.of("A", "B", "C")),
                 "A, B, C all pairwise qualify => one cluster");
         // Arrive at A (from an), depart at C (to ce): direct A->C witness must survive.
-        assertTrue(j.hasMovement("sim_10_f_an_A", "sim_13_f_C_ce"),
+        assertTrue(j.hasMovement("sim_10_r_A_an", "sim_13_f_C_ce"),
                 "direct A->C witness must not be lost to spanning-tree bookkeeping");
     }
 

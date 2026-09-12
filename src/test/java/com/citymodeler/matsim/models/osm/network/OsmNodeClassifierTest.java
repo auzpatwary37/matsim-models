@@ -31,28 +31,39 @@ final class OsmNodeClassifierTest {
                 OsmProvenance.defaultFor("t.osm", "EPSG:3857"));
     }
 
+    private static Map<String, OsmNodeClassification> classify(OsmImportResult res,
+                                                              Set<String> stopNodes,
+                                                              Set<String> viaNodes,
+                                                              Set<String> explicit,
+                                                              boolean preserveCrossing) {
+        return OsmNodeClassifier.classifyIntrinsic(
+                res, res.ways().keySet(), stopNodes, viaNodes, false, 30.0, explicit, preserveCrossing);
+    }
+
     @Test
-    void keepsEndpointsSharedSignalizedAndViaNodesCollapsesPlainInterior() {
+    void intrinsicReasonsAreClassifiedAndPlainInteriorCollapses() {
         Map<String, OsmNodeRecord> nodes = Map.of(
                 "W", node("W", 0, 100, Map.of()),
                 "Wm", node("Wm", 50, 100, Map.of()),
                 "N", node("N", 100, 100, Map.of("highway", "traffic_signals")),
+                "B", node("B", 150, 100, Map.of("barrier", "bollard")),
                 "E", node("E", 200, 100, Map.of()));
         Map<String, OsmWayRecord> ways = Map.of(
-                "10", way("10", List.of("W", "Wm", "N"), Map.of("highway", "residential")),
-                "20", way("20", List.of("N", "E"), Map.of("highway", "residential")));
+                "10", way("10", List.of("W", "Wm", "N", "B", "E"), Map.of("highway", "residential")));
         OsmImportResult res = res(nodes, ways);
 
-        Map<String, OsmNodeClassification> out = OsmNodeClassifier.classify(
-                res, Set.of("10", "20"), Set.of(), Set.of("N"), false, 30.0, Set.of());
+        Map<String, OsmNodeClassification> out = classify(res, Set.of("Wm"), Set.of("B"), Set.of("E"), false);
 
-        assertTrue(out.get("W").keep());
-        assertTrue(out.get("E").keep());
-        assertTrue(out.get("N").keep());
-        assertFalse(out.get("Wm").keep());
         assertTrue(out.get("N").reasons().contains(OsmNodeReason.SIGNALIZED));
-        assertTrue(out.get("N").reasons().contains(OsmNodeReason.TURN_RESTRICTION_VIA));
-        assertTrue(out.get("Wm").reasons().isEmpty());
+        assertTrue(out.get("N").keep());
+        assertTrue(out.get("Wm").reasons().contains(OsmNodeReason.TRANSIT_STOP));
+        assertTrue(out.get("B").reasons().contains(OsmNodeReason.TURN_RESTRICTION_VIA));
+        assertTrue(out.get("B").reasons().contains(OsmNodeReason.BARRIER));
+        assertTrue(out.get("E").reasons().contains(OsmNodeReason.EXPLICIT_PRESERVE));
+
+        // A plain interior node has no reasons and must not be kept.
+        assertTrue(out.get("W").reasons().isEmpty());
+        assertFalse(out.get("W").keep());
     }
 
     @Test
@@ -63,26 +74,28 @@ final class OsmNodeClassifierTest {
         Map<String, OsmWayRecord> ways = Map.of(
                 "1", way("1", List.of("A", "B"), Map.of("highway", "residential")));
 
-        Map<String, OsmNodeClassification> out = OsmNodeClassifier.classify(
-                res(nodes, ways), Set.of("1"), Set.of(), Set.of(), false, 30.0, Set.of());
+        Map<String, OsmNodeClassification> out = classify(res(nodes, ways), Set.of(), Set.of(), Set.of(), false);
 
         assertTrue(out.get("B").reasons().contains(OsmNodeReason.SIGNALIZED));
     }
 
     @Test
-    void transitStopAndExplicitPreserveAreHonored() {
+    void crossingAndSemanticNodeTagsAreHonored() {
         Map<String, OsmNodeRecord> nodes = Map.of(
                 "A", node("A", 0, 0, Map.of()),
-                "B", node("B", 100, 0, Map.of()),
-                "C", node("C", 200, 0, Map.of()));
+                "C", node("C", 100, 0, Map.of("crossing", "marked")),
+                "G", node("G", 200, 0, Map.of("highway", "give_way")));
         Map<String, OsmWayRecord> ways = Map.of(
-                "1", way("1", List.of("A", "B", "C"), Map.of("highway", "residential")));
+                "1", way("1", List.of("A", "C", "G"), Map.of("highway", "residential")));
 
-        Map<String, OsmNodeClassification> out = OsmNodeClassifier.classify(
-                res(nodes, ways), Set.of("1"), Set.of("B"), Set.of(), false, 30.0, Set.of("C"));
+        Map<String, OsmNodeClassification> withCrossing =
+                classify(res(nodes, ways), Set.of(), Set.of(), Set.of(), true);
+        assertTrue(withCrossing.get("C").reasons().contains(OsmNodeReason.CROSSING));
+        assertTrue(withCrossing.get("G").reasons().contains(OsmNodeReason.SEMANTIC_NODE_TAG));
 
-        assertTrue(out.get("B").reasons().contains(OsmNodeReason.TRANSIT_STOP));
-        assertTrue(out.get("C").reasons().contains(OsmNodeReason.EXPLICIT_PRESERVE));
-        assertTrue(out.get("C").keep());
+        Map<String, OsmNodeClassification> withoutCrossing =
+                classify(res(nodes, ways), Set.of(), Set.of(), Set.of(), false);
+        assertFalse(withoutCrossing.get("C").reasons().contains(OsmNodeReason.CROSSING));
+        assertTrue(withoutCrossing.get("G").reasons().contains(OsmNodeReason.SEMANTIC_NODE_TAG));
     }
 }

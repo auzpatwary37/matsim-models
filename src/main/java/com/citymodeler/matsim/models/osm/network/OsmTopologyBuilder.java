@@ -12,6 +12,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 import com.citymodeler.matsim.models.api.Coord;
+import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
 import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.osm.OsmElementType;
@@ -40,25 +41,38 @@ public final class OsmTopologyBuilder {
     public static CollapsedTopology build(OsmImportResult importResult,
                                           OsmNetworkBuildConfig config,
                                           boolean keepAllGeometryNodes) {
-        return buildCore(importResult, config, null, keepAllGeometryNodes, false);
+        return buildCore(importResult, config, null, keepAllGeometryNodes, false, null);
     }
 
     /**
      * Signal-ready contraction: additionally retains transit-stop nodes and via nodes, and honors
      * the simplification options' sharp-bend / explicit-preserve policy. Always contracts
-     * geometry-only nodes (that is its purpose).
+     * geometry-only nodes (that is its purpose). Transit-stop nodes are derived from node tags.
      */
     public static CollapsedTopology buildSignalReady(OsmImportResult importResult,
                                                      OsmNetworkBuildConfig config,
                                                      OsmSimplifyOptions options) {
-        return buildCore(importResult, config, options, false, true);
+        return buildSignalReady(importResult, config, options, null);
+    }
+
+    /**
+     * Signal-ready contraction with an explicit transit-stop node set. When
+     * {@code transitStopNodeIds} is non-null it replaces the tag-derived stop set, letting a caller
+     * preserve the stops it materialized (e.g. from importer hints) rather than re-deriving them.
+     */
+    public static CollapsedTopology buildSignalReady(OsmImportResult importResult,
+                                                     OsmNetworkBuildConfig config,
+                                                     OsmSimplifyOptions options,
+                                                     Set<String> transitStopNodeIds) {
+        return buildCore(importResult, config, options, false, true, transitStopNodeIds);
     }
 
     private static CollapsedTopology buildCore(OsmImportResult importResult,
                                                OsmNetworkBuildConfig config,
                                                OsmSimplifyOptions options,
                                                boolean keepAllGeometryNodes,
-                                               boolean signalReady) {
+                                               boolean signalReady,
+                                               Set<String> transitStopNodeIds) {
         List<OsmImportIssue> issues = new ArrayList<>(importResult.issues());
 
         Set<String> acceptedWayIds = new TreeSet<>();
@@ -70,7 +84,9 @@ public final class OsmTopologyBuilder {
 
         OsmSegmentGraph graph = OsmSegmentGraph.build(importResult, config);
 
-        Set<String> stopNodes = signalReady ? stopNodes(importResult) : new TreeSet<>();
+        Set<String> stopNodes = signalReady
+                ? (transitStopNodeIds != null ? transitStopNodeIds : stopNodes(importResult))
+                : new TreeSet<>();
         Set<String> viaNodes = viaNodes(importResult);
 
         boolean preserveSharpBends = options != null && options.preserveSharpBends();
@@ -219,6 +235,12 @@ public final class OsmTopologyBuilder {
         String linkId = keepAllGeometryNodes
                 ? OsmGeneratedIds.linkId(firstSegment.wayId(), firstSegment.segmentIndex(), traversalForward)
                 : OsmGeneratedIds.simplifiedLinkId(firstWayId, forward, canonicalFrom, canonicalTo);
+        if (!keepAllGeometryNodes && network.getLinks().containsKey(Id.create(linkId, Link.class))) {
+            // Degenerate repeated-node span (a way that doubles back through a node referenced twice,
+            // forcing that node to be kept). The canonical directed span is already represented, so
+            // do not emit a parallel duplicate; the first occurrence keeps the provenance/geometry.
+            return;
+        }
         Link link = network.createLink(linkId,
                 OsmGeneratedIds.nodeId(startOsm), OsmGeneratedIds.nodeId(endOsm),
                 length, capacity, firstSegment.speed(traversalForward), lanes,

@@ -108,6 +108,36 @@ class OsmTopologyBuilderTest {
         assertEquals(3, t.network().getNodes().size());
     }
 
+    /**
+     * Ruling B: the explicit transit-stop overload preserves a stop node the tag-derived set would
+     * miss. An {@code amenity=bus_station} degree-2 node is a hint stop (importer policy) but carries
+     * none of the tags the engine derives stops from, so the 3-arg engine collapses it and the 4-arg
+     * (given the hint set) keeps it.
+     */
+    @Test
+    void explicitTransitStopOverloadRetainsHintOnlyStopNode() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0));
+        ns.put("B", new OsmNodeRecord("B", 100, 0, new Coord(100, 0),
+                OsmTagSet.of(Map.of("amenity", "bus_station"))));
+        ns.put("C", n("C", 200));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", w("10", List.of("A", "B", "C")));
+
+        OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
+        Set<String> stops = Set.of("B");
+
+        CollapsedTopology derived = OsmTopologyBuilder.buildSignalReady(
+                res(ns, ws), cfg, OsmSimplifyOptions.defaults());
+        assertFalse(derived.routingNodeIds().contains("B"),
+                "tag-derived stops must not include amenity=bus_station");
+
+        CollapsedTopology explicit = OsmTopologyBuilder.buildSignalReady(
+                res(ns, ws), cfg, OsmSimplifyOptions.defaults(), stops);
+        assertTrue(explicit.routingNodeIds().contains("B"),
+                "explicit transit-stop set must retain the hint-only stop node");
+    }
+
     /** Finding 1: reverse links must carry the way's backward-resolved freespeed/lanes. */
     @Test
     void reverseLinkCarriesBackwardResolvedAttributes() {
