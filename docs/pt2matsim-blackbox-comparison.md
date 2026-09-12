@@ -24,6 +24,92 @@ Both pipelines use the same OSM extract and the same GTFS feed per city.
 Ours keeps more nodes/links (we preserve geometry-only nodes by default and split links at more
 points); pt2MATSim collapses more aggressively (fewer, longer links). Both are valid MATSim networks.
 
+## Post-contraction (Task 8)
+
+The topology-contraction engine (Tasks 1–7) is now wired into `OsmSignalAwareSimplifier.simplify(...)`,
+so the bundle runner's base network is the **post-contraction** network. Re-running the black-box
+comparison on the **same** `lux.osm` input (network only, no GTFS) gives:
+
+| | OURS pre (adfb47a) | OURS post (6c70ea5) | pt2MATSim (black box) |
+|---|---|---|---|
+| nodes | 96,665 | 75,483 (−21.9%) | 49,549 |
+| links | 201,037 | 164,063 (−18.4%) | 105,125 |
+| mean link length | 132.5 m | 161.7 m | 205.4 m |
+
+Contraction moved our network materially toward pt2MATSim: the same physical road is no longer
+re-split at every way boundary, so mean link length rose 22% while link count fell 18%.
+
+### Per-road-class link counts
+
+Parsed from the `osm:tag:highway` attribute in our network and `osm:way:highway` in the pt2MATSim
+network (streaming, link-scoped). `(rail/other)` = links with no `highway` class attribute (rail).
+The last column is pt2MATSim run with `highway=service` kept, for a like-for-like scope.
+
+| class | OURS pre | OURS post | PT2M default | PT2M service-kept |
+|---|---|---|---|---|
+| motorway | 903 | 482 | 1,321 | 1,332 |
+| motorway_link | 871 | 680 | 777 | 816 |
+| trunk | 214 | 130 | 232 | 233 |
+| trunk_link | 105 | 80 | 92 | 94 |
+| primary | 19,691 | 15,082 | 14,355 | 17,094 |
+| primary_link | 322 | 267 | 220 | 232 |
+| secondary | 30,148 | 21,897 | 24,225 | 28,348 |
+| secondary_link | 131 | 119 | 92 | 95 |
+| tertiary | 6,098 | 4,449 | 4,727 | 5,492 |
+| tertiary_link | 27 | 25 | 24 | 24 |
+| unclassified | 9,133 | 7,058 | 8,275 | 10,358 |
+| residential | 54,908 | 44,547 | 37,154 | 44,113 |
+| living_street | 2,838 | 2,321 | 2,202 | 2,433 |
+| service | 63,806 | 57,074 | 1,151 | 56,527 |
+| busway | 20 | 19 | 7 | 7 |
+| construction | 0 | 0 | 43 | 43 |
+| path | 0 | 0 | 20 | 22 |
+| pedestrian | 0 | 0 | 11 | 11 |
+| platform | 0 | 0 | 2 | 2 |
+| track | 0 | 0 | 2 | 2 |
+| (rail/other) | 11,822 | 9,833 | 10,193 | 10,690 |
+| **TOTAL** | **201,037** | **164,063** | **105,125** | **177,968** |
+
+### Remaining delta expressed as policy choices
+
+1. **`highway=service` scope (dominant term).** Our default keeps service ways: 57,074 post-contraction
+   links. pt2MATSim's default drops almost all of them (1,151); when told to keep service it emits
+   56,527 and 177,968 links / 82,167 nodes, bracketing our total. This is a deliberate default-scope
+   choice — **not** a defect, and explicitly out of scope for Task 8 (the plan forbids changing
+   `service`/`busway` scope while re-measuring).
+2. **Shared non-service road scope is now nearly aligned.** Excluding `service` and `(rail/other)`,
+   ours = 97,156 links at 191.4 m mean; pt2MATSim default = 93,781 links at 199.1 m mean — a **3.6%
+   link-count difference**. Contracted routing-graph compactness is comparable on the shared scope;
+   the headline totals differ mainly because of (1).
+3. **Motorway node retention.** Ours has fewer, much longer motorway links (482 @ 975.0 m) than
+   pt2MATSim (1,321 @ 356.7 m). Our contract rule dissolves every degree-2 node with no intrinsic
+   reason; motorway carriageway/continuation nodes carry none. pt2MATSim retains more motorway nodes
+   (e.g. structure/interchange points). Policy choice, not a defect.
+4. **Accepted way classes.** pt2MATSim additionally materializes `path`, `pedestrian`, `platform`,
+   `construction`, and `track` (80 links total) that we do not admit to the car network; our missing
+   class is rail (9,833 vs 10,193). Policy choice on which way classes feed the network.
+5. **Mean length.** Ours 161.7 m vs pt2MATSim 205.4 m is partly the short service aisles in our
+   network and partly the extra rail; on the shared non-service scope the means differ by <4%
+   (191.4 m vs 199.1 m).
+
+Net: contraction closed most of the gap; what remains is explainable by `service` scope, motorway
+node-retention policy, and accepted-class policy — all choices, not correctness defects.
+
+### Reproduce (post-contraction)
+
+```bash
+# build current branch classes + deps (do NOT use the stale installed jar)
+cd /home/ashraf/git/matsim-models-topo   # branch feat/topology-contraction, HEAD 6c70ea5
+mvn -o -q -DskipTests compile dependency:build-classpath -Dmdep.outputFile=/tmp/cp_topo.txt
+java -Xmx56g -cp "target/classes:$(cat /tmp/cp_topo.txt)" \
+  com.citymodeler.matsim.models.bundle.OsmGtfsBundleRunner \
+  /home/ashraf/git/matsim-compare/lux.osm none \
+  /home/ashraf/git/matsim-compare/ours/luxembourg-post
+# ours  -> /home/ashraf/git/matsim-compare/ours/luxembourg-post/network.xml
+# pt2M  -> /home/ashraf/git/matsim-compare/p2m_lux_full_network.xml        (default)
+#          /home/ashraf/git/matsim-compare/p2m_lux_full_service_network.xml (service kept)
+```
+
 ## Unmapped schedule + vehicles (GTFS -> schedule; same feed, same sample day)
 
 | city | OURS facilities / lines / routes / departures / vehTypes / vehicles | PT2M facilities / lines / routes / departures / vehTypes / vehicles |
