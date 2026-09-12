@@ -325,6 +325,61 @@ final class SignalReadyFixtures {
         return result(nodes, ways);
     }
 
+    /**
+     * Three signal corners A, B, C of one wide junction, all pairwise joined by junction-internal
+     * {@code highway=link} roads A-B, B-C and A-C. Review #1: movement reachability must keep ALL
+     * qualifying directed witnesses (including the direct A-C one), regardless of which edges a
+     * spanning tree would select.
+     */
+    static OsmImportResult wideIntersectionTriangle() {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("A", node("A", 100, 100, "highway", "traffic_signals"));
+        nodes.put("B", node("B", 130, 100, "highway", "traffic_signals"));
+        nodes.put("C", node("C", 115, 130, "highway", "traffic_signals"));
+        nodes.put("an", node("an", 100, 140));
+        nodes.put("aw", node("aw", 60, 100));
+        nodes.put("bs", node("bs", 130, 60));
+        nodes.put("ce", node("ce", 160, 130));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("10", way("10", List.of("an", "A"), "highway", "residential"));
+        ways.put("11", way("11", List.of("aw", "A"), "highway", "residential"));
+        ways.put("12", way("12", List.of("B", "bs"), "highway", "residential"));
+        ways.put("13", way("13", List.of("C", "ce"), "highway", "residential"));
+        ways.put("90", way("90", List.of("A", "B"), "highway", "link"));
+        ways.put("91", way("91", List.of("B", "C"), "highway", "link"));
+        ways.put("92", way("92", List.of("A", "C"), "highway", "link"));
+        return result(nodes, ways);
+    }
+
+    /**
+     * Hop-constrained feasibility (Review #2): the shorter-distance route from A to target B burns
+     * almost all hops through intermediate nodes, while a slightly longer route uses fewer hops and
+     * can finish. A single shortest-distance label would wrongly discard the feasible route.
+     */
+    static OsmImportResult hopConstrainedInternalPath() {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("A", node("A", 0, 0, "highway", "traffic_signals"));
+        nodes.put("B", node("B", 100, 0, "highway", "traffic_signals"));
+        // Shorter-distance chain A-p1-p2-p3-p4-B (5 hops, total 50 m).
+        nodes.put("p1", node("p1", 10, 0));
+        nodes.put("p2", node("p2", 20, 0));
+        nodes.put("p3", node("p3", 30, 0));
+        nodes.put("p4", node("p4", 40, 0));
+        // Longer-distance but fewer-hop route A-q-B (2 hops, total 80 m).
+        nodes.put("q", node("q", 50, 50));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("10", way("10", List.of("A", "p1"), "highway", "link"));
+        ways.put("11", way("11", List.of("p1", "p2"), "highway", "link"));
+        ways.put("12", way("12", List.of("p2", "p3"), "highway", "link"));
+        ways.put("13", way("13", List.of("p3", "p4"), "highway", "link"));
+        ways.put("14", way("14", List.of("p4", "B"), "highway", "link"));
+        ways.put("20", way("20", List.of("A", "q"), "highway", "link"));
+        ways.put("21", way("21", List.of("q", "B"), "highway", "link"));
+        return result(nodes, ways);
+    }
+
     /** Two adjacent collinear streets meeting at a degree-2 boundary node M with DIFFERENT lane data.
      * M must survive (shared by multiple ways) so the two links keep their distinct lane semantics.
      */

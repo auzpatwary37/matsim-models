@@ -499,27 +499,18 @@ public final class OsmSignalAwareSimplifier {
             for (String m : grp) {
                 memberIdx.add(osmIds.indexOf(m));
             }
+            // Review #1: retain ALL accepted directed witnesses between final members, not just a
+            // spanning-tree subset, so a qualifying direct A->C witness is never lost merely because
+            // A-B/B-C were chosen for the tree and their directions do not compose A->C.
             List<List<String>> witnesses = new ArrayList<>();
-            Set<Integer> visited = new HashSet<>();
-            Deque<Integer> dq = new ArrayDeque<>();
-            int start = memberIdx.iterator().next();
-            visited.add(start);
-            dq.add(start);
-            while (!dq.isEmpty()) {
-                int cur = dq.poll();
-                for (Edge e : edges) {
-                    int other = e.i() == cur ? e.j() : (e.j() == cur ? e.i() : -1);
-                    if (other < 0 || !memberIdx.contains(other) || visited.contains(other)) {
-                        continue;
-                    }
+            for (Edge e : edges) {
+                if (memberIdx.contains(e.i()) && memberIdx.contains(e.j())) {
                     if (e.pathForward() != null) {
                         witnesses.add(e.pathForward());
                     }
                     if (e.pathBackward() != null) {
                         witnesses.add(e.pathBackward());
                     }
-                    visited.add(other);
-                    dq.add(other);
                 }
             }
             out.add(new Cluster(grp, witnesses));
@@ -620,28 +611,41 @@ public final class OsmSignalAwareSimplifier {
      * {@code null} if none exists. The path is the "junction box" witness used for both clustering
      * acceptance and movement reachability.
      */
-    private static List<String> shortestInternalPath(String a, String b, Set<String> signalNetIds,
+    static List<String> shortestInternalPath(String a, String b, Set<String> signalNetIds,
                                                      Map<String, List<String>> adj,
                                                      Map<String, Double> len,
                                                      double threshold, int maxHops) {
         if (a.equals(b)) {
             return List.of(a);
         }
-        Map<String, double[]> best = new HashMap<>();
+        // Resource-constrained shortest path: feasibility is bounded by BOTH distance and hop count,
+        // so a single shortest-distance label per node is not sufficient (a shorter path that burns
+        // hops can block a slightly longer but fewer-hop path that can still finish). State is
+        // (node, hops), each holding its best distance; the predecessor chain is kept per state.
+        Map<String, Double> best = new HashMap<>();
         Map<String, String> prev = new HashMap<>();
-        PriorityQueue<String> pq = new PriorityQueue<>((x, y) -> {
-            int d = Double.compare(best.get(x)[0], best.get(y)[0]);
-            return d != 0 ? d : x.compareTo(y);
-        });
-        best.put(a, new double[]{0.0, 0});
-        pq.add(a);
+        PriorityQueue<SearchState> pq = new PriorityQueue<>(
+                Comparator.comparingDouble(SearchState::dist)
+                        .thenComparingInt(SearchState::hops)
+                        .thenComparing(SearchState::node));
+
+        String startKey = key(a, 0);
+        best.put(startKey, 0.0);
+        pq.add(new SearchState(0.0, 0, a));
+
         while (!pq.isEmpty()) {
-            String u = pq.poll();
-            if (u.equals(b)) {
-                break;
+            SearchState cur = pq.poll();
+            String curKey = key(cur.node(), cur.hops());
+            if (cur.dist() > best.getOrDefault(curKey, Double.MAX_VALUE)) {
+                continue;
             }
-            double[] st = best.get(u);
-            for (String v : adj.getOrDefault(u, List.of())) {
+            if (cur.node().equals(b)) {
+                return reconstructPath(prev, curKey);
+            }
+            if (cur.hops() >= maxHops) {
+                continue;
+            }
+            for (String v : adj.getOrDefault(cur.node(), List.of())) {
                 if (v.equals(a)) {
                     continue;
                 }
@@ -649,25 +653,33 @@ public final class OsmSignalAwareSimplifier {
                 if (signalNetIds.contains(v) && !v.equals(b)) {
                     continue;
                 }
-                double nd = st[0] + len.getOrDefault(u + "|" + v, 0.0);
-                int nh = (int) st[1] + 1;
+                double nd = cur.dist() + len.getOrDefault(cur.node() + "|" + v, 0.0);
+                int nh = cur.hops() + 1;
                 if (nd > threshold || nh > maxHops) {
                     continue;
                 }
-                double[] pv = best.get(v);
-                if (pv == null || nd < pv[0]) {
-                    best.put(v, new double[]{nd, nh});
-                    prev.put(v, u);
-                    pq.add(v);
+                String nextKey = key(v, nh);
+                Double pv = best.get(nextKey);
+                if (pv == null || nd < pv) {
+                    best.put(nextKey, nd);
+                    prev.put(nextKey, curKey);
+                    pq.add(new SearchState(nd, nh, v));
                 }
             }
         }
-        if (!best.containsKey(b)) {
-            return null;
-        }
+        return null;
+    }
+
+    private record SearchState(double dist, int hops, String node) { }
+
+    private static String key(String node, int hops) {
+        return node + "@" + hops;
+    }
+
+    private static List<String> reconstructPath(Map<String, String> prev, String endKey) {
         LinkedList<String> path = new LinkedList<>();
-        for (String cur = b; cur != null; cur = prev.get(cur)) {
-            path.addFirst(cur);
+        for (String cur = endKey; cur != null; cur = prev.get(cur)) {
+            path.addFirst(cur.substring(0, cur.lastIndexOf('@')));
         }
         return path;
     }

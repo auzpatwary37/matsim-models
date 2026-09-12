@@ -9,11 +9,14 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import com.citymodeler.matsim.models.network.Link;
+import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.osm.OsmImportResult;
 
 final class JunctionSignalDescriptorTest {
@@ -314,6 +317,52 @@ final class JunctionSignalDescriptorTest {
             assertFalse(j.outgoingLinks().contains(internal),
                     "internal link exposed as outgoing: " + internal);
         }
+    }
+
+    /**
+     * Review #1: with three mutually-qualifying members A, B, C, the direct A->C witness must be
+     * preserved (not discarded as a non-spanning-tree edge). Arriving at A and departing at C's arm
+     * must be a valid cross-node movement.
+     */
+    @Test
+    void allMemberWitnessesArePreservedInTriangleCluster() {
+        OsmSimplifiedNetwork s =
+                simplify(SignalReadyFixtures.wideIntersectionTriangle(),
+                        new OsmSimplifyOptions(60.0, false, 35.0, Set.of()));
+        JunctionSignalDescriptor j = s.junctionAt("osm_node_A");
+        assertNotNull(j);
+        assertTrue(j.osmNodeIds().containsAll(List.of("A", "B", "C")),
+                "A, B, C all pairwise qualify => one cluster");
+        // Arrive at A (from an), depart at C (to ce): direct A->C witness must survive.
+        assertTrue(j.hasMovement("sim_10_f_an_A", "sim_13_f_C_ce"),
+                "direct A->C witness must not be lost to spanning-tree bookkeeping");
+    }
+
+    /**
+     * Review #2: the shortest internal path must respect BOTH distance and hop budgets. The lower-
+     * distance A->B route burns all hops; a slightly longer fewer-hop route must still be found.
+     */
+    @Test
+    void hopConstrainedInternalPathFindsFeasibleRoute() {
+        OsmImportResult r = SignalReadyFixtures.hopConstrainedInternalPath();
+        OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
+        OsmNetworkBuildResult mat = SignalReadyFixtures.materialize(r, cfg);
+        Network net = mat.cleanedNetwork();
+
+        Map<String, List<String>> adj = OsmSignalAwareSimplifier.internalAdjacency(net, r.ways());
+        // Directed lengths over the internal (*_link) subgraph.
+        Map<String, Double> len = new java.util.HashMap<>();
+        for (Link link : net.getLinks().values()) {
+            len.merge(link.getFromNode().getId() + "|" + link.getToNode().getId(), link.getLength(),
+                    Math::min);
+        }
+
+        // 3-hop budget: the 5-hop p-chain is infeasible, the 2-hop q-route must be returned.
+        java.util.List<String> path = OsmSignalAwareSimplifier.shortestInternalPath(
+                "osm_node_A", "osm_node_B", Set.of("osm_node_A", "osm_node_B"), adj, len, 1000.0, 3);
+        assertNotNull(path, "a feasible <=3-hop path exists via q");
+        assertTrue(path.contains("osm_node_q"), "the fewer-hop route must be selected, got " + path);
+        assertFalse(path.contains("osm_node_p3"), "the hop-heavy p-chain is infeasible");
     }
 
     private static SignalizedMovement movement(JunctionSignalDescriptor j, String in, String out) {
