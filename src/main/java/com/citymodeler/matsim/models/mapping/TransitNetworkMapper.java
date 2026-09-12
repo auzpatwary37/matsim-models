@@ -43,6 +43,12 @@ public final class TransitNetworkMapper {
     }
 
     public TransitMappingResult map(TransitSchedule schedule, Network network) {
+        // Build-new contract: mapping never mutates its inputs. Work on deep copies and return them.
+        TransitSchedule mappedSchedule = MappingCopy.copySchedule(schedule);
+        Network mappedNetwork = MappingCopy.copyNetwork(network);
+        schedule = mappedSchedule;
+        network = mappedNetwork;
+
         List<String> warnings = new ArrayList<>();
         List<MappingReport> reports = new ArrayList<>();
         StopCandidateScorer scorer = new StopCandidateScorer(config, spatialIndex, network);

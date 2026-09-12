@@ -23,6 +23,7 @@ import com.citymodeler.matsim.models.io.VehiclesXmlWriter;
 import com.citymodeler.matsim.models.mapping.TransitMappingConfig;
 import com.citymodeler.matsim.models.mapping.TransitMappingResult;
 import com.citymodeler.matsim.models.mapping.TransitNetworkMapper;
+import com.citymodeler.matsim.models.mapping.TransitScheduleClipper;
 import com.citymodeler.matsim.models.network.index.LinkSpatialIndex;
 import com.citymodeler.matsim.models.osm.OsmImportConfig;
 import com.citymodeler.matsim.models.osm.OsmNetworkImporter;
@@ -74,14 +75,21 @@ public final class OsmGtfsBundleRunner {
 
     private final OsmNetworkBuildConfig networkConfig;
     private final OsmSimplifyOptions simplifyOptions;
+    private final double clipMarginMeters;
 
     public OsmGtfsBundleRunner() {
-        this(OsmNetworkBuildConfig.materializeGeometryConfig(), OsmSimplifyOptions.defaults());
+        this(OsmNetworkBuildConfig.materializeGeometryConfig(), OsmSimplifyOptions.defaults(), 0.0);
     }
 
     public OsmGtfsBundleRunner(OsmNetworkBuildConfig networkConfig, OsmSimplifyOptions simplifyOptions) {
+        this(networkConfig, simplifyOptions, 0.0);
+    }
+
+    public OsmGtfsBundleRunner(OsmNetworkBuildConfig networkConfig, OsmSimplifyOptions simplifyOptions,
+                               double clipMarginMeters) {
         this.networkConfig = Objects.requireNonNull(networkConfig, "networkConfig");
         this.simplifyOptions = Objects.requireNonNull(simplifyOptions, "simplifyOptions");
+        this.clipMarginMeters = clipMarginMeters;
     }
 
     /** Summary of a produced bundle: artifact paths and the structural counts of each artifact. */
@@ -170,6 +178,17 @@ public final class OsmGtfsBundleRunner {
 
             TransitSchedule unmapped = build.schedule();
             VehicleDefinitions vehicleDefinitions = build.vehicles();
+
+            // Clip GTFS to the network extent so out-of-area stops do not drive artificial-link
+            // fabrication. The clip is build-new; the vehicle set is unchanged (unused vehicles for
+            // dropped departures are harmless, and departures reference vehicles by id).
+            TransitScheduleClipper.ClipResult clip =
+                    TransitScheduleClipper.clipToNetwork(unmapped, baseNetwork, clipMarginMeters);
+            if (clip.stopsDropped() > 0) {
+                warnings.add("clipped " + clip.stopsDropped() + " stop facilities and "
+                        + clip.routesDropped() + " routes outside the network extent");
+            }
+            unmapped = clip.schedule();
 
             transitScheduleFile = outputDirectory.resolve(TRANSIT_SCHEDULE_FILE);
             vehiclesFile = outputDirectory.resolve(VEHICLES_FILE);

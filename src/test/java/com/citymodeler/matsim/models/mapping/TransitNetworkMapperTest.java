@@ -62,11 +62,16 @@ class TransitNetworkMapperTest {
                 TransitMappingConfig.defaults(), spatialIndex);
         TransitMappingResult result = mapper.map(schedule, network);
 
-        // Stop should be assigned to link l1
-        assertEquals(Id.create("l1", Link.class), stop.getLinkId());
+        // Build-new contract: mapping does not mutate inputs; read the RETURNED results.
+        assertNull(stop.getLinkId(), "input stop must not be mutated");
+        assertEquals(Id.create("l1", Link.class),
+                result.mappedSchedule().getFacilities().get(Id.create("stop1", TransitStopFacility.class)).getLinkId());
         // Route should have network route
-        assertNotNull(route.getNetworkRoute());
-        assertEquals(1, route.getNetworkRoute().size());
+        TransitRoute mappedRoute = result.mappedSchedule().getTransitLines()
+                .get(Id.create("line1", TransitLine.class)).getRoutes()
+                .get(Id.create("route1", TransitRoute.class));
+        assertNotNull(mappedRoute.getNetworkRoute());
+        assertEquals(1, mappedRoute.getNetworkRoute().size());
     }
 
     @Test
@@ -89,9 +94,11 @@ class TransitNetworkMapperTest {
                 TransitMappingConfig.defaults(), spatialIndex);
         TransitMappingResult result = mapper.map(schedule, network);
 
-        // Should have created an artificial loop
-        assertNotNull(stop.getLinkId());
-        assertTrue(stop.getLinkId().toString().startsWith("pt_loop"));
+        // Should have created an artificial loop (on the returned, mapped facility).
+        TransitStopFacility mappedStop = result.mappedSchedule().getFacilities()
+                .get(Id.create("far_stop", TransitStopFacility.class));
+        assertNotNull(mappedStop.getLinkId());
+        assertTrue(mappedStop.getLinkId().toString().startsWith("pt_loop"));
         assertTrue(result.hasWarnings());
     }
 
@@ -175,11 +182,18 @@ class TransitNetworkMapperTest {
 
         TransitNetworkMapper mapper = new TransitNetworkMapper(
                 TransitMappingConfig.defaults(), new LinkSpatialIndex(net, 500.0));
-        mapper.map(schedule, net);
+        TransitMappingResult result = mapper.map(schedule, net);
 
-        assertEquals(Id.create("la", Link.class), f1.getLinkId());
-        assertEquals(Id.create("lb", Link.class), f2.getLinkId());
-        assertNotEquals(f1.getLinkId(), f2.getLinkId());
+        // Inputs unmodified (build-new contract).
+        assertNull(f1.getLinkId());
+        assertNull(f2.getLinkId());
+        assertEquals(Id.create("la", Link.class), result.mappedSchedule().getFacilities()
+                .get(Id.create("w1", TransitStopFacility.class)).getLinkId());
+        assertEquals(Id.create("lb", Link.class), result.mappedSchedule().getFacilities()
+                .get(Id.create("w2", TransitStopFacility.class)).getLinkId());
+        assertNotEquals(
+                result.mappedSchedule().getFacilities().get(Id.create("w1", TransitStopFacility.class)).getLinkId(),
+                result.mappedSchedule().getFacilities().get(Id.create("w2", TransitStopFacility.class)).getLinkId());
     }
 
     /**
@@ -203,13 +217,16 @@ class TransitNetworkMapperTest {
 
         TransitNetworkMapper mapper = new TransitNetworkMapper(
                 TransitMappingConfig.defaults(), spatialIndex);
-        mapper.map(schedule, network);
+        TransitMappingResult result = mapper.map(schedule, network);
 
-        TransitRouteStop routedStop = route.getStops().get(0);
+        TransitRoute mappedRoute = result.mappedSchedule().getTransitLines()
+                .get(Id.create("line1", TransitLine.class)).getRoutes()
+                .get(Id.create("route1", TransitRoute.class));
+        TransitRouteStop routedStop = mappedRoute.getStops().get(0);
         String childId = routedStop.getStopFacilityId().toString();
         assertNotEquals("stop1", childId, "route stop must reference a child, not the parent");
         assertEquals("stop1.link:l1", childId);
-        assertNotNull(schedule.getFacilities().get(routedStop.getStopFacilityId()),
+        assertNotNull(result.mappedSchedule().getFacilities().get(routedStop.getStopFacilityId()),
                 "the child facility must have been materialized");
     }
 
@@ -256,10 +273,13 @@ class TransitNetworkMapperTest {
         TransitMappingResult result = mapper.map(schedule, net);
 
         // The route is kept continuous via an explicit connector, not a raw [la, lb] concatenation.
-        assertNotNull(route.getNetworkRoute());
-        boolean hasConnector = route.getNetworkRoute().stream()
+        TransitRoute mappedRoute = result.mappedSchedule().getTransitLines()
+                .get(Id.create("ln", TransitLine.class)).getRoutes()
+                .get(Id.create("rt", TransitRoute.class));
+        assertNotNull(mappedRoute.getNetworkRoute());
+        boolean hasConnector = mappedRoute.getNetworkRoute().stream()
                 .anyMatch(id -> id.toString().startsWith("pt_"));
-        assertTrue(hasConnector, "expected an artificial connector in " + route.getNetworkRoute());
+        assertTrue(hasConnector, "expected an artificial connector in " + mappedRoute.getNetworkRoute());
         assertTrue(result.warnings().stream()
                 .anyMatch(w -> w.toLowerCase().contains("connector")));
     }
