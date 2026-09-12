@@ -18,6 +18,7 @@ import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.osm.OsmElementType;
 import com.citymodeler.matsim.models.osm.OsmImportIssue;
 import com.citymodeler.matsim.models.osm.OsmImportResult;
+import com.citymodeler.matsim.models.osm.OsmIssueSeverity;
 import com.citymodeler.matsim.models.osm.model.OsmNodeRecord;
 import com.citymodeler.matsim.models.osm.model.OsmRelationMemberRecord;
 import com.citymodeler.matsim.models.osm.model.OsmRelationRecord;
@@ -182,7 +183,7 @@ public final class OsmTopologyBuilder {
                 }
                 emitLink(network, start, end, chainForward, firstSeg, sourceSegments, pts,
                         config, wayRecords, rawTagsKept, keepAllGeometryNodes,
-                        collapsedLinks, linkIdsByOsmWayId, geometry);
+                        collapsedLinks, linkIdsByOsmWayId, geometry, issues);
             }
         }
 
@@ -208,7 +209,8 @@ public final class OsmTopologyBuilder {
                                  boolean keepAllGeometryNodes,
                                  Map<String, OsmCollapsedLink> collapsedLinks,
                                  Map<String, List<String>> linkIdsByOsmWayId,
-                                 Map<String, OsmPolyline> geometry) {
+                                 Map<String, OsmPolyline> geometry,
+                                 List<OsmImportIssue> issues) {
 
         double length = 0.0;
         for (int i = 0; i + 1 < pts.size(); i++) {
@@ -236,9 +238,13 @@ public final class OsmTopologyBuilder {
                 ? OsmGeneratedIds.linkId(firstSegment.wayId(), firstSegment.segmentIndex(), traversalForward)
                 : OsmGeneratedIds.simplifiedLinkId(firstWayId, forward, canonicalFrom, canonicalTo);
         if (!keepAllGeometryNodes && network.getLinks().containsKey(Id.create(linkId, Link.class))) {
-            // Degenerate repeated-node span (a way that doubles back through a node referenced twice,
-            // forcing that node to be kept). The canonical directed span is already represented, so
-            // do not emit a parallel duplicate; the first occurrence keeps the provenance/geometry.
+            // Degenerate repeated-node span: a way that doubles back through a node referenced twice,
+            // forcing that node to be kept. The canonical directed span is already represented, so do
+            // not emit a parallel duplicate; the first occurrence keeps the provenance/geometry.
+            // Record a deterministic WARNING rather than dropping the second physical span silently.
+            issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, "degenerate-span",
+                    "Way " + firstWayId + " doubles back through a repeated node; dropping duplicate "
+                            + "directed span " + linkId + " (already emitted)", null));
             return;
         }
         Link link = network.createLink(linkId,

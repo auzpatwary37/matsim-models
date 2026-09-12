@@ -63,7 +63,18 @@ public final class OsmSignalAwareSimplifier {
         Network network = collapsed.network();
         Map<String, OsmNodeClassification> classification = collapsed.classification();
         Map<String, List<String>> linkIdsByOsmWayId = collapsed.linkIdsByOsmWayId();
-        List<OsmImportIssue> issues = new ArrayList<>(collapsed.issues());
+        // Seed from the MATERIALIZED result, not collapsed.issues(): OsmMatsimNetworkBuilder.build
+        // constructs materialized.issues() as a copy of its engine's issues and then appends
+        // importer-policy warnings (dynamic-oneway, missing-node) via addWayWarnings. The signal-ready
+        // engine run performed here is separate, so merge in any of its issues that the materialized
+        // result does not already carry (e.g. degenerate-span), deduplicated to avoid double-adding
+        // the shared import-level issues. Deterministic: insertion-ordered list, no map iteration.
+        List<OsmImportIssue> issues = new ArrayList<>(materialized.issues());
+        for (OsmImportIssue engineIssue : collapsed.issues()) {
+            if (!issues.contains(engineIssue)) {
+                issues.add(engineIssue);
+            }
+        }
 
         OsmNetworkBuildResult view = new OsmNetworkBuildResult(
                 network, List.of(), Collections.emptyMap(), linkIdsByOsmWayId);

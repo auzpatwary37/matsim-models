@@ -86,6 +86,12 @@ final class OsmSignalAwareSimplifierTest {
         OsmCollapsedLink toP2 = s.collapsedLink("sim_50_f_P1_P2");
         assertNotNull(toP2);
         assertEquals(List.of(1), toP2.sourceSegments().stream().map(OsmLinkRef::segmentIndex).toList());
+        // Finding 2: the second, degenerate span (segment 2 traversed P1->P2) is dropped, but not
+        // silently — a deterministic WARNING names the way and the canonical directed span.
+        assertTrue(s.issues().stream().anyMatch(i ->
+                        "degenerate-span".equals(i.code())
+                                && i.message().contains("sim_50_f_P1_P2")),
+                "dropped degenerate span must be reported");
     }
 
     /** Review: a degree-2 node between two adjacent ways with differing lanes must survive. */
@@ -128,6 +134,32 @@ final class OsmSignalAwareSimplifierTest {
         assertFalse(s.network().getNodes().containsKey(
                 com.citymodeler.matsim.models.api.Id.create("osm_node_B",
                         com.citymodeler.matsim.models.network.Node.class)));
+    }
+
+    /**
+     * Finding 1: importer-policy warnings added by {@code OsmMatsimNetworkBuilder.addWayWarnings}
+     * (here {@code dynamic-oneway}) must survive simplification. The simplifier seeds its issues from
+     * the materialized result, which carries them, rather than from the engine's raw issues.
+     */
+    @Test
+    void preservesImporterPolicyWarnings() {
+        OsmSimplifiedNetwork s = simplify(SignalReadyFixtures.dynamicOnewayWay());
+        assertTrue(s.issues().stream().anyMatch(i -> "dynamic-oneway".equals(i.code())),
+                "simplified network must retain the importer dynamic-oneway warning");
+    }
+
+    /** Finding 1 (at minimum): simplify must preserve every issue present on the materialized result. */
+    @Test
+    void preservesMaterializedIssues() {
+        OsmImportResult r = SignalReadyFixtures.crossroads();
+        OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
+        OsmNetworkBuildResult mat = SignalReadyFixtures.materialize(r, cfg);
+        OsmSimplifiedNetwork s = OsmSignalAwareSimplifier.simplify(
+                mat, r, cfg, OsmSimplifyOptions.defaults());
+        for (var issue : mat.issues()) {
+            assertTrue(s.issues().contains(issue),
+                    "materialized issue not preserved: " + issue.code() + " -> " + issue.message());
+        }
     }
 
     /** Review: carried-over lane tags must be explicitly marked raw whole-way provenance. */
