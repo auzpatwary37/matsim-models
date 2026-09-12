@@ -69,6 +69,21 @@ public final class TransitRoute {
         return Collections.unmodifiableList(stops);
     }
 
+    /**
+     * Replaces the route's ordered stop list. Used by the network mapper to rewire stops to their
+     * per-(parent, link) child facilities after mapping (review #2).
+     */
+    public void setStops(List<TransitRouteStop> newStops) {
+        if (newStops == null) {
+            throw new IllegalArgumentException("newStops must not be null; pass an empty list to clear");
+        }
+        stops.clear();
+        for (TransitRouteStop stop : newStops) {
+            Objects.requireNonNull(stop, "stop");
+            stops.add(stop);
+        }
+    }
+
     public Map<Id<Departure>, Departure> getDepartures() {
         return Collections.unmodifiableMap(departures);
     }
