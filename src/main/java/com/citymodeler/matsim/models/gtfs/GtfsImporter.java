@@ -28,12 +28,29 @@ public final class GtfsImporter {
         Map<String, GtfsFeed> feeds = new LinkedHashMap<>();
         List<String> warnings = new ArrayList<>();
 
+        // Deterministic collision handling (Review #4): resolve unique feed ids in source order
+        // (first occurrence keeps the base id, later ones get -2, -3, ...) BEFORE parsing, so two
+        // sources that sanitize/derive to the same id no longer abort the whole import.
+        List<String> requestedIds = new ArrayList<>();
         for (GtfsImportConfig.FeedSource source : config.feeds()) {
-            String feedId = source.effectiveFeedId();
+            requestedIds.add(source.effectiveFeedId());
+        }
+        List<String> assignedIds = GtfsFeedIdCodec.assignUnique(requestedIds);
+        for (int i = 0; i < requestedIds.size(); i++) {
+            if (!requestedIds.get(i).equals(assignedIds.get(i))) {
+                warnings.add("feed id collision: '" + requestedIds.get(i) + "' -> '"
+                        + assignedIds.get(i) + "'");
+            }
+        }
+
+        for (int i = 0; i < config.feeds().size(); i++) {
+            GtfsImportConfig.FeedSource source = config.feeds().get(i);
+            String feedId = assignedIds.get(i);
             Map<String, GtfsCsvReader.CsvTable> tables = readTables(source.path(), warnings);
             GtfsFeed feed = parseFeed(feedId, tables, warnings);
             if (feeds.containsKey(feedId)) {
-                throw new IOException("Duplicate feed ID: " + feedId);
+                // Should be impossible after assignUnique, but keep a deterministic guard.
+                throw new IOException("Duplicate feed ID after collision handling: " + feedId);
             }
             feeds.put(feedId, feed);
         }

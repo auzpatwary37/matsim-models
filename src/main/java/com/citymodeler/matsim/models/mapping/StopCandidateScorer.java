@@ -64,26 +64,35 @@ public final class StopCandidateScorer {
             "taxi", "pt");
 
     private boolean isModeCompatible(Link link, String mode) {
-        Set<String> allowed = link.getAllowedModes();
-        if (allowed == null || allowed.isEmpty()) return true; // unrestricted link carries anything
-        if (allowed.contains(mode)) return true;
-        // Generic transit: require the link to be transit-capable, not a car-only street.
+        return modeCompatible(link.getAllowedModes(), mode);
+    }
+
+    /**
+     * Shared mode-compatibility policy for stop candidates AND path traversal. A link with no
+     * declared modes carries anything; otherwise the requested mode must be allowed, a generic
+     * {@code pt} request requires a transit-capable link (not a car-only street), and a specific
+     * requested mode is satisfied by an exact match or a link-level {@code pt} super-mode.
+     */
+    static boolean modeCompatible(Set<String> allowed, String mode) {
+        if (allowed == null || allowed.isEmpty()) {
+            return true; // unrestricted link carries anything
+        }
+        if (allowed.contains(mode)) {
+            return true;
+        }
         if ("pt".equals(mode)) {
             for (String m : allowed) {
-                if (TRANSIT_MODES.contains(m)) return true;
+                if (TRANSIT_MODES.contains(m)) {
+                    return true;
+                }
             }
             return false;
         }
-        // A specific requested mode: "pt" on the link is a transit super-mode.
         for (String m : allowed) {
-            if (isSubMode(mode, m)) return true;
+            if ("pt".equals(m) && TRANSIT_MODES.contains(mode)) {
+                return true;
+            }
         }
-        return false;
-    }
-
-    private boolean isSubMode(String requested, String allowed) {
-        if (requested.equals(allowed)) return true;
-        if ("pt".equals(allowed) && TRANSIT_MODES.contains(requested)) return true;
         return false;
     }
 

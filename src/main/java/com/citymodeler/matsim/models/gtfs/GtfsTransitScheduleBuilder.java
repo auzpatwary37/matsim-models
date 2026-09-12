@@ -29,13 +29,20 @@ public final class GtfsTransitScheduleBuilder {
         Map<String, List<SelectedDate>> selectedDatesByFeed = new LinkedHashMap<>();
 
         Map<String, Set<LocalDate>> datesByFeed = new LinkedHashMap<>();
+        List<String> fatal = new ArrayList<>();
         for (GtfsFeed feed : feeds.allFeeds()) {
-            Set<LocalDate> dates = GtfsServiceSelector.selectDates(feed, config);
+            GtfsServiceSelector.ServiceSelection selection = GtfsServiceSelector.select(feed, config);
+            warnings.addAll(selection.warnings());
+            fatal.addAll(selection.fatal());
+            Set<LocalDate> dates = selection.dates();
             datesByFeed.put(feed.feedId(), dates);
             for (LocalDate d : dates) {
                 selectedDatesByFeed.computeIfAbsent(feed.feedId(), k -> new ArrayList<>())
                         .add(new SelectedDate(feed.feedId(), d));
             }
+        }
+        if (!fatal.isEmpty()) {
+            throw new GtfsImportException(String.join("; ", fatal));
         }
 
         TransitSchedule schedule = new TransitSchedule();

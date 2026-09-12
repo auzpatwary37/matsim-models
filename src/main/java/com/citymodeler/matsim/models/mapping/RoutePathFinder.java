@@ -30,6 +30,9 @@ import java.util.Set;
  *       from each link's {@code disallowedNextLinks} attribute (the Phase-1 multi-link model).</li>
  *   <li>#6 The route's transport mode is passed explicitly and used for restriction evaluation,
  *       instead of picking an arbitrary mode from a link's allowed-mode set.</li>
+ *   <li>Mode access is enforced on every traversed link (shared policy with
+ *       {@link StopCandidateScorer#modeCompatible}), so a bus/PT route cannot route through a
+ *       car-only intermediate link.</li>
  * </ul>
  */
 public final class RoutePathFinder {
@@ -128,6 +131,11 @@ public final class RoutePathFinder {
             }
             for (Link next : node.getOutLinks().values()) {
                 if (excludedLinks.contains(next.getId())) {
+                    continue;
+                }
+                // Mode access is enforced on every traversed link, not only at stop-candidate
+                // selection: a bus/PT route must not route through a car-only intermediate link.
+                if (!StopCandidateScorer.modeCompatible(next.getAllowedModes(), routeMode)) {
                     continue;
                 }
                 String nextId = next.getId().toString();

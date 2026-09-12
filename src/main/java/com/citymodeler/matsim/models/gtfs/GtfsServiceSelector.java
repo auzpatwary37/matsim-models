@@ -2,37 +2,100 @@ package com.citymodeler.matsim.models.gtfs;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
 /**
  * Resolves which service dates are active for a given feed.
+ *
+ * <p>Calendar materialization follows the Phase-2 contract: {@code calendar.txt} weekday/date-range
+ * rules first, then {@code calendar_dates.txt} exceptions (1 = added, 2 = removed). A feed with
+ * neither calendar file is fatal unless {@link GtfsImportConfig#assumeAlwaysActive()} is set, in
+ * which case all trips are treated as active for every queried date and a warning is recorded.
  */
 public final class GtfsServiceSelector {
+
+    /** Upper bound on a defensible single calendar span (~100 years); longer is treated as invalid. */
+    static final long MAX_CALENDAR_DAYS = 36600L;
 
     private GtfsServiceSelector() {
     }
 
-    public static Set<LocalDate> selectDates(GtfsFeed feed, GtfsImportConfig config) {
-        GtfsImportConfig.ServiceDateSelection sel = config.serviceDateSelection();
-        if (sel == GtfsImportConfig.ServiceDateSelection.ALL) {
-            return allDates(feed);
-        } else if (sel == GtfsImportConfig.ServiceDateSelection.DAY_WITH_MOST_TRIPS) {
-            LocalDate d = dayWithMostTrips(feed);
-            return d != null ? Set.of(d) : Set.of();
-        } else if (sel == GtfsImportConfig.ServiceDateSelection.DAY_WITH_MOST_SERVICES) {
-            LocalDate d = dayWithMostServices(feed);
-            return d != null ? Set.of(d) : Set.of();
-        } else {
-            if (config.explicitDate() == null) {
-                throw new IllegalArgumentException("EXPLICIT service date selection requires explicitDate");
-            }
-            LocalDate date = parseDate(config.explicitDate());
-            return date != null ? Set.of(date) : Set.of();
+    /**
+     * Result of resolving active dates for a feed: the dates plus any fatal/warning messages.
+     * {@code fatal} is non-empty only when the feed has no calendar data and
+     * {@code assumeAlwaysActive} is false.
+     */
+    public record ServiceSelection(Set<LocalDate> dates, List<String> warnings, List<String> fatal) {
+        public boolean hasFatal() {
+            return !fatal.isEmpty();
         }
     }
+
+    public static Set<LocalDate> selectDates(GtfsFeed feed, GtfsImportConfig config) {
+        return select(feed, config).dates();
+    }
+
+    /**
+     * Resolve active dates for a feed, applying the configured selection mode and the
+     * {@code assumeAlwaysActive} contract for feeds without calendar data.
+     */
+    public static ServiceSelection select(GtfsFeed feed, GtfsImportConfig config) {
+        List<String> warnings = new ArrayList<>();
+        List<String> fatal = new ArrayList<>();
+
+        boolean noCalendar = feed.calendarRows().isEmpty() && feed.calendarDatesRows().isEmpty();
+        if (noCalendar) {
+            if (!config.assumeAlwaysActive()) {
+                fatal.add(feed.feedId() + ": neither calendar.txt nor calendar_dates.txt present; "
+                        + "enable assumeAlwaysActive to treat all trips as always active");
+                return new ServiceSelection(Set.of(), warnings, fatal);
+            }
+            LocalDate anchor = anchorDate(feed, config);
+            warnings.add(feed.feedId() + ": no calendar data; assumeAlwaysActive=true, treating all "
+                    + "trips as active on " + anchor);
+            return new ServiceSelection(Set.of(anchor), warnings, fatal);
+        }
+
+        Set<LocalDate> dates = switch (config.serviceDateSelection()) {
+            case ALL -> allDates(feed);
+            case DAY_WITH_MOST_TRIPS -> {
+                LocalDate d = dayWithMostTrips(feed);
+                yield d != null ? Set.of(d) : Set.of();
+            }
+            case DAY_WITH_MOST_SERVICES -> {
+                LocalDate d = dayWithMostServices(feed);
+                yield d != null ? Set.of(d) : Set.of();
+            }
+            case EXPLICIT -> {
+                if (config.explicitDate() == null) {
+                    throw new IllegalArgumentException("EXPLICIT service date selection requires explicitDate");
+                }
+                LocalDate date = parseDate(config.explicitDate());
+                yield date != null ? Set.of(date) : Set.of();
+            }
+        };
+        return new ServiceSelection(dates, warnings, fatal);
+    }
+
+    /**
+     * The single date used for an always-active feed: the explicit date when one is configured,
+     * otherwise a stable sentinel (epoch) so output is deterministic regardless of the wall clock.
+     */
+    static LocalDate anchorDate(GtfsFeed feed, GtfsImportConfig config) {
+        if (config.explicitDate() != null) {
+            LocalDate d = parseDate(config.explicitDate());
+            if (d != null) {
+                return d;
+            }
+        }
+        return LocalDate.EPOCH;
+    }
+
 
     public static Set<LocalDate> allDates(GtfsFeed feed) {
         Set<LocalDate> result = new TreeSet<>();
@@ -98,8 +161,12 @@ public final class GtfsServiceSelector {
             if (start == null || end == null) continue;
             int[] flags = row.weekdayFlags();
             LocalDate cursor = start;
-            int safety = 0;
-            while (!cursor.isAfter(end) && safety++ < 400) {
+            // No arbitrary truncation: a valid calendar must be materialized in full. Guard only
+            // against a nonsensical declared span (data corruption), never against legitimate length.
+            if (start.until(end, java.time.temporal.ChronoUnit.DAYS) > MAX_CALENDAR_DAYS) {
+                continue;
+            }
+            while (!cursor.isAfter(end)) {
                 int idx = cursor.getDayOfWeek().getValue() - 1;
                 if (idx >= 0 && idx < 7 && flags[idx] == 1) {
                     dates.add(cursor);

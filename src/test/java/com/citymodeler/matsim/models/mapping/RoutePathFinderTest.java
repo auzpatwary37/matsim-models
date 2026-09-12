@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.mapping;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -121,6 +122,56 @@ class RoutePathFinderTest {
         network.postProcess();
         RoutePathFinder f = new RoutePathFinder(network, none, 10000.0, "car");
         assertNotNull(f.findPath(id("F"), id("A")), "A is not the restricted successor of L0");
+    }
+
+    /**
+     * Review #1: traversal enforces link mode access. The geometrically shortest path runs through a
+     * car-only intermediate link, so a bus route must take a longer transit-capable path instead.
+     */
+    @Test
+    void busRouteAvoidsCarOnlyIntermediateLink() {
+        Node n0 = node("n0", 0, 0);
+        Node n1 = node("n1", 100, 0);
+        Node n2 = node("n2", 200, 0);
+        Node n3 = node("n3", 300, 0);
+        Node n4 = node("n4", 400, 0);
+        link("F", n0, n1, 100, 10, Set.of("bus", "car"));
+        // Short path via a car-only intermediate link: n1 -C-> n2 -B-> n3.
+        link("C", n1, n2, 50, 10, Set.of("car"));
+        link("B", n2, n3, 50, 10, Set.of("bus", "car"));
+        // Longer, fully bus-compatible detour: n1 -X1-> n4 -X2-> n2, then the shared B -> n3.
+        link("X1", n1, n4, 200, 10, Set.of("bus", "car"));
+        link("X2", n4, n2, 200, 10, Set.of("bus", "car"));
+
+        // Bus must reach n2 without the car-only C link, then traverse B.
+        List<Id<Link>> bus = finder(10000.0, "bus").findPath(id("F"), id("B"));
+        assertNotNull(bus, "a bus-compatible path to B exists via X1/X2");
+        assertFalse(bus.contains(id("C")), "bus path must not traverse car-only link C");
+        assertTrue(bus.contains(id("B")));
+
+        // Car is free to take the short car-only route.
+        List<Id<Link>> car = finder(10000.0, "car").findPath(id("F"), id("B"));
+        assertNotNull(car);
+        assertTrue(car.contains(id("C")), "car takes the shortest path through C");
+    }
+
+    /**
+     * Review #1 no-compatible-path case: when no mode-compatible path exists, path search returns
+     * null so the caller can fall back to an explicit connector/unmapped result.
+     */
+    @Test
+    void noCompatiblePathReturnsNull() {
+        Node n0 = node("n0", 0, 0);
+        Node n1 = node("n1", 100, 0);
+        Node n2 = node("n2", 200, 0);
+        Node n3 = node("n3", 300, 0);
+        link("F", n0, n1, 100, 10, Set.of("bus", "car"));
+        link("C", n1, n2, 100, 10, Set.of("car")); // only link onward is car-only
+        link("D", n2, n3, 100, 10, Set.of("car"));
+
+        assertNull(finder(10000.0, "bus").findPath(id("F"), id("D")),
+                "no bus-compatible path => null");
+        assertNotNull(finder(10000.0, "car").findPath(id("F"), id("D")));
     }
 
     /** Review #6: the route's own mode decides which restrictions apply, not an arbitrary link mode. */

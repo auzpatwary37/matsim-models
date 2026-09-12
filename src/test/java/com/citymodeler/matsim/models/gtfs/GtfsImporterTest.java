@@ -172,6 +172,46 @@ class GtfsImporterTest {
         assertTrue(set.allStops().containsKey("other-feed:X1"));
     }
 
+    /**
+     * Review #4: two sources whose effective feed ids sanitize to the same value must not abort the
+     * import. Collision handling is deterministic (source order): the first keeps the base id and
+     * the later one gets a {@code -2} suffix, with a warning.
+     */
+    @Test
+    void collidingFeedIdsAreDeterministicallySuffixed() throws IOException {
+        Path feedA = tempDir.resolve("dup-one");
+        Path feedB = tempDir.resolve("dup.two");
+        for (Path feed : List.of(feedA, feedB)) {
+            Files.createDirectories(feed);
+            Files.writeString(feed.resolve("agency.txt"),
+                    "agency_id,agency_name,agency_url,agency_timezone\nA1,X,http://x,UTC\n");
+            Files.writeString(feed.resolve("stops.txt"), "stop_id,stop_name,stop_lat,stop_lon\nS1,N,45,-73\n");
+            Files.writeString(feed.resolve("routes.txt"),
+                    "route_id,agency_id,route_short_name,route_long_name,route_type\nR1,A1,1,L,3\n");
+            Files.writeString(feed.resolve("trips.txt"),
+                    "route_id,service_id,trip_id\nR1,SVC,T1\n");
+            Files.writeString(feed.resolve("stop_times.txt"),
+                    "trip_id,stop_id,stop_sequence,arrival_time,departure_time\nT1,S1,1,08:00:00,08:00:00\n");
+            Files.writeString(feed.resolve("calendar.txt"),
+                    "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"
+                            + "SVC,1,1,1,1,1,0,0,20260101,20261231\n");
+        }
+
+        // Both derive to "dup_" (the '.' is sanitized) — force an exact collision via explicit ids.
+        GtfsImportConfig config = new GtfsImportConfig(
+                List.of(
+                        new GtfsImportConfig.FeedSource(feedA, "dup"),
+                        new GtfsImportConfig.FeedSource(feedB, "dup")),
+                GtfsImportConfig.ServiceDateSelection.ALL, false);
+        GtfsFeedSet set = new GtfsImporter().read(config);
+
+        assertEquals(2, set.feeds().size(), "colliding ids must both import");
+        assertTrue(set.feeds().containsKey("dup"));
+        assertTrue(set.feeds().containsKey("dup-2"), "second collision gets a deterministic -2 suffix");
+        assertTrue(set.warnings().stream().anyMatch(w -> w.contains("collision")),
+                "collision handling must be recorded as a warning");
+    }
+
     @Test
     void csvParserHandlesQuotedFields() throws IOException {
         String csv = "a,b,c\n\"hello, world\",\"say \"\"hi\"\"\",plain\n";
