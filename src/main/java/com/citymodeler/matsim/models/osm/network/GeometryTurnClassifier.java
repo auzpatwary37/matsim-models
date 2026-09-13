@@ -1,6 +1,7 @@
 package com.citymodeler.matsim.models.osm.network;
 
 import com.citymodeler.matsim.models.api.Coord;
+import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
 import com.citymodeler.matsim.models.network.Network;
 
@@ -30,6 +31,13 @@ public final class GeometryTurnClassifier implements MovementTurnClassifier {
         double iy = in[1].getY() - in[0].getY();
         double ox = out[1].getX() - out[0].getX();
         double oy = out[1].getY() - out[0].getY();
+        // Coincident consecutive points give a zero-length segment; atan2(0, 0) is 0, which would
+        // misclassify the movement as THROUGH. With no heading to compare, the turn is unknown.
+        double inLength = Math.hypot(ix, iy);
+        double outLength = Math.hypot(ox, oy);
+        if (inLength < 1e-9 || outLength < 1e-9) {
+            return LaneTurnClass.UNKNOWN;
+        }
         double inHeading = Math.atan2(iy, ix);
         double outHeading = Math.atan2(oy, ox);
         double delta = Math.toDegrees(normalize(outHeading - inHeading));
@@ -69,8 +77,7 @@ public final class GeometryTurnClassifier implements MovementTurnClassifier {
                     ? new Coord[]{points.get(points.size() - 2), points.get(points.size() - 1)}
                     : new Coord[]{points.get(0), points.get(1)};
         }
-        Link link = network.getLinks().get(com.citymodeler.matsim.models.api.Id.create(
-                linkId, Link.class));
+        Link link = network.getLinks().get(Id.create(linkId, Link.class));
         if (link == null || link.getFromNode() == null || link.getToNode() == null) {
             return null;
         }

@@ -163,7 +163,7 @@ public final class OsmGtfsBundleRunner {
         var laneResult = new LaneDefinitionBuilder()
                 .build(baseNetwork, refs, importResult.ways(), simplified.geometryStore(), networkConfig);
         warnings.addAll(laneResult.issues().stream()
-                .map(com.citymodeler.matsim.models.osm.OsmImportIssue::message).toList());
+                .map(issue -> issue.code() + ": " + issue.message()).toList());
         Path lanesFile = outputDirectory.resolve(LANE_DEFINITIONS_FILE);
         new LanesXmlWriter().write(laneResult.lanes(), lanesFile);
         int laneAssignments = laneResult.lanes().getLanesToLinkAssignments().size();

@@ -35,4 +35,20 @@ class GeometryTurnClassifierTest {
         assertEquals(LaneTurnClass.RIGHT, classifier.classify("in", "right"));
         assertEquals(LaneTurnClass.LEFT, classifier.classify("in", "left"));
     }
+
+    @Test
+    void zeroLengthSegmentIsUnknownNotThrough() {
+        Network network = new Network();
+        network.createNode("c", 0, 0);
+        network.createNode("north", 0, 100);
+        network.createLink("in", "c", "c", 1, 900, 10, 1, java.util.Set.of("car"));
+        network.createLink("out", "c", "north", 100, 900, 10, 1, java.util.Set.of("car"));
+
+        OsmGeometryStore geometry = new OsmGeometryStore(Map.of(
+                "in", new OsmPolyline(List.of(new Coord(0, 0), new Coord(0, 0))),
+                "out", new OsmPolyline(List.of(new Coord(0, 0), new Coord(0, 100)))));
+
+        GeometryTurnClassifier classifier = new GeometryTurnClassifier(network, geometry);
+        assertEquals(LaneTurnClass.UNKNOWN, classifier.classify("in", "out"));
+    }
 }

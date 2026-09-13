@@ -44,17 +44,24 @@ public final class LaneDefinitionBuilder {
         for (String linkId : new TreeMap<>(refs).keySet()) {
             Link link = network.getLinks().get(Id.create(linkId, Link.class));
             OsmLinkRef ref = refs.get(linkId);
-            OsmWayRecord way = ways.get(ref.osmWayId());
-            if (link == null || way == null) {
+            OsmWayRecord way = ref == null ? null : ways.get(ref.osmWayId());
+            if (link == null || ref == null || way == null) {
+                // Cannot resolve lanes without both the emitted link and its source OSM way; skipping
+                // silently would hide a link losing its lane assignment from the bundle report.
+                issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, "lane-unresolved-way",
+                        "Link " + linkId + " has no resolvable source way; no lane assignment", null));
                 continue;
             }
             OsmWayRule rule = config.resolveRule(way.tags());
             if (rule == null) {
+                issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, "lane-unresolved-way",
+                        "Link " + linkId + " (way " + ref.osmWayId()
+                                + ") has no matching network rule; no lane assignment", null));
                 continue;
             }
             boolean oneway = isOneway(way);
             OsmLaneCount count = countResolver.resolve(way.tags(), ref.forward(), oneway);
-            List<OsmTurnLaneCell> cells = turnParser.parse(turnLanes(way, ref.forward(), oneway));
+            List<OsmTurnLaneCell> cells = turnParser.parse(turnLanes(way, ref.forward()));
             List<String> outgoing = outgoingByNode.getOrDefault(
                     link.getToNodeId().toString(), List.of());
             if (outgoing.isEmpty()) {
@@ -77,16 +84,19 @@ public final class LaneDefinitionBuilder {
 
     private static boolean isOneway(OsmWayRecord way) {
         String oneway = way.tags().get("oneway");
-        return "yes".equals(oneway) || "1".equals(oneway) || "true".equals(oneway);
+        // oneway=-1 means the draw direction is reversed but it is still one-way, so lane counts
+        // (which describe the travelled direction) apply to a single direction.
+        return "yes".equals(oneway) || "1".equals(oneway) || "true".equals(oneway)
+                || "-1".equals(oneway);
     }
 
-    private static String turnLanes(OsmWayRecord way, boolean forward, boolean oneway) {
+    private static String turnLanes(OsmWayRecord way, boolean forward) {
         String directional = way.tags().get("turn:lanes" + (forward ? ":forward" : ":backward"));
         if (directional != null && !directional.isBlank()) {
             return directional;
         }
-        // A bare turn:lanes on a bidirectional way is only applied when the resolver applied the
-        // even split (both directions share the same per-direction cell list); the decomposer's
+        // No directional tag for this travel direction: fall back to the bare turn:lanes. A bare tag
+        // on a bidirectional way is applied left→right in each travel direction; the decomposer's
         // count/cell reconciliation (Task 3) is the guard against a bad alignment.
         return way.tags().get("turn:lanes");
     }
