@@ -22,8 +22,9 @@ public final class OsmTurnLaneParser {
         List<LaneTurnClass> indications = new ArrayList<>();
         List<String> unsupported = new ArrayList<>();
         LaneMerge merge = LaneMerge.NONE;
+        boolean none = false;
         if (cellText.isEmpty()) {
-            return new OsmTurnLaneCell("", indications, merge, true, unsupported);
+            return new OsmTurnLaneCell("", indications, merge, true, false, unsupported);
         }
         for (String token : cellText.split(";")) {
             String t = token.trim();
@@ -38,10 +39,10 @@ public final class OsmTurnLaneParser {
                 case "reverse" -> indications.add(LaneTurnClass.REVERSE);
                 case "merge_to_left" -> merge = LaneMerge.LEFT;
                 case "merge_to_right" -> merge = LaneMerge.RIGHT;
-                case "none" -> { /* no marked indication; not a movement class */ }
+                case "none" -> none = true;
                 default -> unsupported.add(t);
             }
         }
-        return new OsmTurnLaneCell(cellText, indications, merge, false, unsupported);
+        return new OsmTurnLaneCell(cellText, indications, merge, false, none, unsupported);
     }
 }

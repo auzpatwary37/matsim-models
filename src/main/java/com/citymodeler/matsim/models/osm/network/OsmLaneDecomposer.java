@@ -57,18 +57,23 @@ public final class OsmLaneDecomposer {
         LanesToLinkAssignment assignment = new LanesToLinkAssignment(Id.create(linkId, Link.class));
         for (int i = 0; i < laneCount; i++) {
             OsmTurnLaneCell cell = i < aligned.size() ? aligned.get(i) : null;
-            assignment.addLane(buildLane(linkId, i, cell, count, outgoingLinkIds, classifier,
-                    capacityPerLane, issues));
+            assignment.addLane(buildLane(linkId, i, cell, count, cells.size(), outgoingLinkIds,
+                    classifier, capacityPerLane, issues));
         }
         return new LaneDecomposition(assignment, issues);
     }
 
     private Lane buildLane(String linkId, int index, OsmTurnLaneCell cell, OsmLaneCount count,
-                           List<String> outgoingLinkIds, MovementTurnClassifier classifier,
-                           double capacityPerLane, List<OsmImportIssue> issues) {
+                           int turnLanesCount, List<String> outgoingLinkIds,
+                           MovementTurnClassifier classifier, double capacityPerLane,
+                           List<OsmImportIssue> issues) {
         Lane lane = new Lane(Id.create(linkId + "_l" + index, Lane.class));
         lane.setCapacityVehiclesPerHour(capacityPerLane);
-        lane.getAttributes().putAttribute("osm:lane.count", index);
+        lane.getAttributes().putAttribute("osm:lane.index", index);
+        lane.getAttributes().putAttribute("osm:lanes.count", count.lanes());
+        if (turnLanesCount > 0) {
+            lane.getAttributes().putAttribute("osm:turnLanes.count", turnLanesCount);
+        }
         if (count.undeterminedTotal() != null) {
             lane.getAttributes().putAttribute("osm:lanes.total", count.undeterminedTotal());
         }
@@ -87,6 +92,11 @@ public final class OsmLaneDecomposer {
             issues.add(issue("unsupported-turn-token", "Link " + linkId + " lane " + index
                     + " has unsupported token(s) " + cell.unsupportedTokens()));
             toLinks.addAll(outgoingLinkIds);
+        } else if (cell.none()) {
+            // "none" is explicit evidence that the lane carries no marked indication, distinct from
+            // "no evidence" (absent).
+            confidence = LaneConfidence.NONE_OBSERVED;
+            toLinks.addAll(outgoingLinkIds);
         } else if (!cell.indications().isEmpty()) {
             if (LaneConfidence.UNDETERMINED_SPLIT.equals(count.confidence())
                     || LaneConfidence.ABSENT.equals(count.confidence())) {
@@ -96,6 +106,8 @@ public final class OsmLaneDecomposer {
                 toLinks.addAll(resolve(linkId, indication, outgoingLinkIds, classifier));
             }
             if (toLinks.isEmpty()) {
+                // Indications were present and parsed but resolve to no movement: keep that as
+                // "partial" (evidence present but unresolved), never overwritten to "absent".
                 confidence = LaneConfidence.PARTIAL;
             }
         }
@@ -103,14 +115,14 @@ public final class OsmLaneDecomposer {
         if (cell != null && cell.merge() != LaneMerge.NONE) {
             lane.getAttributes().putAttribute("osm:lane.merge",
                     cell.merge() == LaneMerge.LEFT ? "left" : "right");
-            if (toLinks.isEmpty()) {
-                toLinks.addAll(outgoingLinkIds);
-                confidence = LaneConfidence.UNSUPPORTED;
-            }
+            toLinks.addAll(outgoingLinkIds);
+            confidence = LaneConfidence.MERGE;
         }
         if (toLinks.isEmpty()) {
             toLinks.addAll(outgoingLinkIds);
-            confidence = LaneConfidence.ABSENT;
+            if (!LaneConfidence.PARTIAL.equals(confidence)) {
+                confidence = LaneConfidence.ABSENT;
+            }
         }
         for (String id : toLinks) {
             lane.addToLinkId(Id.create(id, Link.class));
@@ -134,13 +146,11 @@ public final class OsmLaneDecomposer {
         if (!direct.isEmpty()) {
             return direct;
         }
-        // Documented, flagged fallbacks: a sharp turn with no sharp movement falls back to the base
-        // left/right movement; a base turn with only a slight movement falls back to it.
+        // Documented, flagged fallback (spec §1b): a sharp turn with no sharp movement falls back to
+        // the base left/right movement. No base→slight fallback is applied.
         LaneTurnClass fallback = switch (indication) {
             case SHARP_LEFT -> LaneTurnClass.LEFT;
             case SHARP_RIGHT -> LaneTurnClass.RIGHT;
-            case LEFT -> LaneTurnClass.SLIGHT_LEFT;
-            case RIGHT -> LaneTurnClass.SLIGHT_RIGHT;
             default -> LaneTurnClass.UNKNOWN;
         };
         return byClass.getOrDefault(fallback, List.of());

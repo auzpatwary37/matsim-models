@@ -9,6 +9,7 @@ public record OsmTurnLaneCell(
         List<LaneTurnClass> indications,
         LaneMerge merge,
         boolean empty,
+        boolean none,
         List<String> unsupportedTokens) {
 
     public OsmTurnLaneCell {

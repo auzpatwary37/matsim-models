@@ -128,7 +128,68 @@ class OsmLaneDecomposerTest {
 
         assertNotNull(lane(d, 0));
         assertEquals("left", lane(d, 0).getAttributes().getAttribute("osm:lane.merge"));
-        assertTrue(lane(d, 0).getToLinkIds().size() >= 1);
+        assertEquals(LaneConfidence.MERGE, lane(d, 0).getAttributes().getAttribute("osm:lane.confidence"));
+        assertEquals(3, lane(d, 0).getToLinkIds().size());
+    }
+
+    @Test
+    void noneCellIsNoneObservedAcrossAllOutgoing() {
+        OsmLaneCount count = new OsmLaneCount(1, LaneConfidence.PRESENT, null, List.of());
+        LaneDecomposition d = decomposer.decompose("l_in", count, parser.parse("none"),
+                List.of("l_t", "l_l", "l_r"), junction, 900.0);
+
+        assertEquals(3, lane(d, 0).getToLinkIds().size(), "none -> unrestricted lane");
+        assertEquals(LaneConfidence.NONE_OBSERVED,
+                lane(d, 0).getAttributes().getAttribute("osm:lane.confidence"));
+    }
+
+    @Test
+    void parsedIndicationThatResolvesToNoMovementIsPartialNotAbsent() {
+        // 'through' indication, but the junction has no through outgoing link.
+        MovementTurnClassifier noThrough = (in, out) -> LaneTurnClass.LEFT;
+        OsmLaneCount count = new OsmLaneCount(1, LaneConfidence.PRESENT, null, List.of());
+        LaneDecomposition d = decomposer.decompose("l_in", count, parser.parse("through"),
+                List.of("l_l", "l_r"), noThrough, 900.0);
+
+        assertEquals(2, lane(d, 0).getToLinkIds().size(), "unresolved indication -> all outgoing");
+        assertEquals(LaneConfidence.PARTIAL, lane(d, 0).getAttributes().getAttribute("osm:lane.confidence"));
+    }
+
+    @Test
+    void baseTurnDoesNotFallBackToSlightMovement() {
+        // Only a slight-left movement exists, but the lane says 'left': no direct left -> partial.
+        MovementTurnClassifier slightOnly = (in, out) -> "l_sl".equals(out)
+                ? LaneTurnClass.SLIGHT_LEFT : LaneTurnClass.THROUGH;
+        OsmLaneCount count = new OsmLaneCount(1, LaneConfidence.PRESENT, null, List.of());
+        LaneDecomposition d = decomposer.decompose("l_in", count, parser.parse("left"),
+                List.of("l_sl", "l_t"), slightOnly, 900.0);
+
+        assertEquals(2, lane(d, 0).getToLinkIds().size(), "no base movement -> all outgoing");
+        assertEquals(LaneConfidence.PARTIAL, lane(d, 0).getAttributes().getAttribute("osm:lane.confidence"));
+    }
+
+    @Test
+    void sharpTurnStillFallsBackToBaseMovement() {
+        // A 'sharp_left' lane with only a base left movement present resolves to it (spec §1b).
+        MovementTurnClassifier baseOnly = (in, out) -> "l_l".equals(out)
+                ? LaneTurnClass.LEFT : LaneTurnClass.THROUGH;
+        OsmLaneCount count = new OsmLaneCount(1, LaneConfidence.PRESENT, null, List.of());
+        LaneDecomposition d = decomposer.decompose("l_in", count, parser.parse("sharp_left"),
+                List.of("l_l", "l_t"), baseOnly, 900.0);
+
+        assertEquals(List.of("l_l"), lane(d, 0).getToLinkIds().stream().map(Object::toString).toList());
+    }
+
+    @Test
+    void sourceCountProvenanceAndLaneIndexAreEmitted() {
+        OsmLaneCount count = new OsmLaneCount(2, LaneConfidence.EVEN_SPLIT, null, List.of());
+        LaneDecomposition d = decomposer.decompose("l_in", count, parser.parse("left|through"),
+                List.of("l_t", "l_l", "l_r"), junction, 900.0);
+
+        assertEquals(2, lane(d, 0).getAttributes().getAttribute("osm:lanes.count"));
+        assertEquals(2, lane(d, 0).getAttributes().getAttribute("osm:turnLanes.count"));
+        assertEquals(0, lane(d, 0).getAttributes().getAttribute("osm:lane.index"));
+        assertEquals(1, lane(d, 1).getAttributes().getAttribute("osm:lane.index"));
     }
 
     @Test

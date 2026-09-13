@@ -47,6 +47,15 @@ class OsmTurnLaneParserTest {
     }
 
     @Test
+    void noneTokenIsTrackedExplicitlyDistinctFromNoEvidence() {
+        OsmTurnLaneCell c = parser.parse("none").get(0);
+        assertTrue(c.none(), "'none' must be tracked so it is distinct from an absent cell");
+        assertTrue(c.indications().isEmpty());
+        assertFalse(c.empty());
+        assertTrue(c.unsupportedTokens().isEmpty());
+    }
+
+    @Test
     void unknownTokenIsPreservedNotGuessed() {
         OsmTurnLaneCell c = parser.parse("left_turn").get(0);
         assertTrue(c.indications().isEmpty());

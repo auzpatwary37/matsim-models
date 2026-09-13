@@ -101,7 +101,13 @@ public final class OsmGtfsBundleRunner {
         this.clipMarginMeters = clipMarginMeters;
     }
 
-    /** Summary of a produced bundle: artifact paths and the structural counts of each artifact. */
+    /**
+     * Summary of a produced bundle: artifact paths and the structural counts of each artifact.
+     *
+     * <p>Component evolution: {@code lanesFile} and {@code laneAssignments} were added with the
+     * lanes-and-mapping feature (§3 bundle output); consumers constructing this record must pass the
+     * laneDefinitions path and per-link lane-assignment count.
+     */
     public record BundleResult(
             Path directory,
             Path networkFile,

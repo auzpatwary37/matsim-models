@@ -10,6 +10,7 @@ public final class LaneConfidence {
     public static final String NONE_OBSERVED = "none-observed";
     public static final String UNSUPPORTED = "unsupported";
     public static final String PARTIAL = "partial";
+    public static final String MERGE = "merge";
 
     private LaneConfidence() {
     }

@@ -7,6 +7,9 @@ import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
 import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.network.Node;
+import com.citymodeler.matsim.models.transit.TransitLine;
+import com.citymodeler.matsim.models.transit.TransitRoute;
+import com.citymodeler.matsim.models.transit.TransitRouteStop;
 import com.citymodeler.matsim.models.transit.TransitSchedule;
 import com.citymodeler.matsim.models.transit.TransitStopFacility;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -134,5 +137,49 @@ class MappingGeoJsonWriterTest {
         JsonNode props = new ObjectMapper().readTree(json).get("features").get(0).get("properties");
         assertTrue(props.get("linkId").isNull());
         assertTrue(props.get("name").isNull());
+        assertTrue(props.get("candidateLinkIds").isArray());
+        assertEquals(0, props.get("candidateLinkIds").size(),
+                "a facility referenced by no route has no candidate mode -> no candidates");
+    }
+
+    @Test
+    void candidateLinkIdsAreEmittedForAStopWithSeveralNearbyLinks() throws Exception {
+        // Two parallel, mode-compatible links next to the stop; a bus route references the stop so
+        // the writer knows which mode to score candidates with.
+        Network rich = new Network();
+        Node n0 = new Node(Id.create("n0", Node.class), new Coord(0, 0));
+        Node n1 = new Node(Id.create("n1", Node.class), new Coord(200, 0));
+        rich.addNode(n0);
+        rich.addNode(n1);
+        rich.addLink(new Link(Id.create("a", Link.class), n0.getId(), n1.getId(),
+                200.0, 900.0, 13.9, 2.0, Set.of("car", "bus")));
+        rich.addLink(new Link(Id.create("b", Link.class), n0.getId(), n1.getId(),
+                200.0, 900.0, 13.9, 2.0, Set.of("car", "bus")));
+        rich.postProcess();
+
+        TransitSchedule schedule = new TransitSchedule();
+        TransitStopFacility stop = new TransitStopFacility(
+                Id.create("stop", TransitStopFacility.class), new Coord(100, 5), false);
+        stop.setName("Main Street");
+        stop.setLinkId(Id.create("a", Link.class));
+        schedule.addStopFacility(stop);
+
+        TransitLine line = new TransitLine(Id.create("L1", TransitLine.class));
+        TransitRoute route = new TransitRoute(Id.create("R1", TransitRoute.class));
+        route.setTransportMode("bus");
+        route.addStop(new TransitRouteStop(stop.getId(), 0, 0, false));
+        line.addRoute(route);
+        schedule.addTransitLine(line);
+
+        String json = new MappingGeoJsonWriter().writeToString(schedule, rich);
+        JsonNode props = new ObjectMapper().readTree(json)
+                .get("features").get(0).get("properties");
+
+        JsonNode candidates = props.get("candidateLinkIds");
+        assertTrue(candidates.isArray());
+        assertTrue(candidates.size() > 1,
+                "candidateLinkIds must include every nearby candidate link: " + candidates);
+        assertEquals("a", candidates.get(0).asText());
+        assertEquals("b", candidates.get(1).asText());
     }
 }

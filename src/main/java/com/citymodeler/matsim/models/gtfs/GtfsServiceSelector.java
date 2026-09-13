@@ -3,6 +3,7 @@ package com.citymodeler.matsim.models.gtfs;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -128,11 +129,7 @@ public final class GtfsServiceSelector {
                 count.merge(d, 1, Integer::sum);
             }
         }
-        if (count.isEmpty()) return null;
-        return count.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
-                .map(Map.Entry::getKey)
-                .orElse(null);
+        return earliestMaximum(count);
     }
 
     public static LocalDate dayWithMostTrips(GtfsFeed feed) {
@@ -154,8 +151,18 @@ public final class GtfsServiceSelector {
         if (counts.isEmpty()) {
             return dayWithMostServices(feed);
         }
+        return earliestMaximum(counts);
+    }
+
+    /**
+     * The earliest date attaining the maximum value. A {@code HashMap} plus {@code Stream.max} tie-
+     * breaks arbitrarily when values are equal, which made the chosen date nondeterministic; sorting
+     * the candidate dates and taking the smallest among the maxima is stable (Review: determinism).
+     */
+    private static <V extends Comparable<V>> LocalDate earliestMaximum(Map<LocalDate, V> counts) {
         return counts.entrySet().stream()
-                .max(Map.Entry.comparingByValue())
+                .max(Comparator.comparing(Map.Entry<LocalDate, V>::getValue)
+                        .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
                 .map(Map.Entry::getKey)
                 .orElse(null);
     }

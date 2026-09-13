@@ -16,10 +16,10 @@ import com.citymodeler.matsim.models.osm.model.OsmWayRecord;
 /**
  * Builds a {@link Lanes} model for every link of an emitted network.
  *
- * <p>A bare {@code turn:lanes} on a bidirectional way is applied only left→right in the travel
- * direction (the directional {@code turn:lanes:forward}/{@code :backward} tag always takes
- * precedence); the decomposer's count/cell reconciliation (Task 3) is the guard against a bad
- * alignment.
+ * <p>A bare {@code turn:lanes} on a bidirectional way is applied only when an even directional split
+ * is resolved (or the way is one-way), left→right in the travel direction; a directional
+ * {@code turn:lanes:forward}/{@code :backward} tag always takes precedence. An unorientable bare tag
+ * is omitted and reported as {@code ambiguous-turn-lanes}.
  */
 public final class LaneDefinitionBuilder {
 
@@ -41,7 +41,13 @@ public final class LaneDefinitionBuilder {
         }
         outgoingByNode.values().forEach(list -> list.sort(String::compareTo));
 
-        for (String linkId : new TreeMap<>(refs).keySet()) {
+        // Iterate the union of the emitted links and the refs map: a network link missing from refs
+        // must still be reported (lane-unresolved-way) rather than silently dropped, and a ref whose
+        // link is absent is reported too. Sorted for deterministic issue ordering.
+        java.util.Set<String> allLinkIds = new java.util.TreeSet<>(network.getLinks().keySet().stream()
+                .map(Object::toString).toList());
+        allLinkIds.addAll(refs.keySet());
+        for (String linkId : allLinkIds) {
             Link link = network.getLinks().get(Id.create(linkId, Link.class));
             OsmLinkRef ref = refs.get(linkId);
             OsmWayRecord way = ref == null ? null : ways.get(ref.osmWayId());
@@ -61,7 +67,15 @@ public final class LaneDefinitionBuilder {
             }
             boolean oneway = isOneway(way);
             OsmLaneCount count = countResolver.resolve(way.tags(), ref.forward(), oneway);
-            List<OsmTurnLaneCell> cells = turnParser.parse(turnLanes(way, ref.forward()));
+            String turnLanesTag = turnLanes(way, ref.forward(), oneway, count);
+            if (turnLanesTag == null && hasBareTurnLanes(way, ref.forward())) {
+                // A whole-carriageway turn:lanes on a bidirectional way with an unknown split is
+                // ambiguous: it cannot be aligned to a direction, so it is not applied (spec §1b).
+                issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, "ambiguous-turn-lanes",
+                        "Link " + linkId + " has a bare turn:lanes but the way is bidirectional with "
+                                + "no even directional split; the tag is ambiguous and not applied", null));
+            }
+            List<OsmTurnLaneCell> cells = turnParser.parse(turnLanesTag);
             List<String> outgoing = outgoingByNode.getOrDefault(
                     link.getToNodeId().toString(), List.of());
             if (outgoing.isEmpty()) {
@@ -90,14 +104,31 @@ public final class LaneDefinitionBuilder {
                 || "-1".equals(oneway);
     }
 
-    private static String turnLanes(OsmWayRecord way, boolean forward) {
+    /**
+     * Directional {@code turn:lanes} always wins. A bare (whole-carriageway) {@code turn:lanes} is
+     * only applied when the way is {@code oneway} or the directional count is an even split
+     * (spec §1b); otherwise it cannot be orientated to a travel direction and is not applied —
+     * {@link #hasBareTurnLanes} lets the caller record the {@code ambiguous-turn-lanes} issue.
+     */
+    private static String turnLanes(OsmWayRecord way, boolean forward, boolean oneway,
+                                    OsmLaneCount count) {
         String directional = way.tags().get("turn:lanes" + (forward ? ":forward" : ":backward"));
         if (directional != null && !directional.isBlank()) {
             return directional;
         }
-        // No directional tag for this travel direction: fall back to the bare turn:lanes. A bare tag
-        // on a bidirectional way is applied left→right in each travel direction; the decomposer's
-        // count/cell reconciliation (Task 3) is the guard against a bad alignment.
+        if (!oneway && !LaneConfidence.EVEN_SPLIT.equals(count.confidence())) {
+            return null;
+        }
         return way.tags().get("turn:lanes");
+    }
+
+    /** True when a whole-carriageway {@code turn:lanes} exists but no directional tag does. */
+    private static boolean hasBareTurnLanes(OsmWayRecord way, boolean forward) {
+        String directional = way.tags().get("turn:lanes" + (forward ? ":forward" : ":backward"));
+        if (directional != null && !directional.isBlank()) {
+            return false;
+        }
+        String bare = way.tags().get("turn:lanes");
+        return bare != null && !bare.isBlank();
     }
 }
