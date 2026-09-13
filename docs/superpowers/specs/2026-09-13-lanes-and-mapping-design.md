@@ -178,12 +178,19 @@ Replace the simplified writer/reader output with the published `laneDefinitions_
 </laneDefinitions>
 ```
 
-- `leadsTo` may contain `toLink` and/or `toLane` (lane-to-lane across the junction when known).
+- `leadsTo` is an `xs:choice`: it contains **either** `toLink` **or** `toLane`, never both. Emit the
+  `toLink` branch when the lane has any `toLink` ids, else the `toLane` branch. If a lane carries
+  both (model permits it), emit `toLink` and preserve the dropped `toLane` ids in the lane attribute
+  `osm:lane.toLaneIds` so nothing is silently lost.
 - `leadsTo` is **mandatory** in the published XSD: emit all geometrically-available outgoing links
   (conventionally the "unrestricted" lane) with a provenance attribute recording the evidence
-  (`observed`, `none-observed`, `absent`, `unsupported`).
-- `alignment` is **mandatory** (`xs:int`): emit `0` and tag `osm:lane.alignmentProvenance=default`
-  when no alignment was parsed from lane data.
+  (`observed`, `none-observed`, `absent`, `unsupported`). A lane with neither `toLink` nor `toLane`
+  is invalid; the writer rejects it rather than emitting `<leadsTo/>`.
+- `alignment` is **mandatory** (`xs:int`): normalize to an integer. Parse the lane's alignment
+  string; if it is null, blank, or non-integer, emit `0` and tag `osm:lane.alignmentProvenance=default`
+  (plus `osm:lane.alignmentRaw=<original>` when a non-numeric value was supplied).
+- The published `laneDefinitions` root has **no attributes**; the writer emits none (the reader keeps
+  a lenient read of legacy root attributes for tolerance only).
 - `capacity`, `startsAt`, `representedLanes` are optional and emitted only when we have a value;
   otherwise omitted (schema defaults), so absence is explicit rather than fabricated.
 - Child element order must follow the XSD: `leadsTo, representedLanes, capacity, startsAt,
