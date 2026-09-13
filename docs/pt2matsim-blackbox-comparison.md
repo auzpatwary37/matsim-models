@@ -154,9 +154,22 @@ connectivity was not broken). The cause was contraction policy: pt2MATSim stops 
 our link density already matched pt2MATSim (ratio 0.99); the deficit was long merged links, not missing
 roads. Adding the same 500 m cap reproduces pt2MATSim's counts.
 
-Remaining per-class delta is policy, not connectivity: `(rail/other)` +2,476 (we admit more rail/tram),
+Remaining per-class delta is policy, not connectivity: `(rail/other)` (we admit more rail/tram),
 `service` −1,151 (pt2MATSim keeps transit-carrying service via `keepWaysWithPublicTransit`, which we
 exclude entirely), and small `residential`/`secondary`/`tertiary` over-counts from the cap boundary.
+
+### Mode model
+
+pt2MATSim tags its roads `bus,car` (55,632 links) or `bus,car,pt` (37,391); our base network tagged
+roads `car` only, so a raw mode-count comparison showed far fewer "transit" links for us. That was a
+labelling difference, not missing links: our pipeline materializes the transit mode during mapping
+(one output mode per route, `car` as fallback eligibility; spec §Mode assignment). The parity preset
+now adds `bus` to every car road (`addBusToCarRoads`) so the bus routable subnetwork exists in the base
+network too, matching pt2MATSim.
+
+The 500 m length cap applies to **car roads only**, never to rail/tram (pt2MATSim does not length-cap
+rail; applying the car cap to rail over-segments it). Turn restrictions now cover every mode the
+originating link permits (so `car,bus` roads restrict both) minus `except=` exceptions.
 
 ### Road-name provenance for stop mapping
 

@@ -104,8 +104,8 @@ final class OsmNetworkScopeTest {
 
         var net = OsmTopologyBuilder.build(result,
                 OsmNetworkBuildConfig.pt2matsimComparableConfig(), false).network();
-        // No cap for rail: A and C retained only -> 2 directed links.
-        assertEquals(2, net.getLinks().size(),
-                "rail must not be split by the car length cap");
+        // Rail defaults to oneway, so one directed link per span; the cap must not split it.
+        assertEquals(1, net.getLinks().size(),
+                "rail must not be split by the car length cap and defaults to oneway");
     }
 }

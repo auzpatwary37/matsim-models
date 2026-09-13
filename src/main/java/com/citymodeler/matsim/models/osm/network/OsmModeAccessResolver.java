@@ -20,10 +20,19 @@ public final class OsmModeAccessResolver {
     }
 
     public List<DirectionDecision> resolve(OsmWayRecord way, Set<String> ruleAllowedModes) {
+        return resolve(way, ruleAllowedModes, false);
+    }
+
+    /**
+     * @param ruleDefaultOneway the way-rule's default oneway flag, applied when OSM carries no
+     *                          explicit {@code oneway} tag (e.g. tram tracks default to oneway).
+     */
+    public List<DirectionDecision> resolve(OsmWayRecord way, Set<String> ruleAllowedModes,
+                                           boolean ruleDefaultOneway) {
         List<DirectionDecision> decisions = new ArrayList<>();
         Set<String> baseModes = applyAccessRestrictions(way.tags(), ruleAllowedModes);
 
-        boolean forwardOnly = resolveOneway(way.tags());
+        boolean forwardOnly = resolveOneway(way.tags(), ruleDefaultOneway);
         boolean backwardOnly = resolveOnewayReverse(way.tags());
 
         if (forwardOnly) {
@@ -182,6 +191,11 @@ public final class OsmModeAccessResolver {
     }
 
     private static boolean resolveOneway(com.citymodeler.matsim.models.osm.OsmTagSet tags) {
+        return resolveOneway(tags, false);
+    }
+
+    private static boolean resolveOneway(com.citymodeler.matsim.models.osm.OsmTagSet tags,
+                                         boolean ruleDefaultOneway) {
         String oneway = tags.get("oneway");
         if (oneway != null) {
             if ("yes".equals(oneway) || "true".equals(oneway) || "1".equals(oneway)) {
@@ -203,7 +217,7 @@ public final class OsmModeAccessResolver {
         if ("motorway".equals(tags.get("highway"))) {
             return true;
         }
-        return false;
+        return ruleDefaultOneway;
     }
 
     private static boolean resolveOnewayReverse(com.citymodeler.matsim.models.osm.OsmTagSet tags) {

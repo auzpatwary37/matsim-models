@@ -80,7 +80,8 @@ public final class OsmSegmentGraph {
             if (refs.size() < 2) {
                 continue;
             }
-            List<OsmModeAccessResolver.DirectionDecision> decisions = access.resolve(way, rule.allowedModes());
+            List<OsmModeAccessResolver.DirectionDecision> decisions =
+                    access.resolve(way, rule.allowedModes(), rule.defaultOneway());
             for (int i = 0; i + 1 < refs.size(); i++) {
                 String a = refs.get(i);
                 String b = refs.get(i + 1);
