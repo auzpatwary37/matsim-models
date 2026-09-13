@@ -502,7 +502,7 @@ git commit -m "feat(lanes): deterministic turn:lanes token parser"
   - `@FunctionalInterface MovementTurnClassifier { LaneTurnClass classify(String inLinkId, String outLinkId); }`
   - `record LaneDecomposition(LanesToLinkAssignment assignment, List<OsmImportIssue> issues)`
   - `OsmLaneDecomposer.decompose(String linkId, OsmLaneCount count, List<OsmTurnLaneCell> cells, List<String> outgoingLinkIds, MovementTurnClassifier classifier, double capacityPerLane) -> LaneDecomposition`
-- Attribute keys written on each `Lane`: `osm:lane.confidence`, `osm:lane.rawToken`, `osm:lane.merge`, `osm:lane.count`, `osm:lane.capacity.shared`, `osm:lanes.total`.
+- Attribute keys written on each `Lane`: `osm:lane.confidence`, `osm:lane.rawToken`, `osm:lane.merge`, `osm:lane.index`, `osm:lane.capacity.shared`, `osm:lanes.total`.
 - Issue codes: `lane-count-mismatch`, `unsupported-turn-token`, `empty-turn-cell`.
 
 - [ ] **Step 1: Write the failing test**

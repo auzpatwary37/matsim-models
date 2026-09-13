@@ -235,7 +235,7 @@ reused workspace artifact.
 |---|---|---|
 | lanes per assignment `{n: assignments}` | `{1: 3,077, 2: 333, 3: 139, 4: 20}` | `{1: 2,053, 2: 277, 3: 116, 4: 19}` |
 | `leadsTo/toLink` per lane `{n: lanes}` | `{1: 658, 2: 1,809, 3: 1,219, 4: 551, 5: 3}` | `{1: 486, 2: 1,609, 3: 545, 4: 391}` |
-| `osm:lane.count` per lane | `{0: 3,569, 1: 492, 2: 159, 3: 20}` | `{0: 2,465, 1: 412, 2: 135, 3: 19}` |
+| `osm:lane.index` per lane | `{0: 3,569, 1: 492, 2: 159, 3: 20}` | `{0: 2,465, 1: 412, 2: 135, 3: 19}` |
 | `osm:lane.capacity.shared` per lane | `{true: 3,582, false: 658}` | `{true: 2,545, false: 486}` |
 | `osm:lane.alignmentProvenance` per lane | `{default: 4,240}` | `{default: 3,031}` |
 
