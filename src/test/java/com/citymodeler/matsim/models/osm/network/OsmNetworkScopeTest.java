@@ -104,8 +104,30 @@ final class OsmNetworkScopeTest {
 
         var net = OsmTopologyBuilder.build(result,
                 OsmNetworkBuildConfig.pt2matsimComparableConfig(), false).network();
-        // Rail defaults to oneway, so one directed link per span; the cap must not split it.
-        assertEquals(1, net.getLinks().size(),
-                "rail must not be split by the car length cap and defaults to oneway");
+        // Rail is bidirectional and must not be split by the car length cap: A and C retained only,
+        // so one physical span -> 2 directed links.
+        assertEquals(2, net.getLinks().size(),
+                "rail must not be split by the car length cap");
+    }
+
+    /** Tram defaults to oneway in pt2MATSim (1 directed link per span); rail is bidirectional. */
+    @Test
+    void tramDefaultsToOnewayRailToBidirectional() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0));
+        ns.put("B", n("B", 100));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B"),
+                OsmTagSet.of(Map.of("railway", "tram"))));
+        ws.put("20", new OsmWayRecord("20", List.of("A", "B"),
+                OsmTagSet.of(Map.of("railway", "rail"))));
+        OsmImportResult result = new OsmImportResult(ns, ws, new TreeMap<>(), List.of(),
+                OsmProvenance.defaultFor("f.osm", "EPSG:3857"));
+
+        var net = OsmTopologyBuilder.build(result,
+                OsmNetworkBuildConfig.pt2matsimComparableConfig(), false).network();
+        // tram: 1 directed; rail: 2 directed => 3 total.
+        assertEquals(3, net.getLinks().size(),
+                "tram oneway (1) + rail bidirectional (2) = 3");
     }
 }

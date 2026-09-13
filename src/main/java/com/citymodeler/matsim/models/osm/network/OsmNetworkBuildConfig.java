@@ -209,15 +209,15 @@ public final class OsmNetworkBuildConfig {
         rules.put("highway:busway", new OsmWayRule("highway", "busway", 3,
                 Set.of("bus", "pt"), 1.0, 13.89, 600.0, false, true));
         rules.put("railway:rail", new OsmWayRule("railway", "rail", 1,
-                Set.of("rail", "pt"), 1.0, 83.33, 3000.0, true, true));
+                Set.of("rail", "pt"), 1.0, 83.33, 3000.0, false, true));
         rules.put("railway:light_rail", new OsmWayRule("railway", "light_rail", 2,
-                Set.of("light_rail", "pt"), 1.0, 27.78, 1200.0, true, true));
+                Set.of("light_rail", "pt"), 1.0, 27.78, 1200.0, false, true));
         rules.put("railway:subway", new OsmWayRule("railway", "subway", 3,
-                Set.of("subway", "pt"), 1.0, 27.78, 1200.0, true, true));
+                Set.of("subway", "pt"), 1.0, 27.78, 1200.0, false, true));
         rules.put("railway:tram", new OsmWayRule("railway", "tram", 4,
                 Set.of("tram", "pt"), 1.0, 16.67, 600.0, true, true));
         rules.put("railway:monorail", new OsmWayRule("railway", "monorail", 5,
-                Set.of("monorail", "pt"), 1.0, 27.78, 1200.0, true, true));
+                Set.of("monorail", "pt"), 1.0, 27.78, 1200.0, false, true));
         rules.put("railway:funicular", new OsmWayRule("railway", "funicular", 6,
                 Set.of("funicular", "pt"), 1.0, 8.33, 300.0, false, true));
         rules.put("route:ferry", new OsmWayRule("route", "ferry", 10,

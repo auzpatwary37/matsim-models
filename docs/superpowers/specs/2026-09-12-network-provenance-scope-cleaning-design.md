@@ -170,3 +170,21 @@ The Phase-1 build now emits `osm:name` / `osm:sourceNames` on links (54.4% of Lu
 a token overlap. This disambiguates among nearby candidate links (e.g. both sides of a dual
 carriageway) using the GTFS stop name.
 
+## Mode-model parity follow-up
+
+Comparing raw mode counts with pt2MATSim is misleading: pt2MATSim tags roads `bus,car` / `bus,car,pt`,
+while our base network tags roads `car` only and materializes the transit mode during mapping (spec
+§Mode assignment). To match:
+
+- `OsmNetworkBuildConfig.addBusToCarRoads()` adds `bus` to every link that allows `car` (default true),
+  so the bus routable subnetwork exists in the base network.
+- The 500 m length cap applies to **car roads only** (rail/tram are not split by length).
+- `OsmWayRule.defaultOneway` is now honored (it was previously dead). Measured from pt2MATSim's
+  black-box output: rail is **bidirectional** (9,356 directed / 4,667 physical = 2.00) and tram is
+  **oneway** (640 / 640 = 1.00). Our rules now match (`rail`/`light_rail`/`subway`/`monorail`
+  bidirectional, `tram` oneway). Turn restrictions cover every mode the originating link permits
+  (minus `except=`), so a `car,bus` road restricts both.
+
+With these, Luxembourg parity: **49,978 nodes / 106,378 links** vs pt2MATSim **49,549 / 105,125**
+(+0.9% / +1.2%), car subgraph 100% strongly connected.
+
