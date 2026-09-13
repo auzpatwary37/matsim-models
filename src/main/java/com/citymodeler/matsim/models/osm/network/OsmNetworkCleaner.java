@@ -160,9 +160,10 @@ public final class OsmNetworkCleaner {
      * and seeds are sorted.
      */
     static Set<String> largestStronglyConnectedComponent(Network network, Set<String> linkIds) {
-        // Induced node adjacency (from-node -> sorted to-nodes) and reverse.
+        // Induced node adjacency (from-node -> sorted to-nodes) and reverse, plus the induced links.
         Map<String, Set<String>> out = new TreeMap<>();
         Map<String, Set<String>> rev = new TreeMap<>();
+        List<String> inducedLinks = new ArrayList<>();
         for (String linkId : linkIds) {
             Link link = network.getLinks().get(Id.create(linkId, Link.class));
             if (link == null) {
@@ -174,6 +175,7 @@ public final class OsmNetworkCleaner {
             out.computeIfAbsent(to, k -> new TreeSet<>());
             rev.computeIfAbsent(to, k -> new TreeSet<>()).add(from);
             rev.computeIfAbsent(from, k -> new TreeSet<>());
+            inducedLinks.add(linkId);
         }
 
         // Pass 1: finishing order over the forward graph.
@@ -185,47 +187,56 @@ public final class OsmNetworkCleaner {
             }
         }
 
-        // Pass 2: assign SCCs over the reverse graph in decreasing finish order.
+        // Pass 2: assign SCCs over the reverse graph in decreasing finish order. Record node ->
+        // component index so link counts are a single pass (not O(components x links)).
         Set<String> assigned = new TreeSet<>();
-        List<Set<String>> components = new ArrayList<>();
+        Map<String, Integer> componentOf = new java.util.HashMap<>();
+        int componentCount = 0;
         while (!order.isEmpty()) {
             String node = order.pop();
             if (!assigned.add(node)) {
                 continue;
             }
-            Set<String> component = new TreeSet<>();
             Deque<String> stack = new ArrayDeque<>();
             stack.push(node);
             while (!stack.isEmpty()) {
                 String current = stack.pop();
-                component.add(current);
+                componentOf.put(current, componentCount);
                 for (String prev : rev.getOrDefault(current, Set.of())) {
                     if (assigned.add(prev)) {
                         stack.push(prev);
                     }
                 }
             }
-            components.add(component);
+            componentCount++;
         }
 
-        // Largest component by member link count.
-        Set<String> best = new TreeSet<>();
-        int bestCount = -1;
-        for (Set<String> component : components) {
-            Set<String> componentLinks = new TreeSet<>();
-            for (String linkId : linkIds) {
-                Link link = network.getLinks().get(Id.create(linkId, Link.class));
-                if (link == null) {
-                    continue;
-                }
-                if (component.contains(link.getFromNodeId().toString())
-                        && component.contains(link.getToNodeId().toString())) {
-                    componentLinks.add(linkId);
-                }
+        // Count induced links per component in a single pass.
+        int[] linkCounts = new int[componentCount];
+        Map<String, Integer> componentLinkOf = new java.util.HashMap<>();
+        for (String linkId : inducedLinks) {
+            Link link = network.getLinks().get(Id.create(linkId, Link.class));
+            Integer fromComponent = componentOf.get(link.getFromNodeId().toString());
+            Integer toComponent = componentOf.get(link.getToNodeId().toString());
+            if (fromComponent != null && fromComponent.equals(toComponent)) {
+                linkCounts[fromComponent]++;
+                componentLinkOf.put(linkId, fromComponent);
             }
-            if (componentLinks.size() > bestCount) {
-                bestCount = componentLinks.size();
-                best = componentLinks;
+        }
+
+        int bestComponent = -1;
+        int bestCount = -1;
+        for (int i = 0; i < componentCount; i++) {
+            if (linkCounts[i] > bestCount) {
+                bestCount = linkCounts[i];
+                bestComponent = i;
+            }
+        }
+
+        Set<String> best = new TreeSet<>();
+        for (Map.Entry<String, Integer> entry : componentLinkOf.entrySet()) {
+            if (entry.getValue() == bestComponent) {
+                best.add(entry.getKey());
             }
         }
         return best;
