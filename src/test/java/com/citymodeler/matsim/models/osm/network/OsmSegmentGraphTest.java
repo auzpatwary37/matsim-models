@@ -138,4 +138,53 @@ class OsmSegmentGraphTest {
         assertEquals(4, g.segments().size(),
                 "tracks with distinct intermediate geometry must not be collapsed");
     }
+
+    /**
+     * Candidate bucketing must not miss a pair whose two endpoints straddle cell boundaries by
+     * DIFFERENT offsets. Cell size is 30 m; here way 10 occupies cells (0,0)-(10,0) while way 20
+     * occupies (1,0)-(10,1). With a single shared (dx,dy) offset no bucket key coincides, so the old
+     * prefilter produced a false negative; per-endpoint indexing must find them. Both are genuine
+     * coincident dual tracks and must still collapse.
+     */
+    @Test
+    void parallelTracksStraddlingCellBoundariesByDifferentOffsetsCollapse() {
+        Map<String, OsmNodeRecord> nodes = new java.util.TreeMap<>();
+        nodes.put("A1", node("A1", 5, 5));      // cell (0,0)
+        nodes.put("A2", node("A2", 305, 5));    // cell (10,0)
+        nodes.put("B1", node("B1", 30, 5));     // cell (1,0)
+        nodes.put("B2", node("B2", 305, 35));   // cell (10,1)
+        Map<String, OsmWayRecord> ways = new java.util.TreeMap<>();
+        ways.put("10", new OsmWayRecord("10", List.of("A1", "A2"),
+                OsmTagSet.of(Map.of("railway", "tram"))));
+        ways.put("20", new OsmWayRecord("20", List.of("B1", "B2"),
+                OsmTagSet.of(Map.of("railway", "tram"))));
+
+        OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways),
+                OsmNetworkBuildConfig.defaultConfig());
+        assertEquals(1, g.segments().size(),
+                "coincident dual tracks must collapse regardless of different cell-boundary offsets");
+    }
+
+    /**
+     * The documented rule is per-endpoint coincidence: two endpoints each 20 m apart must collapse
+     * even though their SUM (40 m) would fail a combined-budget test.
+     */
+    @Test
+    void parallelTracksWithinToleranceAtEachEndpointCollapse() {
+        Map<String, OsmNodeRecord> nodes = new java.util.TreeMap<>();
+        nodes.put("A1", node("A1", 0, 0));
+        nodes.put("B1", node("B1", 100, 0));
+        nodes.put("A2", node("A2", 20, 0));
+        nodes.put("B2", node("B2", 120, 0));
+        Map<String, OsmWayRecord> ways = new java.util.TreeMap<>();
+        ways.put("10", new OsmWayRecord("10", List.of("A1", "B1"),
+                OsmTagSet.of(Map.of("railway", "tram"))));
+        ways.put("20", new OsmWayRecord("20", List.of("A2", "B2"),
+                OsmTagSet.of(Map.of("railway", "tram"))));
+
+        OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways),
+                OsmNetworkBuildConfig.defaultConfig());
+        assertEquals(1, g.segments().size(),
+                "each endpoint within 30 m must collapse (not a combined 30 m budget)");
+    }
 }

@@ -50,13 +50,16 @@ public final class OsmModeAccessResolver {
     /**
      * Maps an OSM exclusion token used by a turn-restriction {@code except=*} to the internal network
      * modes it exempts, so the restriction layer reuses the same ontology as access resolution
-     * instead of doing raw string subtraction. Unknown tokens pass through unchanged (a no-op when
-     * they are not network modes).
+     * instead of doing raw string subtraction. The class hierarchy mirrors {@link #accessKeys}: a bus
+     * is a public-service vehicle, a motor vehicle and a vehicle, so {@code except=motor_vehicle} must
+     * exempt a bus too, not just a car. Unknown tokens pass through unchanged.
      */
     public static Set<String> internalModesForExclusion(String osmMode) {
         return switch (osmMode) {
+            case "motorcar", "car" -> Set.of("car");
+            case "motor_vehicle" -> Set.of("car", "bus", "pt");
+            case "vehicle" -> Set.of("car", "bus", "pt");
             case "psv", "bus" -> Set.of("bus", "pt");
-            case "motorcar", "motor_vehicle", "vehicle", "car" -> Set.of("car");
             default -> Set.of(osmMode);
         };
     }

@@ -168,7 +168,29 @@ class OsmTurnRestrictionReaderTest {
         assertNotNull(dnl);
         assertFalse(dnl.isDisallowed("car", List.of("osm_way_30_0_f")),
                 "except=motorcar must exempt the internal car mode");
-        assertTrue(dnl.isDisallowed("bus", List.of("osm_way_30_0_f")));
+        assertTrue(dnl.isDisallowed("bus", List.of("osm_way_30_0_f")),
+                "except=motorcar must NOT exempt bus (bus is not a motorcar)");
+    }
+
+    /**
+     * except=motor_vehicle must exempt both car and bus, consistent with the access ontology where a
+     * bus is governed by motor_vehicle. The from-link permits car,bus.
+     */
+    @Test
+    void exceptMotorVehicleExemptsCarAndBus() {
+        OsmRelationRecord rel = new OsmRelationRecord("r1",
+                List.of(
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "10", "from"),
+                        new OsmRelationMemberRecord(OsmElementType.NODE, "2", "via"),
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "30", "to")),
+                OsmTagSet.of(Map.of("type", "restriction", "restriction", "no_left_turn",
+                        "except", "motor_vehicle")));
+
+        Record result = OsmTurnRestrictionReader.read(restrictionFixture(rel),
+                buildResult(threeArmJunction()));
+        // Both car and bus are exempt, so no enforceable restriction remains for this relation.
+        assertNull(result.perLink().get("osm_way_10_0_f"),
+                "except=motor_vehicle must exempt car AND bus on a car,bus link");
     }
 
     /** Semicolon-separated exception list exempts every mapped mode. */

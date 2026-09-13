@@ -18,7 +18,7 @@ public final class OsmSegmentGraph {
     /** Endpoint coincidence tolerance for two parallel transit-track ways (metres). */
     private static final double PARALLEL_TRACK_TOLERANCE_METERS = 30.0;
     /** Intermediate-vertex coincidence tolerance used to confirm two tracks share a corridor. */
-    private static final double PARALLEL_TRACK_VERTEX_TOLERANCE_METERS = 15.0;
+    private static final double PARALLEL_TRACK_VERTEX_TOLERANCE_METERS = 30.0;
     /** Spatial bucket size for the parallel-track candidate scan (metres). */
     private static final double PARALLEL_TRACK_CELL_METERS = 30.0;
 
@@ -223,49 +223,64 @@ public final class OsmSegmentGraph {
                     quantize(b.getX()), quantize(b.getY())});
         }
 
-        // Bucket candidates by both endpoint cells so only near-endpoint ways are compared.
+        // Candidate prefilter: index EACH endpoint independently into its own cell, then a way's
+        // candidates are every way sharing a 3x3 cell neighborhood of either endpoint. The prefilter
+        // is conservative — it may admit false positives — but it must not create false negatives,
+        // so no shared offset is applied across the two endpoints.
         Map<String, List<String>> byCell = new TreeMap<>();
         for (var entry : endpointCells.entrySet()) {
-            for (String cell : cells(entry.getValue())) {
-                byCell.computeIfAbsent(cell, k -> new ArrayList<>()).add(entry.getKey());
-            }
+            long[] e = entry.getValue();
+            byCell.computeIfAbsent(cellKey(e[0], e[1]), k -> new ArrayList<>()).add(entry.getKey());
+            byCell.computeIfAbsent(cellKey(e[2], e[3]), k -> new ArrayList<>()).add(entry.getKey());
         }
 
         Set<String> duplicates = new TreeSet<>();
-        for (var entry : byCell.entrySet()) {
-            List<String> candidates = entry.getValue();
-            if (candidates.size() < 2) {
+        for (String first : new TreeSet<>(endpointCells.keySet())) {
+            if (duplicates.contains(first)) {
                 continue;
             }
-            for (int i = 0; i < candidates.size(); i++) {
-                String first = candidates.get(i);
-                if (duplicates.contains(first)) {
+            long[] a = endpointCells.get(first);
+            Set<String> candidates = new TreeSet<>();
+            for (int endpoint = 0; endpoint < 2; endpoint++) {
+                long cx = a[endpoint * 2];
+                long cy = a[endpoint * 2 + 1];
+                for (long dx = -1; dx <= 1; dx++) {
+                    for (long dy = -1; dy <= 1; dy++) {
+                        List<String> bucket = byCell.get(cellKey(cx + dx, cy + dy));
+                        if (bucket != null) {
+                            candidates.addAll(bucket);
+                        }
+                    }
+                }
+            }
+            for (String second : candidates) {
+                if (second.equals(first) || duplicates.contains(second)
+                        || first.compareTo(second) >= 0) {
+                    continue; // process each unordered pair once; keep the smaller id
+                }
+                if (!railType.get(first).equals(railType.get(second))) {
                     continue;
                 }
-                for (int j = i + 1; j < candidates.size(); j++) {
-                    String second = candidates.get(j);
-                    if (duplicates.contains(second) || first.equals(second)
-                            || !railType.get(first).equals(railType.get(second))) {
-                        continue;
-                    }
-                    if (parallel(endpointsMeters.get(first), endpointsMeters.get(second))
-                            && polylinesClose(polyline.get(first), polyline.get(second))) {
-                        // Keep the lexicographically smaller id; drop the other.
-                        duplicates.add(first.compareTo(second) < 0 ? second : first);
-                    }
+                if (parallel(endpointsMeters.get(first), endpointsMeters.get(second))
+                        && polylinesClose(polyline.get(first), polyline.get(second))) {
+                    duplicates.add(second);
                 }
             }
         }
         return duplicates;
     }
 
-    /** Endpoint coincidence in metres (straight or crossed orientation). */
+    /**
+     * Endpoint coincidence: <b>each</b> corresponding endpoint pair must be within
+     * {@code PARALLEL_TRACK_TOLERANCE_METERS} (straight or crossed orientation), matching the
+     * documented "both endpoints coincide" rule. This is deliberately not a combined error budget.
+     */
     private static boolean parallel(double[] a, double[] b) {
-        double straight = Math.hypot(a[0] - b[0], a[1] - b[1])
-                + Math.hypot(a[2] - b[2], a[3] - b[3]);
-        double crossed = Math.hypot(a[0] - b[2], a[1] - b[3])
-                + Math.hypot(a[2] - b[0], a[3] - b[1]);
-        return Math.min(straight, crossed) <= PARALLEL_TRACK_TOLERANCE_METERS;
+        boolean straight = Math.hypot(a[0] - b[0], a[1] - b[1]) <= PARALLEL_TRACK_TOLERANCE_METERS
+                && Math.hypot(a[2] - b[2], a[3] - b[3]) <= PARALLEL_TRACK_TOLERANCE_METERS;
+        boolean crossed = Math.hypot(a[0] - b[2], a[1] - b[3]) <= PARALLEL_TRACK_TOLERANCE_METERS
+                && Math.hypot(a[2] - b[0], a[3] - b[1]) <= PARALLEL_TRACK_TOLERANCE_METERS;
+        return straight || crossed;
     }
 
     /**
@@ -314,24 +329,8 @@ public final class OsmSegmentGraph {
         return Math.round(value / PARALLEL_TRACK_CELL_METERS);
     }
 
-    private static List<String> cells(long[] endpoint) {
-        // Bucket by a small neighborhood of endpoint cells so a pair straddling a cell boundary is
-        // still compared. Keyed on quantized (x,y) of both endpoints, orientation-insensitive.
-        List<String> cells = new ArrayList<>(4);
-        for (long dx = -1; dx <= 1; dx++) {
-            for (long dy = -1; dy <= 1; dy++) {
-                long ax = endpoint[0] + dx;
-                long ay = endpoint[1] + dy;
-                long bx = endpoint[2] + dx;
-                long by = endpoint[3] + dy;
-                long loX = Math.min(ax, bx);
-                long loY = Math.min(ay, by);
-                long hiX = Math.max(ax, bx);
-                long hiY = Math.max(ay, by);
-                cells.add(loX + ":" + loY + "|" + hiX + ":" + hiY);
-            }
-        }
-        return cells;
+    private static String cellKey(long x, long y) {
+        return x + ":" + y;
     }
 
     public Set<String> nodeIds() {
