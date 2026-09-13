@@ -232,10 +232,10 @@ class GtfsImporterTest {
     }
 
     /**
-     * Regression: a CRLF feed where a quoted (even empty) field appears on every row must NOT be
-     * treated as an unterminated quote that swallows the following line. Real feeds (e.g. the
-     * Luxembourg GTFS) quote an empty stop_headsign on every row; the old parity-by-count logic
-     * merged adjacent physical lines and corrupted the next field.
+     * A CRLF feed where a quoted (even empty) field appears on every row must not be treated as an
+     * unterminated quote that swallows the following line. Real feeds (e.g. the Luxembourg GTFS)
+     * quote an empty stop_headsign on every row; merging adjacent physical lines would corrupt the
+     * next field.
      */
     @Test
     void csvParserDoesNotMergeLinesWithClosedQuotedFields() throws IOException {

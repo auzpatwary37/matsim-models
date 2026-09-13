@@ -50,7 +50,7 @@ public final class OsmLaneHintExtractor {
             boolean forward = ref.forward();
 
             // A direction is "oneway" for lane-resolution purposes unless the way has a single
-            // decision granting BOTH directions (matching the resolver call the old extractor made).
+            // decision granting BOTH directions.
             boolean anyAllowed = false;
             boolean bidirectional = false;
             for (OsmModeAccessResolver.DirectionDecision decision

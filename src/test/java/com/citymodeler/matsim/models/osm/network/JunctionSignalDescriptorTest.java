@@ -212,9 +212,9 @@ final class JunctionSignalDescriptorTest {
     }
 
     /**
-     * Review #2: two signal corners joined only through a NON-signal internal node X. The cross-way
-     * contraction engine dissolves the degree-2 X into a single merged A->B internal link (that is
-     * its purpose), and the A-to-B cross-node movement must still be emitted through it.
+     * Two signal corners joined only through a NON-signal internal node X. The cross-way contraction
+     * engine dissolves the degree-2 X into a single merged A->B internal link, and the A-to-B
+     * cross-node movement must still be emitted through it.
      */
     @Test
     void viaInternalNodeClusterEmitsCrossNodeMovement() {

@@ -3,7 +3,7 @@
 **Status:** approved in brainstorming (2026-09-12). Independently derived from this repo's specs
 (`2026-09-08-gtfs-transit-mapping-clean-room-design.md`,
 `2026-09-10-signal-ready-network-clean-room-spec.md`) and OSM semantics. External networks are used
-only as black-box output for measurement (see `docs/pt2matsim-blackbox-comparison.md`); no external
+only as black-box output for measurement (see `docs/external-reference-comparison.md`); no external
 source, bytecode, or configuration is used to derive behavior.
 
 ## Problem
@@ -153,7 +153,7 @@ Derived from OSM semantics and our own spec:
 - Bus admission happens in access resolution, not as a post-hoc `car`→`bus` clone, so explicit OSM
   access tags always retain final authority.
 - Clean-room: no external source, bytecode, or configuration is read; external outputs are used only
-  as black-box measurements in `docs/pt2matsim-blackbox-comparison.md`.
+  as black-box measurements in `docs/external-reference-comparison.md`.
 
 ## Faithful import vs policy presets
 

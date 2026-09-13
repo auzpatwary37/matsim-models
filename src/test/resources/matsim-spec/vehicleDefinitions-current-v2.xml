@@ -4,7 +4,7 @@
   vehicleDefinitions v2.0 wire format. Authored by hand strictly from the
   published v2.0 schema (matsim-spec/vehicleDefinitions_v2.0.xsd) and the
   documented vehicle-type attribute conventions; it contains no MATSim or
-  Pt2MATSim code. Used to prove the reader ingests current-format input.
+  external-converter code. Used to prove the reader ingests current-format input.
 -->
 <vehicleDefinitions xmlns="http://www.matsim.org/files/dtd"
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

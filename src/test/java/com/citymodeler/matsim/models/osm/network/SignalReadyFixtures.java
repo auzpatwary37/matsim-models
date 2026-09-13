@@ -383,7 +383,7 @@ final class SignalReadyFixtures {
     /**
      * A single residential way whose {@code oneway=alternating} is importer-policy dynamic: the
      * importer treats it as bidirectional and records a {@code dynamic-oneway} warning on the
-     * materialized build. Used to prove the simplifier preserves importer-policy issues.
+     * materialized build, which the simplifier must preserve.
      */
     static OsmImportResult dynamicOnewayWay() {
         Map<String, OsmNodeRecord> nodes = new TreeMap<>();

@@ -1,12 +1,9 @@
 package com.citymodeler.matsim.models.mapping;
 
 /**
- * Weight vector for stop-candidate scoring factors.
- *
- * <p>Review #12: this record previously advertised factors that were silently ignored. The vector
- * now covers exactly the factors the scorer computes: distance, mode compatibility, and — since the
- * Phase-1 build emits road names on links (`osm:name`, `osm:sourceNames`) — name similarity between
- * the GTFS stop name and a candidate link's source road name(s).
+ * Weight vector for stop-candidate scoring factors. Covers exactly the factors the scorer computes:
+ * distance, mode compatibility, and name similarity between the GTFS stop name and a candidate
+ * link's source road name(s) (`osm:name`, `osm:sourceNames`).
  */
 public record CandidateScoreWeights(
         double distance,
