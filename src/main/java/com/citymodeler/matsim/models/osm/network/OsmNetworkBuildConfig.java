@@ -15,12 +15,15 @@ public final class OsmNetworkBuildConfig {
     private final boolean preserveCrossingNodes;
     private final boolean preserveBarrierNodes;
     private final boolean cleanupIsolatedComponents;
+    private final Set<String> excludedHighwayClasses;
+    private final Set<String> routableModes;
 
     private OsmNetworkBuildConfig(OsmGeometryMode geometryMode, boolean preserveTransitStopNodes,
                                    Set<String> explicitOsmNodeIdsToKeep, double sharpBendAngleDegrees,
                                    Map<String, OsmWayRule> rulesByKeyValue,
                                    boolean preserveCrossingNodes, boolean preserveBarrierNodes,
-                                   boolean cleanupIsolatedComponents) {
+                                   boolean cleanupIsolatedComponents, Set<String> excludedHighwayClasses,
+                                   Set<String> routableModes) {
         this.geometryMode = geometryMode;
         this.preserveTransitStopNodes = preserveTransitStopNodes;
         this.explicitOsmNodeIdsToKeep = Set.copyOf(explicitOsmNodeIdsToKeep);
@@ -29,22 +32,45 @@ public final class OsmNetworkBuildConfig {
         this.preserveCrossingNodes = preserveCrossingNodes;
         this.preserveBarrierNodes = preserveBarrierNodes;
         this.cleanupIsolatedComponents = cleanupIsolatedComponents;
+        this.excludedHighwayClasses = Set.copyOf(excludedHighwayClasses);
+        this.routableModes = Set.copyOf(routableModes);
     }
 
     public static OsmNetworkBuildConfig materializeGeometryConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
-                true, Set.of(), 35.0, defaultRules(), false, true, false);
+                true, Set.of(), 35.0, defaultRules(), false, true, false, Set.of(), defaultRoutableModes());
+    }
+
+    /** Materialize-geometry config that additionally enforces routable cleaning (bundle pipeline). */
+    public static OsmNetworkBuildConfig materializeGeometryConfigWithCleanup() {
+        return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes());
     }
 
     public static OsmNetworkBuildConfig defaultConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
-                true, Set.of(), 35.0, defaultRules(), false, true, false);
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes());
     }
 
     /** Default contraction config that additionally removes isolated non-transit components. */
     public static OsmNetworkBuildConfig defaultConfigWithCleanup() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
-                true, Set.of(), 35.0, defaultRules(), false, true, true);
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes());
+    }
+
+    /**
+     * Scope comparable to pt2MATSim's default OSM converter, which defines no {@code highway=service}
+     * default parameters and therefore drops service roads while keeping everything else. This is a
+     * comparison preset only; the project default still includes service ways.
+     */
+    public static OsmNetworkBuildConfig pt2matsimComparableConfig() {
+        return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of("service"),
+                defaultRoutableModes());
+    }
+
+    private static Set<String> defaultRoutableModes() {
+        return Set.of("car", "bus");
     }
 
     public OsmGeometryMode geometryMode() {
@@ -75,9 +101,22 @@ public final class OsmNetworkBuildConfig {
         return cleanupIsolatedComponents;
     }
 
+    /** Highway classes explicitly excluded from the network scope (empty = admit every rule). */
+    public Set<String> excludedHighwayClasses() {
+        return excludedHighwayClasses;
+    }
+
+    /** Modes for which the cleaner enforces strongly connected routability. */
+    public Set<String> routableModes() {
+        return routableModes;
+    }
+
     public OsmWayRule resolveRule(OsmTagSet tags) {
         String highway = tags.get("highway");
         if (highway != null) {
+            if (excludedHighwayClasses.contains(highway)) {
+                return null;
+            }
             OsmWayRule rule = rulesByKeyValue.get("highway:" + highway);
             if (rule != null) {
                 return rule;

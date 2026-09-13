@@ -80,7 +80,7 @@ public final class OsmGtfsBundleRunner {
     private final double clipMarginMeters;
 
     public OsmGtfsBundleRunner() {
-        this(OsmNetworkBuildConfig.materializeGeometryConfig(), OsmSimplifyOptions.defaults(), 0.0);
+        this(OsmNetworkBuildConfig.materializeGeometryConfigWithCleanup(), OsmSimplifyOptions.defaults(), 0.0);
     }
 
     public OsmGtfsBundleRunner(OsmNetworkBuildConfig networkConfig, OsmSimplifyOptions simplifyOptions) {

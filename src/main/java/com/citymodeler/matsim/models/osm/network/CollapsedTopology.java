@@ -15,5 +15,23 @@ public record CollapsedTopology(
         Map<String, OsmPolyline> geometry,
         Map<String, OsmNodeClassification> classification,
         Set<String> routingNodeIds,
-        List<OsmImportIssue> issues) {
+        List<OsmImportIssue> issues,
+        List<List<String>> quarantinedComponents) {
+
+    public CollapsedTopology {
+        quarantinedComponents = List.copyOf(
+                quarantinedComponents != null ? quarantinedComponents : List.of());
+    }
+
+    /** Back-compat constructor without an explicit quarantine list. */
+    public CollapsedTopology(Network network,
+                             Map<String, OsmCollapsedLink> collapsedLinksByLinkId,
+                             Map<String, List<String>> linkIdsByOsmWayId,
+                             Map<String, OsmPolyline> geometry,
+                             Map<String, OsmNodeClassification> classification,
+                             Set<String> routingNodeIds,
+                             List<OsmImportIssue> issues) {
+        this(network, collapsedLinksByLinkId, linkIdsByOsmWayId, geometry, classification,
+                routingNodeIds, issues, List.of());
+    }
 }

@@ -243,15 +243,19 @@ class OsmTopologyBuilderTest {
         return res(ns, ws);
     }
 
-    /** Cleanup is off by default, so the isolated non-transit stub must survive. */
+    /** Cleaning is on by default, so the isolated non-transit stub is removed and quarantined. */
     @Test
-    void cleanupDisabledByDefaultKeepsIsolatedNonTransitStub() {
+    void defaultConfigCleansIsolatedNonTransitStub() {
         CollapsedTopology t = OsmTopologyBuilder.build(cleanupFixture(),
                 OsmNetworkBuildConfig.defaultConfig(), false);
-        assertTrue(t.network().getNodes().containsKey(
-                com.citymodeler.matsim.models.api.Id.create("osm_node_X",
-                        com.citymodeler.matsim.models.network.Node.class)));
-        assertEquals(6 + 2 + 2, t.network().getLinks().size());
+        Set<String> nodeIds = t.network().getNodes().keySet().stream()
+                .map(Object::toString).collect(java.util.stream.Collectors.toSet());
+        assertFalse(nodeIds.contains("osm_node_X"), "non-transit stub node X must be removed");
+        assertFalse(nodeIds.contains("osm_node_Y"), "non-transit stub node Y must be removed");
+        // main junction (6 directed) + busway stub (2 directed); X-Y stub (2) removed.
+        assertEquals(8, t.network().getLinks().size());
+        assertFalse(t.quarantinedComponents().isEmpty(), "removed stub must be quarantined");
+        assertTrue(t.issues().stream().anyMatch(i -> "quarantined-component".equals(i.code())));
     }
 
     /**

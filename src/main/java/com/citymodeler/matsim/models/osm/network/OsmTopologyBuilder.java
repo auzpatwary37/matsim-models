@@ -198,15 +198,22 @@ public final class OsmTopologyBuilder {
         // routing set and classification never advertise a node the network cannot route through.
         reconcileIsolatedRoutingNodes(network, routing, classification, issues);
 
+        List<List<String>> quarantined = List.of();
         if (config.cleanupIsolatedComponents()) {
-            OsmNetworkCleaner.CleanResult cleaned = OsmNetworkCleaner.clean(network, true);
+            OsmNetworkCleaner.CleanResult cleaned =
+                    OsmNetworkCleaner.clean(network, config.routableModes(),
+                            linkId -> {
+                                OsmCollapsedLink collapsed = collapsedLinks.get(linkId);
+                                return collapsed == null ? List.of() : collapsed.sourceOsmWayIds();
+                            });
             issues.addAll(cleaned.issues());
+            quarantined = cleaned.quarantinedComponents();
             reconcileAfterCleanup(network, collapsedLinks, linkIdsByOsmWayId, geometry,
                     classification, routing);
         }
 
         return new CollapsedTopology(network, collapsedLinks, linkIdsByOsmWayId, geometry,
-                classification, new TreeSet<>(routing), issues);
+                classification, new TreeSet<>(routing), issues, quarantined);
     }
 
     /**

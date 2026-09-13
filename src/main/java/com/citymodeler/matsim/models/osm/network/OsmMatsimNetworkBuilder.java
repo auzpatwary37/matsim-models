@@ -47,7 +47,8 @@ public final class OsmMatsimNetworkBuilder {
                 : new OsmGeometryStore(collapsed.geometry());
 
         return new OsmNetworkBuildResult(network, issues, linkRefsByLinkId, linkIdsByOsmWayId,
-                stopHints, laneHints, intersectionHints, geometryStore);
+                stopHints, laneHints, intersectionHints, geometryStore,
+                null, null, collapsed.quarantinedComponents());
     }
 
     /**
