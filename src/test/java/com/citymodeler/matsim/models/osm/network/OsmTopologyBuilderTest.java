@@ -243,7 +243,7 @@ class OsmTopologyBuilderTest {
         return res(ns, ws);
     }
 
-    /** Cleaning is on by default, so the isolated non-transit stub is removed and quarantined. */
+    /** Cleaning is on by default, so isolated non-routable stubs are removed and quarantined. */
     @Test
     void defaultConfigCleansIsolatedNonTransitStub() {
         CollapsedTopology t = OsmTopologyBuilder.build(cleanupFixture(),
@@ -252,18 +252,19 @@ class OsmTopologyBuilderTest {
                 .map(Object::toString).collect(java.util.stream.Collectors.toSet());
         assertFalse(nodeIds.contains("osm_node_X"), "non-transit stub node X must be removed");
         assertFalse(nodeIds.contains("osm_node_Y"), "non-transit stub node Y must be removed");
-        // main junction (6 directed) + busway stub (2 directed); X-Y stub (2) removed.
-        assertEquals(8, t.network().getLinks().size());
-        assertFalse(t.quarantinedComponents().isEmpty(), "removed stub must be quarantined");
+        // Only the main junction survives (6 directed links); both isolated stubs are quarantined.
+        assertEquals(6, t.network().getLinks().size());
+        assertEquals(2, t.quarantinedComponents().size(), "both isolated stubs must be quarantined");
         assertTrue(t.issues().stream().anyMatch(i -> "quarantined-component".equals(i.code())));
     }
 
     /**
-     * With cleanup enabled the 2-direct-link non-transit X-Y stub is removed while the equally
-     * small busway P-Q stub survives because it carries transit modes.
+     * Since bus is added to all car roads, the bus routable network is the main car component; an
+     * isolated busway stub is a separate small bus component and is quarantined, matching pt2MATSim's
+     * per-mode largest-SCC cleaning. The X-Y car stub is likewise removed.
      */
     @Test
-    void cleanupEnabledRemovesNonTransitStubAndKeepsTransitStub() {
+    void cleanupQuarantinesIsolatedStubsIncludingIsolatedBusway() {
         CollapsedTopology t = OsmTopologyBuilder.build(cleanupFixture(),
                 OsmNetworkBuildConfig.defaultConfigWithCleanup(), false);
 
@@ -271,12 +272,11 @@ class OsmTopologyBuilderTest {
                 .map(Object::toString).collect(java.util.stream.Collectors.toSet());
         assertFalse(nodeIds.contains("osm_node_X"), "non-transit stub node X must be removed");
         assertFalse(nodeIds.contains("osm_node_Y"), "non-transit stub node Y must be removed");
-        assertTrue(nodeIds.contains("osm_node_P"), "transit stub node P must survive");
-        assertTrue(nodeIds.contains("osm_node_Q"), "transit stub node Q must survive");
+        assertFalse(nodeIds.contains("osm_node_P"), "isolated busway stub P must be quarantined");
+        assertFalse(nodeIds.contains("osm_node_Q"), "isolated busway stub Q must be quarantined");
         assertTrue(nodeIds.contains("osm_node_A"), "main component node A must survive");
         assertTrue(nodeIds.contains("osm_node_B"), "main component node B must survive");
-        // main junction (6 directed) + busway stub (2 directed); X-Y stub (2) removed.
-        assertEquals(8, t.network().getLinks().size());
+        assertEquals(6, t.network().getLinks().size());
     }
 
     /** Provenance maps must not retain removed links or nodes after cleanup. */

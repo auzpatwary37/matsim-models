@@ -69,34 +69,43 @@ final class OsmNetworkScopeTest {
     }
 
     /**
-     * The pt2MATSim parity preset caps contracted link length at 500 m: along a chain, the interior
-     * node where the accumulated length first exceeds the cap is retained, so the chain is split
-     * there (the emitted link may overshoot the cap by up to one atomic segment, as in pt2MATSim).
+     * Bus is added to car roads so transit mapping can route buses over the road network (matching
+     * pt2MATSim's {@code bus,car} labelling).
      */
     @Test
-    void parityPresetCapsContractedLinkLength() {
+    void busIsAddedToCarRoads() {
         Map<String, OsmNodeRecord> ns = new TreeMap<>();
         ns.put("A", n("A", 0));
-        ns.put("B", n("B", 400));
-        ns.put("C", n("C", 800));
-        ns.put("D", n("D", 1200));
+        ns.put("B", n("B", 100));
         Map<String, OsmWayRecord> ws = new TreeMap<>();
-        ws.put("10", new OsmWayRecord("10", List.of("A", "B", "C", "D"),
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B"),
                 OsmTagSet.of(Map.of("highway", "residential"))));
         OsmImportResult result = new OsmImportResult(ns, ws, new TreeMap<>(), List.of(),
                 OsmProvenance.defaultFor("f.osm", "EPSG:3857"));
 
-        // Default (no cap): one contracted link each direction between the endpoints.
-        CollapsedTopology uncapped = OsmTopologyBuilder.build(result,
-                OsmNetworkBuildConfig.defaultConfig(), false);
-        assertEquals(2, uncapped.network().getLinks().size());
+        var net = OsmTopologyBuilder.build(result, OsmNetworkBuildConfig.defaultConfig(), false).network();
+        var modes = net.getLinks().values().iterator().next().getAllowedModes();
+        assertTrue(modes.contains("car"));
+        assertTrue(modes.contains("bus"), "car roads must also allow bus, got " + modes);
+    }
 
-        // Parity preset (500 m cap): C is retained where A->B->C exceeds the cap -> 4 directed links.
-        CollapsedTopology capped = OsmTopologyBuilder.build(result,
-                OsmNetworkBuildConfig.pt2matsimComparableConfig(), false);
-        assertEquals(4, capped.network().getLinks().size());
-        assertTrue(capped.network().getNodes().containsKey(
-                com.citymodeler.matsim.models.api.Id.create("osm_node_C",
-                        com.citymodeler.matsim.models.network.Node.class)));
+    /** The 500 m cap must not split rail/tram links (it applies to car roads only). */
+    @Test
+    void lengthCapDoesNotSplitRail() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0));
+        ns.put("B", n("B", 400));
+        ns.put("C", n("C", 800));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B", "C"),
+                OsmTagSet.of(Map.of("railway", "rail"))));
+        OsmImportResult result = new OsmImportResult(ns, ws, new TreeMap<>(), List.of(),
+                OsmProvenance.defaultFor("f.osm", "EPSG:3857"));
+
+        var net = OsmTopologyBuilder.build(result,
+                OsmNetworkBuildConfig.pt2matsimComparableConfig(), false).network();
+        // No cap for rail: A and C retained only -> 2 directed links.
+        assertEquals(2, net.getLinks().size(),
+                "rail must not be split by the car length cap");
     }
 }

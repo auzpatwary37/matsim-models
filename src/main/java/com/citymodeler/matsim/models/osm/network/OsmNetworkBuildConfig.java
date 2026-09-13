@@ -18,13 +18,15 @@ public final class OsmNetworkBuildConfig {
     private final Set<String> excludedHighwayClasses;
     private final Set<String> routableModes;
     private final double maxContractedLinkLengthMeters;
+    private final boolean addBusToCarRoads;
 
     private OsmNetworkBuildConfig(OsmGeometryMode geometryMode, boolean preserveTransitStopNodes,
                                    Set<String> explicitOsmNodeIdsToKeep, double sharpBendAngleDegrees,
                                    Map<String, OsmWayRule> rulesByKeyValue,
                                    boolean preserveCrossingNodes, boolean preserveBarrierNodes,
                                    boolean cleanupIsolatedComponents, Set<String> excludedHighwayClasses,
-                                   Set<String> routableModes, double maxContractedLinkLengthMeters) {
+                                   Set<String> routableModes, double maxContractedLinkLengthMeters,
+                                   boolean addBusToCarRoads) {
         if (maxContractedLinkLengthMeters < 0) {
             throw new IllegalArgumentException("maxContractedLinkLengthMeters must be >= 0");
         }
@@ -39,40 +41,45 @@ public final class OsmNetworkBuildConfig {
         this.excludedHighwayClasses = Set.copyOf(excludedHighwayClasses);
         this.routableModes = Set.copyOf(routableModes);
         this.maxContractedLinkLengthMeters = maxContractedLinkLengthMeters;
+        this.addBusToCarRoads = addBusToCarRoads;
     }
 
     public static OsmNetworkBuildConfig materializeGeometryConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
-                true, Set.of(), 35.0, defaultRules(), false, true, false, Set.of(), defaultRoutableModes(), 0.0);
+                true, Set.of(), 35.0, defaultRules(), false, true, false, Set.of(), defaultRoutableModes(),
+                0.0, true);
     }
 
     /** Materialize-geometry config that additionally enforces routable cleaning (bundle pipeline). */
     public static OsmNetworkBuildConfig materializeGeometryConfigWithCleanup() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
-                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(), 0.0);
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(),
+                0.0, true);
     }
 
     public static OsmNetworkBuildConfig defaultConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
-                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(), 0.0);
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(),
+                0.0, true);
     }
 
     /** Default contraction config that additionally removes isolated non-transit components. */
     public static OsmNetworkBuildConfig defaultConfigWithCleanup() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
-                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(), 0.0);
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(),
+                0.0, true);
     }
 
     /**
-     * Scope comparable to pt2MATSim's default OSM converter: excludes {@code highway=service} (pt2MATSim
-     * defines no service default parameters) and caps contracted link length at 500 m (pt2MATSim's
-     * {@code maxLinkLength}), so degree-2 nodes are retained where dissolving them would exceed the cap.
-     * Comparison preset only; the project default still keeps service ways with no length cap.
+     * Scope comparable to pt2MATSim's default OSM converter: excludes {@code highway=service},
+     * admits buses on all car roads (pt2MATSim labels roads {@code bus,car}), and caps contracted
+     * road-link length at 500 m (pt2MATSim's {@code maxLinkLength}). The cap applies to car roads
+     * only, never to rail/tram, matching pt2MATSim's rail handling.
      */
     public static OsmNetworkBuildConfig pt2matsimComparableConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
                 true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of("service"),
-                defaultRoutableModes(), 500.0);
+                defaultRoutableModes(), 500.0, true);
     }
 
     private static Set<String> defaultRoutableModes() {
@@ -124,6 +131,14 @@ public final class OsmNetworkBuildConfig {
      */
     public double maxContractedLinkLengthMeters() {
         return maxContractedLinkLengthMeters;
+    }
+
+    /**
+     * When true, every link that allows {@code car} also allows {@code bus} (matching pt2MATSim's
+     * {@code bus,car} road labelling), so transit mapping can route buses over the road network.
+     */
+    public boolean addBusToCarRoads() {
+        return addBusToCarRoads;
     }
 
     public OsmWayRule resolveRule(OsmTagSet tags) {

@@ -107,7 +107,6 @@ public final class OsmTopologyBuilder {
         Set<String> routing = OsmRoutingNodeSelector.select(graph, classification, keepAllGeometryNodes);
         routing = enforceMaxLinkLength(graph, routing, config.maxContractedLinkLengthMeters());
         routing = anchorCycles(graph, routing);
-
         Map<String, OsmNodeRecord> nodeRecords = importResult.nodes();
         Map<String, OsmWayRecord> wayRecords = importResult.ways();
 
@@ -218,11 +217,14 @@ public final class OsmTopologyBuilder {
     }
 
     /**
-     * Retains additional routing nodes so that no contracted link exceeds {@code cap} metres,
+     * Retains additional routing nodes so that no contracted CAR link exceeds {@code cap} metres,
      * mirroring pt2MATSim's {@code maxLinkLength} policy: walk each maximal chain between existing
      * routing nodes and, where the distance since the last kept node would exceed the cap, promote
      * the node at which it exceeds to a routing node. A resulting link may overshoot the cap by at
      * most one atomic segment (as in pt2MATSim). A non-positive cap disables the policy.
+     *
+     * <p>The cap applies to car roads only: rail/tram tracks are not split by length (pt2MATSim does
+     * not length-cap rail, and applying the car cap to rail over-segments it).
      */
     private static Set<String> enforceMaxLinkLength(OsmSegmentGraph graph, Set<String> routingBase,
                                                     double cap) {
@@ -242,6 +244,7 @@ public final class OsmTopologyBuilder {
                 if (visited.contains(segmentKey(firstSeg, chainForward))) {
                     continue;
                 }
+                boolean carRoad = isCarRoad(firstSeg);
                 String cur = start;
                 OsmSegmentGraph.Segment seg = firstSeg;
                 double sinceLastKept = 0.0;
@@ -254,11 +257,13 @@ public final class OsmTopologyBuilder {
                     if (!visited.add(segmentKey(seg, traversedForward))) {
                         break;
                     }
-                    sinceLastKept += seg.length();
+                    if (carRoad) {
+                        sinceLastKept += seg.length();
+                    }
                     if (routingBase.contains(next)) {
                         break;
                     }
-                    if (sinceLastKept > cap) {
+                    if (carRoad && sinceLastKept > cap) {
                         promotions.add(next);
                         sinceLastKept = 0.0;
                     } else if (promotions.contains(next)) {
@@ -276,6 +281,11 @@ public final class OsmTopologyBuilder {
         Set<String> result = new TreeSet<>(routingBase);
         result.addAll(promotions);
         return result;
+    }
+
+    /** True when the segment permits cars (the road subnetwork the length cap applies to). */
+    private static boolean isCarRoad(OsmSegmentGraph.Segment seg) {
+        return seg.modes(true).contains("car") || seg.modes(false).contains("car");
     }
 
     /**
@@ -402,10 +412,14 @@ public final class OsmTopologyBuilder {
                             + "directed span " + linkId + " (already emitted)", null));
             return;
         }
+        Set<String> linkModes = new TreeSet<>(firstSegment.modes(traversalForward));
+        if (config.addBusToCarRoads() && linkModes.contains("car") && !linkModes.contains("bus")) {
+            linkModes.add("bus");
+        }
         Link link = network.createLink(linkId,
                 OsmGeneratedIds.nodeId(startOsm), OsmGeneratedIds.nodeId(endOsm),
                 length, capacity, firstSegment.speed(traversalForward), lanes,
-                firstSegment.modes(traversalForward));
+                linkModes);
 
         link.getAttributes().putAttribute("osm:wayId", firstWayId);
         if (!keepAllGeometryNodes) {
