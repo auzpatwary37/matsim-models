@@ -112,6 +112,53 @@ java -Xmx56g -cp "target/classes:$(cat /tmp/cp_topo.txt)" \
 #          /home/ashraf/git/matsim-compare/p2m_lux_full_service_network.xml (service kept)
 ```
 
+## Post-cleaning (routability + scope pass)
+
+The topology pipeline now (a) cleans each configured routable mode to its largest strongly connected
+component (default modes `car`, `bus`), quarantining rather than silently deleting disconnected
+fragments, and (b) persists full link provenance (geometry, source OSM ways/nodes, names). Both are
+described in `docs/superpowers/specs/2026-09-12-network-provenance-scope-cleaning-design.md`.
+
+Luxembourg, default scope, `lux.osm`:
+
+| | post-contraction | post-cleaning |
+|---|---|---|
+| nodes | 75,483 | 73,347 |
+| links | 164,063 | 161,016 |
+
+Cleaning removed 1,136 nodes / 3,047 links of disconnected fragments and one-way sinks. The car
+routable subgraph is now **one strongly connected component covering 100.00% of its nodes** (verified
+by an independent Kosaraju audit of the emitted `network.xml`); before this pass routability was not
+guaranteed. Removed components are reported as quarantine issues (never silently dropped).
+
+### Scope parity preset
+
+`OsmNetworkBuildConfig.pt2matsimComparableConfig()` excludes `highway=service` to match pt2MATSim's
+default OSM-converter scope (which defines no service default parameters). Re-measured Luxembourg:
+
+| network | ours nodes/links | pt2MATSim nodes/links |
+|---|---|---|
+| default scope, post-cleaning (service kept) | 73,347 / 161,016 | — (177,968 links when pt2M keeps service) |
+| parity preset (service excluded) | 39,464 / 86,091 | 49,549 / 105,125 |
+
+Two honest observations:
+
+- **Like-for-like (service kept) we are now within ~10%**: ours 161,016 vs pt2MATSim's service-kept
+  177,968 links. The remaining gap is the earlier motorway piece-count policy, not scope.
+- **The parity preset undershoots** pt2MATSim (86,091 vs 105,125) because our cleaner is stricter:
+  `service` ways are highly connective, so excluding them disconnects many non-service fragments,
+  which the SCC cleaner then removes. pt2MATSim keeps dead-ends/sources for modes outside its
+  configured routable subnetworks. This is a policy difference in dead-end aggressiveness, tunable via
+  `routableModes`, not an over/under-segmentation defect. The default project config keeps service.
+
+### Provenance now emitted per link
+
+Every contracted link carries `osm:geometry` (WKT LINESTRING), `osm:sourceWays`, `osm:sourceNodes`,
+`osm:name`, and `osm:sourceNames` (only when a merged link spans more than one distinct name). These
+round-trip through `NetworkXmlWriter`/`StreamingNetworkWriter` and `NetworkXmlReader`, so a merged
+link's full source polyline and OSM way/node lineage survive to disk. This fixes the earlier defect
+where a 269-segment, ~9.7 km merged link was attributed to a single 172 m source way.
+
 ## Unmapped schedule + vehicles (GTFS -> schedule; same feed, same sample day)
 
 | city | OURS facilities / lines / routes / departures / vehTypes / vehicles | PT2M facilities / lines / routes / departures / vehTypes / vehicles |

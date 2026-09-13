@@ -123,3 +123,28 @@ for `build()`/`simplify()`. The old `<3-link non-transit` behavior is removed.
   build a strongly-connected fixture or opt out via config with a documented reason.
 - Cleaning on by default is a deliberate output change; the default scope (service included) is NOT changed.
 - Clean-room: no pt2MATSim/MATSim source or bytecode; only published docs/config/black-box output.
+
+## Implementation notes (as built)
+
+- **Layer:** cleaning runs inside `OsmTopologyBuilder.buildCore`, gated by
+  `OsmNetworkBuildConfig.cleanupIsolatedComponents()` (default true for `defaultConfig()` /
+  `materializeGeometryConfigWithCleanup()`; false for the visualization-only `materializeGeometryConfig()`).
+  The `signal-ready` engine method is NOT forced to clean, so engine-level junction fixtures stay isolated
+  and testable; the product bundle runner uses `materializeGeometryConfigWithCleanup()`.
+- **SCC:** iterative Kosaraju over the induced node graph, one pass per `routableModes` entry
+  (default `{car, bus}`), link counts accumulated in a single pass (not O(components × links)).
+- **Exemption:** links whose id begins with `pt_` are exempt from zero-length and component removal.
+- **Measured (Luxembourg, `lux.osm`):** before cleaning 75,483 nodes / 164,063 links; after cleaning
+  73,347 nodes / 161,016 links. Car routable subgraph is one strongly connected component covering
+  100.00% of its nodes (was not guaranteed before). Removed components are quarantined with issues.
+
+## Known limitations (deferred)
+
+- Turn-restriction-aware cleaning (colored-subgraph expansion as pt2MATSim does) is deferred; the
+  cleaner operates on the plain directed graph, and a later validation drops restriction sequences
+  whose links no longer exist.
+- `OsmStopHintExtractor.findParentRelations` is O(n²)-ish on large inputs (pre-existing); the
+  Luxembourg run takes ~15 min and is dominated by it, not by cleaning.
+- pt2MATSim additionally retains ~1,151 transit-carrying `service` links; our parity preset does not
+  yet special-case transit on excluded classes.
+
