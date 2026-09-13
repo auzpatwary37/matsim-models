@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import com.citymodeler.matsim.models.facilities.ActivityFacilities;
@@ -17,6 +19,7 @@ import com.citymodeler.matsim.models.gtfs.GtfsImporter;
 import com.citymodeler.matsim.models.gtfs.GtfsTransitBuildResult;
 import com.citymodeler.matsim.models.gtfs.GtfsTransitScheduleBuilder;
 import com.citymodeler.matsim.models.io.FacilitiesXmlWriter;
+import com.citymodeler.matsim.models.io.LanesXmlWriter;
 import com.citymodeler.matsim.models.io.NetworkXmlWriter;
 import com.citymodeler.matsim.models.io.TransitScheduleXmlWriter;
 import com.citymodeler.matsim.models.io.VehiclesXmlWriter;
@@ -27,6 +30,8 @@ import com.citymodeler.matsim.models.mapping.TransitScheduleClipper;
 import com.citymodeler.matsim.models.network.index.LinkSpatialIndex;
 import com.citymodeler.matsim.models.osm.OsmImportConfig;
 import com.citymodeler.matsim.models.osm.OsmNetworkImporter;
+import com.citymodeler.matsim.models.osm.network.LaneDefinitionBuilder;
+import com.citymodeler.matsim.models.osm.network.OsmLinkRef;
 import com.citymodeler.matsim.models.osm.network.OsmMatsimNetworkBuilder;
 import com.citymodeler.matsim.models.osm.network.OsmNetworkBuildConfig;
 import com.citymodeler.matsim.models.osm.network.OsmNetworkBuildResult;
@@ -54,6 +59,7 @@ import com.citymodeler.matsim.models.vehicles.VehicleType;
  * <ul>
  *   <li>{@code network.xml} — stage 1 base network</li>
  *   <li>{@code facilities.xml} — OSM activity facilities</li>
+ *   <li>{@code laneDefinitions.xml} — stage 1 lane assignments (always emitted)</li>
  *   <li>{@code transitSchedule.xml} — stage 2 unmapped schedule (only with GTFS)</li>
  *   <li>{@code vehicleDefinitions.xml} — stage 2 vehicles (only with GTFS)</li>
  *   <li>{@code network-mapped.xml} — stage 3 mapped network (only with GTFS)</li>
@@ -68,6 +74,7 @@ public final class OsmGtfsBundleRunner {
 
     public static final String NETWORK_FILE = "network.xml";
     public static final String FACILITIES_FILE = "facilities.xml";
+    public static final String LANE_DEFINITIONS_FILE = "laneDefinitions.xml";
     public static final String TRANSIT_SCHEDULE_FILE = "transitSchedule.xml";
     public static final String VEHICLES_FILE = "vehicleDefinitions.xml";
     public static final String MAPPED_NETWORK_FILE = "network-mapped.xml";
@@ -99,12 +106,14 @@ public final class OsmGtfsBundleRunner {
             Path directory,
             Path networkFile,
             Path facilitiesFile,
+            Path lanesFile,
             Path transitScheduleFile,
             Path vehiclesFile,
             Path mappedNetworkFile,
             Path mappedScheduleFile,
             int baseNetworkNodes,
             int baseNetworkLinks,
+            int laneAssignments,
             int facilityCount,
             Integer transitLines,
             Integer transitRoutes,
@@ -144,6 +153,20 @@ public final class OsmGtfsBundleRunner {
         var baseNetwork = simplified.network();
         int baseNodes = baseNetwork.getNodes().size();
         int baseLinks = baseNetwork.getLinks().size();
+
+        Map<String, OsmLinkRef> refs = new LinkedHashMap<>();
+        for (var entry : simplified.collapsedLinksByLinkId().entrySet()) {
+            var source = entry.getValue().sourceSegments().get(0);
+            refs.put(entry.getKey(), new OsmLinkRef(
+                    entry.getKey(), source.osmWayId(), source.segmentIndex(), source.forward()));
+        }
+        var laneResult = new LaneDefinitionBuilder()
+                .build(baseNetwork, refs, importResult.ways(), simplified.geometryStore(), networkConfig);
+        warnings.addAll(laneResult.issues().stream()
+                .map(com.citymodeler.matsim.models.osm.OsmImportIssue::message).toList());
+        Path lanesFile = outputDirectory.resolve(LANE_DEFINITIONS_FILE);
+        new LanesXmlWriter().write(laneResult.lanes(), lanesFile);
+        int laneAssignments = laneResult.lanes().getLanesToLinkAssignments().size();
 
         // ---- OSM -> activity facilities --------------------------------------------------
         OsmFacilityConfig facilityConfig = OsmFacilityConfig.defaults(TARGET_CRS);
@@ -221,10 +244,10 @@ public final class OsmGtfsBundleRunner {
             mappedLinks = mapping.mappedNetwork().getLinks().size();
         }
 
-        return new BundleResult(outputDirectory, networkFile, facilitiesFile, transitScheduleFile,
-                vehiclesFile, mappedNetworkFile, mappedScheduleFile, baseNodes, baseLinks,
-                facilities.getFacilities().size(), lines, routes, departures, vehicleTypes, vehicles,
-                mappedNodes, mappedLinks, List.copyOf(warnings));
+        return new BundleResult(outputDirectory, networkFile, facilitiesFile, lanesFile,
+                transitScheduleFile, vehiclesFile, mappedNetworkFile, mappedScheduleFile, baseNodes,
+                baseLinks, laneAssignments, facilities.getFacilities().size(), lines, routes,
+                departures, vehicleTypes, vehicles, mappedNodes, mappedLinks, List.copyOf(warnings));
     }
 
     /**
@@ -266,10 +289,10 @@ public final class OsmGtfsBundleRunner {
         Path gtfs = "none".equalsIgnoreCase(args[1]) ? null : Path.of(args[1]);
         Path out = Path.of(args[2]);
         BundleResult r = new OsmGtfsBundleRunner().run(osm, gtfs, null, out);
-        System.err.printf("bundle: base nodes=%d links=%d | facilities=%d | lines=%s routes=%s "
+        System.err.printf("bundle: base nodes=%d links=%d lanes=%d | facilities=%d | lines=%s routes=%s "
                         + "departures=%s vehicleTypes=%s vehicles=%s | mapped nodes=%s links=%s%n",
-                r.baseNetworkNodes(), r.baseNetworkLinks(), r.facilityCount(), r.transitLines(),
-                r.transitRoutes(), r.departures(), r.vehicleTypes(), r.vehicles(),
+                r.baseNetworkNodes(), r.baseNetworkLinks(), r.laneAssignments(), r.facilityCount(),
+                r.transitLines(), r.transitRoutes(), r.departures(), r.vehicleTypes(), r.vehicles(),
                 r.mappedNetworkNodes(), r.mappedNetworkLinks());
     }
 }
