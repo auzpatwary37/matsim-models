@@ -353,4 +353,25 @@ final class OsmNetworkEdgeCasesTest {
         assertTrue(link.getAllowedModes().contains("bus"));
         assertFalse(link.getAllowedModes().contains("car"));
     }
+
+    /**
+     * A more specific directional override must beat a general directional restriction, exactly as in
+     * the non-directional hierarchy: access:forward=no + bus:forward=yes keeps bus going forward.
+     */
+    @Test
+    void directionalSpecificOverrideBeatsGeneralDirectionalRestriction() throws Exception {
+        OsmNetworkBuildResult r = build("""
+                <?xml version="1.0"?><osm version="0.6">
+                <node id="1" lat="0.0" lon="0.0"/>
+                <node id="2" lat="0.0" lon="0.001"/>
+                <way id="10"><nd ref="1"/><nd ref="2"/>
+                  <tag k="highway" v="residential"/>
+                  <tag k="motor_vehicle:forward" v="no"/><tag k="bus:forward" v="yes"/>
+                </way></osm>""");
+        Link forward = r.cleanedNetwork().getLinks().get(
+                com.citymodeler.matsim.models.api.Id.create("osm_way_10_0_f", Link.class));
+        assertNotNull(forward, "bus:forward=yes is more specific than motor_vehicle:forward=no");
+        assertTrue(forward.getAllowedModes().contains("bus"));
+        assertFalse(forward.getAllowedModes().contains("car"));
+    }
 }

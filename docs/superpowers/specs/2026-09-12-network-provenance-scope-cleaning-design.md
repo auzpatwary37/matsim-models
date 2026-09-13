@@ -177,9 +177,15 @@ This is derived from the OSM wiki and geometry only.
 
 ## Known limitations (deferred)
 
+- **Via-way turn restrictions are preserved but NOT enforced.** A restriction whose `via` is a way
+  (rather than a node) has all of its via nodes retained, so the geometry and topology are intact, but
+  the routing layer does not yet enforce the multi-link ban. The count is surfaced as
+  `SignalReadinessReport.unimplementedViaWayRestrictions` and reported in the summary, so callers must
+  not treat turn-restriction enforcement as complete. This is a known routing limitation, not a
+  faithful-import defect.
 - Turn-restriction-aware cleaning (colored-subgraph expansion) is deferred; the cleaner operates on
   the plain directed graph, and a later validation drops restriction sequences whose links no longer
   exist.
 - `OsmStopHintExtractor.findParentRelations` is O(n²)-ish on large inputs (pre-existing).
-- Multi-city (Toronto/Seattle/Melbourne) comparison inputs are not currently available; all current
-  measurements are Luxembourg-only.
+- Toronto/Seattle/Melbourne reference artifacts are generated on demand with pt2MATSim (black box) but
+  are not checked in; current continuous measurements are Luxembourg-only.

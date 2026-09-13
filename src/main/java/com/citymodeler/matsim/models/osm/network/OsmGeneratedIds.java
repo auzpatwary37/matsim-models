@@ -1,5 +1,8 @@
 package com.citymodeler.matsim.models.osm.network;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 public record OsmGeneratedIds(String wayId, int segmentIndex, boolean forward) {
@@ -20,19 +23,33 @@ public record OsmGeneratedIds(String wayId, int segmentIndex, boolean forward) {
      * Collision-safe id for a merged link. {@link #simplifiedLinkId} is canonical only by first source
      * way + endpoints, so two genuinely distinct chains can share a base id (e.g. a way that doubles
      * back produces two different arcs between the same endpoints). Rather than dropping one physical
-     * span, disambiguate with a stable hash of the ordered node sequence in canonical order, so both
-     * travel directions of one chain derive the same id and distinct chains never collide.
+     * span, disambiguate with a strong digest of the ordered node sequence in canonical order, so both
+     * travel directions of one chain derive the same id.
+     *
+     * <p>The digest is a full 256-bit SHA-256, not a 32-bit hash; the caller additionally guarantees
+     * that a collision can never discard topology by uniquifying with an occurrence counter.
      */
     public static String uniqueSimplifiedLinkId(String baseId, List<String> canonicalNodeIds) {
         return baseId + "_c" + chainDiscriminator(canonicalNodeIds);
     }
 
-    /** Stable 32-bit hex digest of an ordered node-id sequence. */
+    /** Deterministic SHA-256 hex digest of an ordered node-id sequence. */
     static String chainDiscriminator(List<String> canonicalNodeIds) {
-        long hash = 1125899906842597L;
-        for (String nodeId : canonicalNodeIds) {
-            hash = 31 * hash + nodeId.hashCode();
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            StringBuilder sb = new StringBuilder();
+            for (String nodeId : canonicalNodeIds) {
+                sb.append(nodeId).append('\u0000');
+            }
+            byte[] bytes = digest.digest(sb.toString().getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(bytes.length * 2);
+            for (byte b : bytes) {
+                hex.append(Character.forDigit((b >> 4) & 0xF, 16));
+                hex.append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
         }
-        return Integer.toHexString((int) hash);
     }
 }

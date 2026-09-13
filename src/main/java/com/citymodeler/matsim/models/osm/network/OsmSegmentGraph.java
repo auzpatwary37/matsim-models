@@ -187,7 +187,8 @@ public final class OsmSegmentGraph {
                                                          OsmNetworkBuildConfig config) {
         Map<String, List<Coord>> polyline = new TreeMap<>();
         Map<String, String> railType = new TreeMap<>();
-        Map<String, long[]> endpoints = new TreeMap<>();
+        Map<String, double[]> endpointsMeters = new TreeMap<>();
+        Map<String, long[]> endpointCells = new TreeMap<>();
         for (OsmWayRecord way : importResult.ways().values()) {
             String railway = way.tags().get("railway");
             if (railway == null || config.resolveRule(way.tags()) == null) {
@@ -214,14 +215,17 @@ public final class OsmSegmentGraph {
             railType.put(way.id(), railway);
             Coord a = pts.get(0);
             Coord b = pts.get(pts.size() - 1);
-            endpoints.put(way.id(), new long[] {
+            // Metres are used for the actual tolerance test; quantized cells only bucket candidates.
+            endpointsMeters.put(way.id(), new double[] {
+                    a.getX(), a.getY(), b.getX(), b.getY()});
+            endpointCells.put(way.id(), new long[] {
                     quantize(a.getX()), quantize(a.getY()),
                     quantize(b.getX()), quantize(b.getY())});
         }
 
         // Bucket candidates by both endpoint cells so only near-endpoint ways are compared.
         Map<String, List<String>> byCell = new TreeMap<>();
-        for (var entry : endpoints.entrySet()) {
+        for (var entry : endpointCells.entrySet()) {
             for (String cell : cells(entry.getValue())) {
                 byCell.computeIfAbsent(cell, k -> new ArrayList<>()).add(entry.getKey());
             }
@@ -244,7 +248,7 @@ public final class OsmSegmentGraph {
                             || !railType.get(first).equals(railType.get(second))) {
                         continue;
                     }
-                    if (parallel(endpoints.get(first), endpoints.get(second))
+                    if (parallel(endpointsMeters.get(first), endpointsMeters.get(second))
                             && polylinesClose(polyline.get(first), polyline.get(second))) {
                         // Keep the lexicographically smaller id; drop the other.
                         duplicates.add(first.compareTo(second) < 0 ? second : first);
@@ -255,7 +259,8 @@ public final class OsmSegmentGraph {
         return duplicates;
     }
 
-    private static boolean parallel(long[] a, long[] b) {
+    /** Endpoint coincidence in metres (straight or crossed orientation). */
+    private static boolean parallel(double[] a, double[] b) {
         double straight = Math.hypot(a[0] - b[0], a[1] - b[1])
                 + Math.hypot(a[2] - b[2], a[3] - b[3]);
         double crossed = Math.hypot(a[0] - b[2], a[1] - b[3])

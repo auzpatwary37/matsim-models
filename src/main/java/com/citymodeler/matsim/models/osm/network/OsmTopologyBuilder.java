@@ -422,6 +422,8 @@ public final class OsmTopologyBuilder {
             linkId = OsmGeneratedIds.linkId(firstSegment.wayId(), firstSegment.segmentIndex(),
                     traversalForward);
         } else {
+            // A repeated travel-ordered node sequence from the same way is a genuine re-traversal of
+            // one directed span: collapse it. This is the ONLY case that may drop a span.
             String existing = spanSignatures.get(spanSignature);
             if (existing != null) {
                 issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, "degenerate-span",
@@ -435,14 +437,15 @@ public final class OsmTopologyBuilder {
             linkId = network.getLinks().containsKey(Id.create(baseId, Link.class))
                     ? OsmGeneratedIds.uniqueSimplifiedLinkId(baseId, canonicalNodes)
                     : baseId;
+            // A distinct chain is NEVER discarded: if even the strong digest somehow collides, add a
+            // deterministic occurrence suffix until the id is free.
+            int occurrence = 1;
+            while (network.getLinks().containsKey(Id.create(linkId, Link.class))) {
+                linkId = OsmGeneratedIds.uniqueSimplifiedLinkId(baseId, canonicalNodes)
+                        + "_" + occurrence;
+                occurrence++;
+            }
             spanSignatures.put(spanSignature, linkId);
-        }
-        if (network.getLinks().containsKey(Id.create(linkId, Link.class))) {
-            // Defensive: the disambiguated id must be unique; if not, do not silently overwrite.
-            issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, "degenerate-span",
-                    "Way " + firstWayId + " produced an already-emitted link id " + linkId
-                            + "; skipping duplicate directed link", null));
-            return;
         }
         // Bus admissibility is resolved with the segment's modes (see OsmModeAccessResolver
         // .candidateModes), so explicit OSM access tags have already had final authority. Do NOT

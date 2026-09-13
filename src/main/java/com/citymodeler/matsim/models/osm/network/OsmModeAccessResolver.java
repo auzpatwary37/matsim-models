@@ -189,11 +189,11 @@ public final class OsmModeAccessResolver {
     }
 
     private Set<String> filterByDirectionalAccess(com.citymodeler.matsim.models.osm.OsmTagSet tags, Set<String> baseModes, String direction) {
-        if (stateOf(tags.get("access:" + direction)) == AccessState.FORBIDDEN) {
-            return Set.of();
-        }
         Set<String> result = new LinkedHashSet<>(baseModes);
         for (String mode : baseModes) {
+            // Resolve each mode exclusively through the specificity ladder so a more specific
+            // directional override (e.g. access:forward=no + bus:forward=yes) wins, exactly as in the
+            // non-directional resolveAccessState(). No global short-circuit.
             if (resolveDirectionalState(tags, mode, direction) == AccessState.FORBIDDEN) {
                 result.remove(mode);
             }
