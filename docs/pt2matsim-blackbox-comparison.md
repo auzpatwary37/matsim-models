@@ -141,10 +141,17 @@ dissolving it would produce a longer link.
 | network | ours nodes/links | pt2MATSim nodes/links |
 |---|---|---|
 | default scope, post-cleaning (service kept) | 73,347 / 161,016 | — (177,968 links when pt2M keeps service) |
-| parity preset (service excluded, 500 m cap) | **51,402 / 109,220** | **49,549 / 105,125** |
+| parity preset (service excluded, 500 m car cap, bus on roads) | **49,981 / 105,592** | **49,549 / 105,125** |
 
-The parity preset now matches pt2MATSim to **+3.9%** on links (was −18% before the cap). The car
-routable subgraph is **one strongly connected component (100.0% of its nodes)** in both networks.
+The parity preset now matches pt2MATSim to **+0.9% nodes / +0.4% links** (was −18% before the cap). The
+car routable subgraph is **one strongly connected component (100.0% of its nodes)** in both networks.
+Direction defaults match empirically: rail **2.01** directed/physical (bidirectional) and tram **1.00**
+(oneway), against pt2MATSim's **2.00** and **1.00**.
+
+Remaining per-class delta is policy, not connectivity: `service` −1,151 (pt2MATSim keeps
+transit-carrying service via `keepWaysWithPublicTransit`, which we exclude entirely), `(rail/other)`
+−1,162 (pt2MATSim keeps `platform`/`narrow_gauge`/`abandoned` links we drop), and a few hundred
+cap-boundary links in `residential`/`secondary`/`tertiary`.
 
 **How the gap was diagnosed.** A spatial difference map (links rasterized to 50 m cells, proximity
 join) showed the earlier deficit was *not* a missing region — it was scattered short fragments — and an
@@ -168,8 +175,10 @@ now adds `bus` to every car road (`addBusToCarRoads`) so the bus routable subnet
 network too, matching pt2MATSim.
 
 The 500 m length cap applies to **car roads only**, never to rail/tram (pt2MATSim does not length-cap
-rail; applying the car cap to rail over-segments it). Turn restrictions now cover every mode the
-originating link permits (so `car,bus` roads restrict both) minus `except=` exceptions.
+rail; applying the car cap to rail over-segments it). Direction defaults are matched empirically from
+pt2MATSim's output: **rail is bidirectional** (9,356 directed / 4,667 physical spans = 2.00) and
+**tram is oneway** (640 / 640 = 1.00). Turn restrictions cover every mode the originating link permits
+(so `car,bus` roads restrict both) minus `except=` exceptions.
 
 ### Road-name provenance for stop mapping
 
