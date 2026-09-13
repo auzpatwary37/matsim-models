@@ -19,12 +19,21 @@ import com.citymodeler.matsim.models.osm.model.OsmWayRecord;
  * total to {@code round(T / 2)}), so the emitted link never carries a fractional {@code permlanes}.
  * The result is directional: for a bidirectional way the two directions can differ (e.g.
  * {@code lanes:forward=1} / {@code lanes:backward=2}).</p>
+ *
+ * <p>{@link #resolveCount} exposes the full {@link OsmLaneCount} (confidence, issues, provenance) so
+ * the network build can surface the same diagnostics as {@code laneDefinitions.xml};
+ * {@link #resolve} is the count-only convenience used where only the number is needed.</p>
  */
 public final class OsmLaneResolver {
 
     private final OsmDirectionalLaneResolver delegate = new OsmDirectionalLaneResolver();
 
+    /** Full resolved count with provenance/diagnostics for the given travel direction. */
+    public OsmLaneCount resolveCount(OsmWayRecord way, OsmWayRule rule, boolean forward, boolean oneway) {
+        return delegate.resolve(way.tags(), forward, oneway, rule.lanesPerDirection());
+    }
+
     public double resolve(OsmWayRecord way, OsmWayRule rule, boolean forward, boolean oneway) {
-        return delegate.resolve(way.tags(), forward, oneway, rule.lanesPerDirection()).lanes();
+        return resolveCount(way, rule, forward, oneway).lanes();
     }
 }

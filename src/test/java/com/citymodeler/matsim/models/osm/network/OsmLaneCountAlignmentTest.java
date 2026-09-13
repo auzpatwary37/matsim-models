@@ -42,7 +42,7 @@ final class OsmLaneCountAlignmentTest {
                 OsmProvenance.defaultFor("f.osm", "EPSG:3857"));
     }
 
-    private static double forwardPermlanes(OsmImportResult r, double ruleLanesForAbsent) {
+    private static double forwardPermlanes(OsmImportResult r) {
         Network net = OsmTopologyBuilder.build(r, OsmNetworkBuildConfig.materializeGeometryConfig(), false)
                 .network();
         Link link = net.getLinks().get(Id.createLinkId("sim_10_f_A_B"));
@@ -60,7 +60,7 @@ final class OsmLaneCountAlignmentTest {
         // resolver flags it and falls back to the total split (2 -> 1 per direction).
         OsmImportResult r = way(Map.of("highway", "residential", "lanes", "2",
                 "lanes:forward", "3", "lanes:backward", "1"));
-        double networkLanes = forwardPermlanes(r, 1.0);
+        double networkLanes = forwardPermlanes(r);
         OsmLaneCount expected = resolver().resolve(
                 r.ways().get("10").tags(), true, false, 1.0);
         assertTrue(expected.issueCodes().contains("inconsistent-lane-tags"));
@@ -69,11 +69,35 @@ final class OsmLaneCountAlignmentTest {
     }
 
     @Test
+    void networkBuildSurfacesLaneTagDiagnostics() {
+        // The base-network path must not silently drop the resolver's diagnostics: contradictory tags
+        // surface `inconsistent-lane-tags`, odd totals surface `undetermined-lane-split`, matching
+        // what laneDefinitions.xml reports.
+        var inconsistent = OsmTopologyBuilder.build(
+                way(Map.of("highway", "residential", "lanes", "2",
+                        "lanes:forward", "3", "lanes:backward", "1")),
+                OsmNetworkBuildConfig.materializeGeometryConfig(), false);
+        assertTrue(hasIssue(inconsistent.issues(), "inconsistent-lane-tags"),
+                "network build must surface inconsistent-lane-tags");
+
+        var oddTotal = OsmTopologyBuilder.build(
+                way(Map.of("highway", "primary", "lanes", "3")),
+                OsmNetworkBuildConfig.materializeGeometryConfig(), false);
+        assertTrue(hasIssue(oddTotal.issues(), "undetermined-lane-split"),
+                "network build must surface undetermined-lane-split for an odd total");
+    }
+
+    private static boolean hasIssue(java.util.List<com.citymodeler.matsim.models.osm.OsmImportIssue> issues,
+                                    String code) {
+        return issues.stream().anyMatch(i -> code.equals(i.code()));
+    }
+
+    @Test
     void oddBidirectionalTotalIsIntegralInNetworkLanes() {
         // lanes=3 (odd): the network must not emit a fractional 1.5 permlanes; the shared resolver
         // rounds to 2 with an undetermined-split flag, matching laneDefinitions.
         OsmImportResult r = way(Map.of("highway", "primary", "lanes", "3"));
-        double networkLanes = forwardPermlanes(r, 2.0);
+        double networkLanes = forwardPermlanes(r);
         OsmLaneCount expected = resolver().resolve(r.ways().get("10").tags(), true, false, 2.0);
         assertEquals(expected.lanes(), networkLanes, 1e-9);
         assertEquals(2.0, networkLanes, 1e-9);
@@ -85,7 +109,7 @@ final class OsmLaneCountAlignmentTest {
     void consistentDirectionalTagsMatchBetweenNetworkAndResolver() {
         OsmImportResult r = way(Map.of("highway", "residential", "lanes", "4",
                 "lanes:forward", "3", "lanes:backward", "1"));
-        double networkFwd = forwardPermlanes(r, 1.0);
+        double networkFwd = forwardPermlanes(r);
         assertEquals(3.0, networkFwd, 1e-9);
         assertEquals(3, resolver().resolve(r.ways().get("10").tags(), true, false, 1.0).lanes());
     }
@@ -94,7 +118,7 @@ final class OsmLaneCountAlignmentTest {
     void bothWaysIsNotDuplicatedIntoNetworkLanes() {
         // lanes=5, both_ways=1 -> directional total 4 -> 2 per direction; both_ways is provenance only.
         OsmImportResult r = way(Map.of("highway", "primary", "lanes", "5", "lanes:both_ways", "1"));
-        double networkLanes = forwardPermlanes(r, 2.0);
+        double networkLanes = forwardPermlanes(r);
         assertEquals(2.0, networkLanes, 1e-9);
         assertEquals(2, resolver().resolve(r.ways().get("10").tags(), true, false, 2.0).lanes());
     }
@@ -103,9 +127,9 @@ final class OsmLaneCountAlignmentTest {
     void absentLaneTagsUseRuleDefaultInNetwork() {
         // No lane tags: the network uses the rule's lanesPerDirection (residential -> 1).
         OsmImportResult r = way(Map.of("highway", "residential"));
-        assertEquals(1.0, forwardPermlanes(r, 1.0), 1e-9);
+        assertEquals(1.0, forwardPermlanes(r), 1e-9);
         // motorway rule default is 3.
         OsmImportResult m = way(Map.of("highway", "motorway"));
-        assertEquals(3.0, forwardPermlanes(m, 3.0), 1e-9);
+        assertEquals(3.0, forwardPermlanes(m), 1e-9);
     }
 }

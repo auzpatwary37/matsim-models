@@ -64,12 +64,17 @@ rule-default one-way such as `motorway`) is treated one-way when generating `lan
 
 **The lane-count hierarchy is shared with the network.** The base network's per-direction count
 (`network.xml` `permlanes` and `link.capacity = permlanes × capacityPerLane`) is produced by the
-SAME `OsmDirectionalLaneResolver` used for `laneDefinitions.xml`, via the thin `OsmLaneResolver` adapter. The network therefore also: validates the whole tag set against `lanes=*`
-(contradictory directional tags fall back to the total-derived split rather than inflating
-`permlanes`), never duplicates `lanes:both_ways`, uses `rule.lanesPerDirection()` when tags are
-absent, and emits an **integral** count (an odd bidirectional total rounds to `round(T / 2)` with the
-`undetermined-split` flag, never a fractional `permlanes`). The two artifacts cannot disagree on lane
-count.
+SAME `OsmDirectionalLaneResolver` used for `laneDefinitions.xml`, via the thin `OsmLaneResolver`
+adapter. The network therefore also: validates the whole tag set against `lanes=*` (contradictory
+directional tags fall back to the total-derived split rather than inflating `permlanes`), never
+duplicates `lanes:both_ways`, uses `rule.lanesPerDirection()` when tags are absent, and emits an
+**integral** count (an odd bidirectional total rounds to `round(T / 2)` with the `undetermined-split`
+flag, never a fractional `permlanes`). The two artifacts cannot disagree on lane count.
+
+The network build also **surfaces the resolver's diagnostics**: `OsmSegmentGraph` collects each way's
+lane `issueCodes()` (`inconsistent-lane-tags`, `undetermined-lane-split`, `malformed-lane-count`) and
+adds them to the build's `OsmImportIssue` list, so `network.xml` output carries the same lane
+diagnostics as `laneDefinitions.xml` (one warning per way, deduplicated by code).
 
 1. **Validate the whole tag set first** (only when `lanes=*` is present; this applies to **both
    bidirectional and one-way** ways — the one-way variant is stated in step 2). For a bidirectional
