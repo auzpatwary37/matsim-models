@@ -3,6 +3,7 @@ package com.citymodeler.matsim.models.osm.network;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -261,5 +262,116 @@ final class OsmNetworkEdgeCasesTest {
                   <tag k="highway" v="residential"/>
                 </way></osm>""");
         assertEquals(2, r.cleanedNetwork().getNodes().size());
+    }
+
+    /**
+     * addBusToCarRoads supplies bus as a default candidate, but explicit OSM access tags have final
+     * authority: bus=no on a car road must not gain bus. Same for the psv umbrella tag.
+     */
+    @Test
+    void busNoAndPsvNoOnCarRoadKeepBusOut() throws Exception {
+        OsmNetworkBuildResult busNo = build("""
+                <?xml version="1.0"?><osm version="0.6">
+                <node id="1" lat="0.0" lon="0.0"/>
+                <node id="2" lat="0.0" lon="0.001"/>
+                <way id="10"><nd ref="1"/><nd ref="2"/>
+                  <tag k="highway" v="residential"/><tag k="bus" v="no"/>
+                </way></osm>""");
+        Link a = busNo.cleanedNetwork().getLinks().get(
+                com.citymodeler.matsim.models.api.Id.create("osm_way_10_0_f", Link.class));
+        assertNotNull(a);
+        assertTrue(a.getAllowedModes().contains("car"));
+        assertFalse(a.getAllowedModes().contains("bus"), "bus=no must win over addBusToCarRoads");
+
+        OsmNetworkBuildResult psvNo = build("""
+                <?xml version="1.0"?><osm version="0.6">
+                <node id="1" lat="0.0" lon="0.0"/>
+                <node id="2" lat="0.0" lon="0.001"/>
+                <way id="10"><nd ref="1"/><nd ref="2"/>
+                  <tag k="highway" v="residential"/><tag k="psv" v="no"/>
+                </way></osm>""");
+        Link b = psvNo.cleanedNetwork().getLinks().get(
+                com.citymodeler.matsim.models.api.Id.create("osm_way_10_0_f", Link.class));
+        assertNotNull(b);
+        assertFalse(b.getAllowedModes().contains("bus"), "psv=no must win over addBusToCarRoads");
+    }
+
+    /**
+     * The inverse case a post-hoc car->bus clone could not model: a road illegal for cars but explicitly
+     * legal for buses must keep bus. motor_vehicle=no forbids cars (and normally buses), but bus=yes is
+     * more specific and restores bus.
+     */
+    @Test
+    void motorVehicleNoWithBusYesKeepsBusOnly() throws Exception {
+        OsmNetworkBuildResult r = build("""
+                <?xml version="1.0"?><osm version="0.6">
+                <node id="1" lat="0.0" lon="0.0"/>
+                <node id="2" lat="0.0" lon="0.001"/>
+                <way id="10"><nd ref="1"/><nd ref="2"/>
+                  <tag k="highway" v="residential"/>
+                  <tag k="motor_vehicle" v="no"/><tag k="bus" v="yes"/>
+                </way></osm>""");
+        Link link = r.cleanedNetwork().getLinks().get(
+                com.citymodeler.matsim.models.api.Id.create("osm_way_10_0_f", Link.class));
+        assertNotNull(link, "bus=yes is more specific than motor_vehicle=no, so a bus link survives");
+        assertTrue(link.getAllowedModes().contains("bus"));
+        assertFalse(link.getAllowedModes().contains("car"));
+    }
+
+    /** Directional motor-vehicle restriction applies to buses too (a bus is a motor vehicle). */
+    @Test
+    void motorVehicleDirectionalNoRemovesBusAndCar() throws Exception {
+        OsmNetworkBuildResult r = build("""
+                <?xml version="1.0"?><osm version="0.6">
+                <node id="1" lat="0.0" lon="0.0"/>
+                <node id="2" lat="0.0" lon="0.001"/>
+                <way id="10"><nd ref="1"/><nd ref="2"/>
+                  <tag k="highway" v="residential"/><tag k="motor_vehicle:forward" v="no"/>
+                </way></osm>""");
+        assertNull(r.cleanedNetwork().getLinks().get(
+                com.citymodeler.matsim.models.api.Id.create("osm_way_10_0_f", Link.class)));
+        Link reverse = r.cleanedNetwork().getLinks().get(
+                com.citymodeler.matsim.models.api.Id.create("osm_way_10_0_r", Link.class));
+        assertNotNull(reverse);
+        assertTrue(reverse.getAllowedModes().contains("car"));
+    }
+
+    /** access=no with bus=designated: only the explicitly designated bus survives. */
+    @Test
+    void accessNoWithBusDesignatedOnCarRoadKeepsBusOnly() throws Exception {
+        OsmNetworkBuildResult r = build("""
+                <?xml version="1.0"?><osm version="0.6">
+                <node id="1" lat="0.0" lon="0.0"/>
+                <node id="2" lat="0.0" lon="0.001"/>
+                <way id="10"><nd ref="1"/><nd ref="2"/>
+                  <tag k="highway" v="residential"/>
+                  <tag k="access" v="no"/><tag k="bus" v="designated"/>
+                </way></osm>""");
+        Link link = r.cleanedNetwork().getLinks().get(
+                com.citymodeler.matsim.models.api.Id.create("osm_way_10_0_f", Link.class));
+        assertNotNull(link);
+        assertTrue(link.getAllowedModes().contains("bus"));
+        assertFalse(link.getAllowedModes().contains("car"));
+    }
+
+    /**
+     * A more specific directional override must beat a general directional restriction, exactly as in
+     * the non-directional hierarchy: access:forward=no + bus:forward=yes keeps bus going forward.
+     */
+    @Test
+    void directionalSpecificOverrideBeatsGeneralDirectionalRestriction() throws Exception {
+        OsmNetworkBuildResult r = build("""
+                <?xml version="1.0"?><osm version="0.6">
+                <node id="1" lat="0.0" lon="0.0"/>
+                <node id="2" lat="0.0" lon="0.001"/>
+                <way id="10"><nd ref="1"/><nd ref="2"/>
+                  <tag k="highway" v="residential"/>
+                  <tag k="motor_vehicle:forward" v="no"/><tag k="bus:forward" v="yes"/>
+                </way></osm>""");
+        Link forward = r.cleanedNetwork().getLinks().get(
+                com.citymodeler.matsim.models.api.Id.create("osm_way_10_0_f", Link.class));
+        assertNotNull(forward, "bus:forward=yes is more specific than motor_vehicle:forward=no");
+        assertTrue(forward.getAllowedModes().contains("bus"));
+        assertFalse(forward.getAllowedModes().contains("car"));
     }
 }

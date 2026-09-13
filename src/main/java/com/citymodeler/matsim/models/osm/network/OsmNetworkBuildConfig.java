@@ -12,25 +12,109 @@ public final class OsmNetworkBuildConfig {
     private final Set<String> explicitOsmNodeIdsToKeep;
     private final double sharpBendAngleDegrees;
     private final Map<String, OsmWayRule> rulesByKeyValue;
+    private final boolean preserveCrossingNodes;
+    private final boolean preserveBarrierNodes;
+    private final boolean cleanupIsolatedComponents;
+    private final Set<String> excludedHighwayClasses;
+    private final Set<String> routableModes;
+    private final double maxContractedLinkLengthMeters;
+    private final boolean addBusToCarRoads;
+    private final boolean collapseParallelTransitTracks;
 
     private OsmNetworkBuildConfig(OsmGeometryMode geometryMode, boolean preserveTransitStopNodes,
                                    Set<String> explicitOsmNodeIdsToKeep, double sharpBendAngleDegrees,
-                                   Map<String, OsmWayRule> rulesByKeyValue) {
+                                   Map<String, OsmWayRule> rulesByKeyValue,
+                                   boolean preserveCrossingNodes, boolean preserveBarrierNodes,
+                                   boolean cleanupIsolatedComponents, Set<String> excludedHighwayClasses,
+                                   Set<String> routableModes, double maxContractedLinkLengthMeters,
+                                   boolean addBusToCarRoads, boolean collapseParallelTransitTracks) {
+        if (maxContractedLinkLengthMeters < 0) {
+            throw new IllegalArgumentException("maxContractedLinkLengthMeters must be >= 0");
+        }
         this.geometryMode = geometryMode;
         this.preserveTransitStopNodes = preserveTransitStopNodes;
         this.explicitOsmNodeIdsToKeep = Set.copyOf(explicitOsmNodeIdsToKeep);
         this.sharpBendAngleDegrees = sharpBendAngleDegrees;
         this.rulesByKeyValue = rulesByKeyValue;
+        this.preserveCrossingNodes = preserveCrossingNodes;
+        this.preserveBarrierNodes = preserveBarrierNodes;
+        this.cleanupIsolatedComponents = cleanupIsolatedComponents;
+        this.excludedHighwayClasses = Set.copyOf(excludedHighwayClasses);
+        this.routableModes = Set.copyOf(routableModes);
+        this.maxContractedLinkLengthMeters = maxContractedLinkLengthMeters;
+        this.addBusToCarRoads = addBusToCarRoads;
+        this.collapseParallelTransitTracks = collapseParallelTransitTracks;
     }
 
     public static OsmNetworkBuildConfig materializeGeometryConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
-                true, Set.of(), 35.0, defaultRules());
+                true, Set.of(), 35.0, defaultRules(), false, true, false, Set.of(), defaultRoutableModes(),
+                0.0, true, false);
     }
 
+    /** Materialize-geometry config that additionally enforces routable cleaning (bundle pipeline). */
+    public static OsmNetworkBuildConfig materializeGeometryConfigWithCleanup() {
+        return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(),
+                0.0, true, true);
+    }
+
+    /**
+     * Faithful import preset: no connectivity cleaning, no length cap, no bus expansion, and no
+     * parallel-track collapse. This is the reference for "what the source says"; simulation-oriented
+     * preparation is expressed by the policy presets such as {@link #defaultConfig()} and
+     * {@link #compactRoadNetworkConfig()}.
+     */
+    public static OsmNetworkBuildConfig faithfulImportConfig() {
+        return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
+                true, Set.of(), 35.0, defaultRules(), false, true, false, Set.of(), Set.of(),
+                0.0, false, false);
+    }
+
+    /**
+     * Simulation-oriented policy preset: contracts degree-2 nodes, applies routable-subnetwork
+     * connectivity cleaning (largest-SCC union for {@code car,bus}), admits buses on car roads, and
+     * collapses parallel transit tracks. Use {@link #faithfulImportConfig()} for a literal import.
+     */
     public static OsmNetworkBuildConfig defaultConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
-                true, Set.of(), 35.0, defaultRules());
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(),
+                0.0, true, true);
+    }
+
+    /** Default contraction config that additionally removes isolated non-transit components. */
+    public static OsmNetworkBuildConfig defaultConfigWithCleanup() {
+        return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(),
+                0.0, true, true);
+    }
+
+    /**
+     * Compact road-network scope: car roads only (no {@code highway=service} aisles), buses admitted
+     * on every car road so the bus routable subnetwork exists in the base network, and a bounded
+     * contracted-link length so no merged road link becomes implausibly long. Rail/tram are not
+     * length-capped. Intended as a compact, routable road network; the default config keeps service
+     * ways and applies no length bound.
+     */
+    public static OsmNetworkBuildConfig compactRoadNetworkConfig() {
+        return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of("service"),
+                defaultRoutableModes(), 500.0, true, true);
+    }
+
+    /**
+     * Config that treats a pair of physically parallel transit-track ways (both endpoints coincident)
+     * as a single bidirectional corridor rather than two bidirectional tracks, avoiding a
+     * double-count of direction. This is on by default; this factory exists for explicit use.
+     */
+    public static OsmNetworkBuildConfig collapsingParallelTransitTracksConfig() {
+        return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(),
+                defaultRoutableModes(), 0.0, true, true);
+    }
+
+    private static Set<String> defaultRoutableModes() {
+        return Set.of("car", "bus");
     }
 
     public OsmGeometryMode geometryMode() {
@@ -49,9 +133,60 @@ public final class OsmNetworkBuildConfig {
         return sharpBendAngleDegrees;
     }
 
+    public boolean preserveCrossingNodes() {
+        return preserveCrossingNodes;
+    }
+
+    public boolean preserveBarrierNodes() {
+        return preserveBarrierNodes;
+    }
+
+    public boolean cleanupIsolatedComponents() {
+        return cleanupIsolatedComponents;
+    }
+
+    /** Highway classes explicitly excluded from the network scope (empty = admit every rule). */
+    public Set<String> excludedHighwayClasses() {
+        return excludedHighwayClasses;
+    }
+
+    /** Modes for which the cleaner enforces strongly connected routability. */
+    public Set<String> routableModes() {
+        return routableModes;
+    }
+
+    /**
+     * Maximum length (metres) of a contracted link; {@code 0} means no cap. When positive, a
+     * degree-2 node is retained as a routing node if dissolving it would make the merged link longer
+     * than this value.
+     */
+    public double maxContractedLinkLengthMeters() {
+        return maxContractedLinkLengthMeters;
+    }
+
+    /**
+     * When true, every link that allows {@code car} also allows {@code bus}, so the bus routable
+     * subnetwork exists in the base network and transit buses can be routed over the road network.
+     */
+    public boolean addBusToCarRoads() {
+        return addBusToCarRoads;
+    }
+
+    /**
+     * When true, a pair of physically parallel transit-track ways (both endpoints coincident within a
+     * small tolerance) is treated as one bidirectional corridor rather than two bidirectional tracks,
+     * so travel direction is not double-counted. Default on.
+     */
+    public boolean collapseParallelTransitTracks() {
+        return collapseParallelTransitTracks;
+    }
+
     public OsmWayRule resolveRule(OsmTagSet tags) {
         String highway = tags.get("highway");
         if (highway != null) {
+            if (excludedHighwayClasses.contains(highway)) {
+                return null;
+            }
             OsmWayRule rule = rulesByKeyValue.get("highway:" + highway);
             if (rule != null) {
                 return rule;
@@ -114,15 +249,15 @@ public final class OsmNetworkBuildConfig {
         rules.put("highway:busway", new OsmWayRule("highway", "busway", 3,
                 Set.of("bus", "pt"), 1.0, 13.89, 600.0, false, true));
         rules.put("railway:rail", new OsmWayRule("railway", "rail", 1,
-                Set.of("rail", "pt"), 1.0, 83.33, 3000.0, true, true));
+                Set.of("rail", "pt"), 1.0, 83.33, 3000.0, false, true));
         rules.put("railway:light_rail", new OsmWayRule("railway", "light_rail", 2,
-                Set.of("light_rail", "pt"), 1.0, 27.78, 1200.0, true, true));
+                Set.of("light_rail", "pt"), 1.0, 27.78, 1200.0, false, true));
         rules.put("railway:subway", new OsmWayRule("railway", "subway", 3,
-                Set.of("subway", "pt"), 1.0, 27.78, 1200.0, true, true));
+                Set.of("subway", "pt"), 1.0, 27.78, 1200.0, false, true));
         rules.put("railway:tram", new OsmWayRule("railway", "tram", 4,
-                Set.of("tram", "pt"), 1.0, 16.67, 600.0, true, true));
+                Set.of("tram", "pt"), 1.0, 16.67, 600.0, false, true));
         rules.put("railway:monorail", new OsmWayRule("railway", "monorail", 5,
-                Set.of("monorail", "pt"), 1.0, 27.78, 1200.0, true, true));
+                Set.of("monorail", "pt"), 1.0, 27.78, 1200.0, false, true));
         rules.put("railway:funicular", new OsmWayRule("railway", "funicular", 6,
                 Set.of("funicular", "pt"), 1.0, 8.33, 300.0, false, true));
         rules.put("route:ferry", new OsmWayRule("route", "ferry", 10,

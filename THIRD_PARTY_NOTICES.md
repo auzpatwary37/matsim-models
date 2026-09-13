@@ -68,8 +68,8 @@ license — not GPL, CC-BY, Apache, or any other — for these files. Consequent
 
 | File | Nature |
 |------|--------|
-| `src/test/resources/matsim-spec/transitSchedule-current-v2.xml` | Hand-written from the transitSchedule v2 DTD content model; used as a test oracle. No MATSim/Pt2MATSim code. |
-| `src/test/resources/matsim-spec/vehicleDefinitions-current-v2.xml` | Hand-written from the vehicleDefinitions v2.0 schema; used as a test oracle. No MATSim/Pt2MATSim code. |
+| `src/test/resources/matsim-spec/transitSchedule-current-v2.xml` | Hand-written from the transitSchedule v2 DTD content model; used as a test oracle. No MATSim or pt2MATSim code. |
+| `src/test/resources/matsim-spec/vehicleDefinitions-current-v2.xml` | Hand-written from the vehicleDefinitions v2.0 schema; used as a test oracle. No MATSim or pt2MATSim code. |
 
 **Usage / why they are (or are not) packaged:**
 

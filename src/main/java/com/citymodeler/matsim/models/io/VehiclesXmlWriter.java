@@ -21,7 +21,7 @@ import com.citymodeler.matsim.models.vehicles.VehicleType;
  * as vehicle-type attributes), followed by {@code <vehicle>} elements.
  *
  * <p>The element names and structure are defined by the published v2.0
- * schema; no MATSim or Pt2MATSim code is used.</p>
+ * schema; no MATSim or pt2MATSim code is used.</p>
  */
 public final class VehiclesXmlWriter {
     static final String MATSIM_NAMESPACE = "http://www.matsim.org/files/dtd";

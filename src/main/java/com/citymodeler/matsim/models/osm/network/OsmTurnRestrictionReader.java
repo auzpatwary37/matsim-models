@@ -48,6 +48,7 @@ public final class OsmTurnRestrictionReader {
         List<OsmImportIssue> issues = new ArrayList<>();
         TurnRestrictionIndex index = new TurnRestrictionIndex();
         Map<String, DisallowedNextLinks> perLink = new HashMap<>();
+        int viaWayRestrictions = 0;
 
         // Build topological indexes: nodeId → outgoing/incoming link IDs
         Map<String, List<String>> nodeOutgoing = new HashMap<>(); // node → links leaving
@@ -85,9 +86,14 @@ public final class OsmTurnRestrictionReader {
             }
 
             if (viaIsWay) {
+                // Via-way restrictions are preserved topologically (every via node is kept) but cannot
+                // be enforced as a single-turn DisallowedNextLinks entry in this phase. Count them so
+                // callers can surface the gap rather than assuming turn restrictions are complete.
+                viaWayRestrictions++;
                 issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING,
                         "restriction-via-way-unsupported",
-                        "Restriction " + rel.id() + " uses a via-way; not supported in Phase 1", null));
+                        "Restriction " + rel.id() + " uses a via-way; topology is preserved but the "
+                                + "restriction is not enforced in Phase 1", null));
                 continue;
             }
             if (fromWayId == null || toWayId == null || viaNodeId == null) {
@@ -99,10 +105,6 @@ public final class OsmTurnRestrictionReader {
 
             // Resolve the via node's MATSim ID
             String matSimViaNodeId = OsmGeneratedIds.nodeId(viaNodeId);
-
-            // Determine affected modes, respecting except=* exceptions
-            Set<String> modes = resolveAffectedModes(rel, importResult, fromWayId, issues);
-            if (modes.isEmpty()) continue;
 
             boolean isOnly = restriction.startsWith("only_");
 
@@ -125,6 +127,12 @@ public final class OsmTurnRestrictionReader {
                         "Could not resolve to-link for restriction " + rel.id(), null));
                 continue;
             }
+
+            // Determine affected modes from the ACTUAL from-link modes (so a car+bus road restricts
+            // both), respecting except=* exceptions. A restriction applies to every mode the from-link
+            // permits unless explicitly excepted.
+            Set<String> modes = resolveAffectedModes(rel, buildResult, fromLinks, importResult, fromWayId);
+            if (modes.isEmpty()) continue;
 
             // Apply semantics
             for (String fromLinkId : fromLinks) {
@@ -164,33 +172,52 @@ public final class OsmTurnRestrictionReader {
             }
         }
 
-        return new Record(index, perLink, issues);
+        return new Record(index, perLink, issues, viaWayRestrictions);
     }
 
     /** Resolve modes from the from-way's rule, applying OSM except=* exemptions. */
-    private static Set<String> resolveAffectedModes(OsmRelationRecord rel, OsmImportResult importResult,
-                                                     String fromWayId, List<OsmImportIssue> issues) {
-        OsmWayRecord fromWay = importResult.ways().get(fromWayId);
-        Set<String> modes;
-        if (fromWay != null) {
-            var rule = OsmNetworkBuildConfig.defaultConfig().resolveRule(fromWay.tags());
-            modes = rule != null ? new HashSet<>(rule.allowedModes()) : new HashSet<>(Set.of("car"));
-        } else {
-            modes = new HashSet<>(Set.of("car"));
+    /**
+     * Modes a turn restriction affects: every mode permitted by the originating link(s) — so a road
+     * that carries {@code car,bus} restricts both — minus any {@code except=} exceptions. Falls back
+     * to the source way's rule modes when the link modes cannot be read.
+     */
+    private static Set<String> resolveAffectedModes(OsmRelationRecord rel,
+                                                     OsmNetworkBuildResult buildResult,
+                                                     List<String> fromLinks,
+                                                     OsmImportResult importResult,
+                                                     String fromWayId) {
+        Set<String> modes = new HashSet<>();
+        for (String linkId : fromLinks) {
+            Link link = buildResult.cleanedNetwork().getLinks().get(Id.create(linkId, Link.class));
+            if (link != null && !link.getAllowedModes().isEmpty()) {
+                modes.addAll(link.getAllowedModes());
+            }
+        }
+        if (modes.isEmpty()) {
+            OsmWayRecord fromWay = importResult.ways().get(fromWayId);
+            if (fromWay != null) {
+                var rule = OsmNetworkBuildConfig.defaultConfig().resolveRule(fromWay.tags());
+                modes = rule != null ? new HashSet<>(rule.allowedModes()) : new HashSet<>(Set.of("car"));
+            } else {
+                modes = new HashSet<>(Set.of("car"));
+            }
         }
 
-        // Standard OSM: except=bus;bicycle (semicolon-separated mode list)
+        // Standard OSM: except=bus;bicycle (semicolon-separated mode list). Tokens are OSM transport
+        // classes, not internal modes, so map them through the access ontology (psv->bus/pt,
+        // motorcar->car, ...) rather than subtracting raw strings.
         String exceptValue = rel.tags().get("except");
         if (exceptValue != null && !exceptValue.isBlank()) {
             for (String exceptMode : exceptValue.split(";")) {
-                modes.remove(exceptMode.trim());
+                modes.removeAll(OsmModeAccessResolver.internalModesForExclusion(exceptMode.trim()));
             }
         }
         // Also support mode-specific: except:bus=bus, except:taxi=taxi
         for (var entry : rel.tags().asMap().entrySet()) {
             String key = entry.getKey();
             if (key.startsWith("except:") && entry.getValue().equals(key.substring("except:".length()))) {
-                modes.remove(key.substring("except:".length()));
+                modes.removeAll(OsmModeAccessResolver.internalModesForExclusion(
+                        key.substring("except:".length())));
             }
         }
         return modes;
@@ -232,6 +259,7 @@ public final class OsmTurnRestrictionReader {
         return matched;
     }
 
-    public record Record(TurnRestrictionIndex index, Map<String, DisallowedNextLinks> perLink, List<OsmImportIssue> issues) {
+    public record Record(TurnRestrictionIndex index, Map<String, DisallowedNextLinks> perLink,
+                         List<OsmImportIssue> issues, int viaWayRestrictions) {
     }
 }

@@ -62,11 +62,16 @@ class TransitNetworkMapperTest {
                 TransitMappingConfig.defaults(), spatialIndex);
         TransitMappingResult result = mapper.map(schedule, network);
 
-        // Stop should be assigned to link l1
-        assertEquals(Id.create("l1", Link.class), stop.getLinkId());
+        // Build-new contract: mapping does not mutate inputs; read the RETURNED results.
+        assertNull(stop.getLinkId(), "input stop must not be mutated");
+        assertEquals(Id.create("l1", Link.class),
+                result.mappedSchedule().getFacilities().get(Id.create("stop1", TransitStopFacility.class)).getLinkId());
         // Route should have network route
-        assertNotNull(route.getNetworkRoute());
-        assertEquals(1, route.getNetworkRoute().size());
+        TransitRoute mappedRoute = result.mappedSchedule().getTransitLines()
+                .get(Id.create("line1", TransitLine.class)).getRoutes()
+                .get(Id.create("route1", TransitRoute.class));
+        assertNotNull(mappedRoute.getNetworkRoute());
+        assertEquals(1, mappedRoute.getNetworkRoute().size());
     }
 
     @Test
@@ -89,9 +94,11 @@ class TransitNetworkMapperTest {
                 TransitMappingConfig.defaults(), spatialIndex);
         TransitMappingResult result = mapper.map(schedule, network);
 
-        // Should have created an artificial loop
-        assertNotNull(stop.getLinkId());
-        assertTrue(stop.getLinkId().toString().startsWith("pt_loop"));
+        // Should have created an artificial loop (on the returned, mapped facility).
+        TransitStopFacility mappedStop = result.mappedSchedule().getFacilities()
+                .get(Id.create("far_stop", TransitStopFacility.class));
+        assertNotNull(mappedStop.getLinkId());
+        assertTrue(mappedStop.getLinkId().toString().startsWith("pt_loop"));
         assertTrue(result.hasWarnings());
     }
 
@@ -112,13 +119,36 @@ class TransitNetworkMapperTest {
     @Test
     void weightValidationRejectsNegatives() {
         assertThrows(IllegalArgumentException.class, () ->
-                new CandidateScoreWeights(-1, 0).validate());
+                new CandidateScoreWeights(-1, 0, 0).validate());
+    }
+
+    /**
+     * Road-name similarity (spec §Stop-Link Candidate Scoring) prefers a candidate whose source road
+     * name matches the stop name, which disambiguates among several nearby links.
+     */
+    @Test
+    void nameSimilarityScoresMatchingCandidateHigher() {
+        Link named = network.getLinks().get(Id.create("l1", Link.class));
+        named.getAttributes().putAttribute("osm:name", "Rue de Hamm");
+        // A second, identical link with an unrelated name.
+        Node a = network.getNodes().get(Id.create("A", Node.class));
+        Node b = network.getNodes().get(Id.create("B", Node.class));
+        Link other = new Link(Id.create("l2", Link.class), a.getId(), b.getId(),
+                100.0, 900.0, 13.9, 2.0, Set.of("car", "pt"));
+        other.getAttributes().putAttribute("osm:name", "Avenue de la Liberté");
+        network.addLink(other);
+        network.postProcess();
+
+        assertTrue(StopCandidateScorer.nameSimilarity("Hamm", named) > 0.5,
+                "stop 'Hamm' should match 'Rue de Hamm'");
+        assertEquals(0.0, StopCandidateScorer.nameSimilarity("Hamm", other));
+        assertEquals(0.0, StopCandidateScorer.nameSimilarity("   ", named));
     }
 
     @Test
     void weightValidationRejectsAllZero() {
         assertThrows(IllegalArgumentException.class, () ->
-                new CandidateScoreWeights(0, 0).validate());
+                new CandidateScoreWeights(0, 0, 0).validate());
     }
 
     @Test
@@ -175,11 +205,18 @@ class TransitNetworkMapperTest {
 
         TransitNetworkMapper mapper = new TransitNetworkMapper(
                 TransitMappingConfig.defaults(), new LinkSpatialIndex(net, 500.0));
-        mapper.map(schedule, net);
+        TransitMappingResult result = mapper.map(schedule, net);
 
-        assertEquals(Id.create("la", Link.class), f1.getLinkId());
-        assertEquals(Id.create("lb", Link.class), f2.getLinkId());
-        assertNotEquals(f1.getLinkId(), f2.getLinkId());
+        // Inputs unmodified (build-new contract).
+        assertNull(f1.getLinkId());
+        assertNull(f2.getLinkId());
+        assertEquals(Id.create("la", Link.class), result.mappedSchedule().getFacilities()
+                .get(Id.create("w1", TransitStopFacility.class)).getLinkId());
+        assertEquals(Id.create("lb", Link.class), result.mappedSchedule().getFacilities()
+                .get(Id.create("w2", TransitStopFacility.class)).getLinkId());
+        assertNotEquals(
+                result.mappedSchedule().getFacilities().get(Id.create("w1", TransitStopFacility.class)).getLinkId(),
+                result.mappedSchedule().getFacilities().get(Id.create("w2", TransitStopFacility.class)).getLinkId());
     }
 
     /**
@@ -203,13 +240,16 @@ class TransitNetworkMapperTest {
 
         TransitNetworkMapper mapper = new TransitNetworkMapper(
                 TransitMappingConfig.defaults(), spatialIndex);
-        mapper.map(schedule, network);
+        TransitMappingResult result = mapper.map(schedule, network);
 
-        TransitRouteStop routedStop = route.getStops().get(0);
+        TransitRoute mappedRoute = result.mappedSchedule().getTransitLines()
+                .get(Id.create("line1", TransitLine.class)).getRoutes()
+                .get(Id.create("route1", TransitRoute.class));
+        TransitRouteStop routedStop = mappedRoute.getStops().get(0);
         String childId = routedStop.getStopFacilityId().toString();
         assertNotEquals("stop1", childId, "route stop must reference a child, not the parent");
         assertEquals("stop1.link:l1", childId);
-        assertNotNull(schedule.getFacilities().get(routedStop.getStopFacilityId()),
+        assertNotNull(result.mappedSchedule().getFacilities().get(routedStop.getStopFacilityId()),
                 "the child facility must have been materialized");
     }
 
@@ -256,10 +296,13 @@ class TransitNetworkMapperTest {
         TransitMappingResult result = mapper.map(schedule, net);
 
         // The route is kept continuous via an explicit connector, not a raw [la, lb] concatenation.
-        assertNotNull(route.getNetworkRoute());
-        boolean hasConnector = route.getNetworkRoute().stream()
+        TransitRoute mappedRoute = result.mappedSchedule().getTransitLines()
+                .get(Id.create("ln", TransitLine.class)).getRoutes()
+                .get(Id.create("rt", TransitRoute.class));
+        assertNotNull(mappedRoute.getNetworkRoute());
+        boolean hasConnector = mappedRoute.getNetworkRoute().stream()
                 .anyMatch(id -> id.toString().startsWith("pt_"));
-        assertTrue(hasConnector, "expected an artificial connector in " + route.getNetworkRoute());
+        assertTrue(hasConnector, "expected an artificial connector in " + mappedRoute.getNetworkRoute());
         assertTrue(result.warnings().stream()
                 .anyMatch(w -> w.toLowerCase().contains("connector")));
     }
@@ -270,5 +313,52 @@ class TransitNetworkMapperTest {
         f.getAttributes().putAttribute("gtfs:lon", lon);
         f.getAttributes().putAttribute("gtfs:lat", lat);
         return f;
+    }
+
+    /**
+     * Regression: an unmapped WGS84 stop gets an artificial loop, and that loop's node must be in the
+     * NETWORK CRS (projected meters), never the raw WGS84 degrees. A degrees-valued loop node would
+     * sit ~6,000 km from the network it is added to.
+     */
+    @Test
+    void artificialLoopUsesProjectedNetworkCrsNotRawWgs84() {
+        Network net = new Network();
+        net.getAttributes().putAttribute("osm:targetCrs", "EPSG:3857");
+        // A network far from (0,0) so a raw-degree coordinate is obviously wrong.
+        Node a = new Node(Id.create("a", Node.class), new Coord(682000, 6376000));
+        Node b = new Node(Id.create("b", Node.class), new Coord(682100, 6376000));
+        net.addNode(a);
+        net.addNode(b);
+        net.addLink(new Link(Id.create("l1", Link.class), a.getId(), b.getId(),
+                100.0, 900.0, 13.9, 2.0, Set.of("car", "pt")));
+        net.postProcess();
+
+        TransitSchedule schedule = new TransitSchedule();
+        // Luxembourg City WGS84; no link anywhere near -> artificial loop.
+        TransitStopFacility stop = wgs84Stop("s1", 6.13, 49.61);
+        schedule.addStopFacility(stop);
+        TransitLine line = new TransitLine(Id.create("line1", TransitLine.class));
+        TransitRoute route = new TransitRoute(Id.create("route1", TransitRoute.class));
+        route.setTransportMode("pt");
+        route.addStop(new TransitRouteStop(Id.create("s1", TransitStopFacility.class), 0, 0, false));
+        line.addRoute(route);
+        schedule.addTransitLine(line);
+        schedule.postProcess();
+
+        // Tiny candidate radius so the distant stop definitely gets a loop.
+        TransitMappingConfig cfg = new TransitMappingConfig(1.0, 1.0, 1, 1000.0,
+                CandidateScoreWeights.defaults(), java.util.Map.of());
+        TransitMappingResult result = new TransitNetworkMapper(cfg, new LinkSpatialIndex(net, 100.0))
+                .map(schedule, net);
+
+        Node loopNode = result.mappedNetwork().getNodes().values().stream()
+                .filter(n -> n.getId().toString().startsWith("pt_loop_node_"))
+                .findFirst().orElseThrow(() -> new AssertionError("expected an artificial loop node"));
+        Coord c = loopNode.getCoord();
+        // Projected Luxembourg is ~x=682,000 / y=6,376,000 m; raw degrees would be ~6.13 / 49.61.
+        assertTrue(c.getX() > 1000 && c.getX() < 1_000_000,
+                "loop node x must be in projected meters, was " + c.getX());
+        assertTrue(c.getY() > 1_000_000,
+                "loop node y must be in projected meters, was " + c.getY());
     }
 }
