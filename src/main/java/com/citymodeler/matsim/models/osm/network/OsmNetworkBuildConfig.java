@@ -71,12 +71,13 @@ public final class OsmNetworkBuildConfig {
     }
 
     /**
-     * Scope comparable to pt2MATSim's default OSM converter: excludes {@code highway=service},
-     * admits buses on all car roads (pt2MATSim labels roads {@code bus,car}), and caps contracted
-     * road-link length at 500 m (pt2MATSim's {@code maxLinkLength}). The cap applies to car roads
-     * only, never to rail/tram, matching pt2MATSim's rail handling.
+     * Compact road-network scope: car roads only (no {@code highway=service} aisles), buses admitted
+     * on every car road so the bus routable subnetwork exists in the base network, and a bounded
+     * contracted-link length so no merged road link becomes implausibly long. Rail/tram are not
+     * length-capped. Intended as a compact, routable road network; the default config keeps service
+     * ways and applies no length bound.
      */
-    public static OsmNetworkBuildConfig pt2matsimComparableConfig() {
+    public static OsmNetworkBuildConfig compactRoadNetworkConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
                 true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of("service"),
                 defaultRoutableModes(), 500.0, true);
@@ -134,8 +135,8 @@ public final class OsmNetworkBuildConfig {
     }
 
     /**
-     * When true, every link that allows {@code car} also allows {@code bus} (matching pt2MATSim's
-     * {@code bus,car} road labelling), so transit mapping can route buses over the road network.
+     * When true, every link that allows {@code car} also allows {@code bus}, so the bus routable
+     * subnetwork exists in the base network and transit buses can be routed over the road network.
      */
     public boolean addBusToCarRoads() {
         return addBusToCarRoads;
@@ -215,7 +216,7 @@ public final class OsmNetworkBuildConfig {
         rules.put("railway:subway", new OsmWayRule("railway", "subway", 3,
                 Set.of("subway", "pt"), 1.0, 27.78, 1200.0, false, true));
         rules.put("railway:tram", new OsmWayRule("railway", "tram", 4,
-                Set.of("tram", "pt"), 1.0, 16.67, 600.0, true, true));
+                Set.of("tram", "pt"), 1.0, 16.67, 600.0, false, true));
         rules.put("railway:monorail", new OsmWayRule("railway", "monorail", 5,
                 Set.of("monorail", "pt"), 1.0, 27.78, 1200.0, false, true));
         rules.put("railway:funicular", new OsmWayRule("railway", "funicular", 6,

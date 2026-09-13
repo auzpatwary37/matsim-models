@@ -20,7 +20,7 @@ import com.citymodeler.matsim.models.osm.OsmTagSet;
 import com.citymodeler.matsim.models.osm.model.OsmNodeRecord;
 import com.citymodeler.matsim.models.osm.model.OsmWayRecord;
 
-/** Way-class scope: the default admits service; the pt2MATSim-comparable preset excludes it. */
+/** Way-class scope: the default admits service; the compact-road preset excludes it. */
 final class OsmNetworkScopeTest {
 
     private static OsmNodeRecord n(String id, double x) {
@@ -46,15 +46,15 @@ final class OsmNetworkScopeTest {
     }
 
     @Test
-    void parityPresetExcludesService() {
-        OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.pt2matsimComparableConfig();
+    void compactRoadPresetExcludesService() {
+        OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.compactRoadNetworkConfig();
         assertNull(cfg.resolveRule(OsmTagSet.of(Map.of("highway", "service"))));
         assertNotNull(cfg.resolveRule(OsmTagSet.of(Map.of("highway", "residential"))));
         assertTrue(cfg.excludedHighwayClasses().contains("service"));
     }
 
     @Test
-    void parityPresetDropsServiceWayFromNetwork() {
+    void compactRoadPresetDropsServiceWayFromNetwork() {
         OsmImportResult result = withServiceWay();
 
         CollapsedTopology withService = OsmTopologyBuilder.build(result,
@@ -62,16 +62,13 @@ final class OsmNetworkScopeTest {
         assertFalse(withService.network().getLinks().isEmpty(), "default keeps the service way");
 
         CollapsedTopology withoutService = OsmTopologyBuilder.build(result,
-                OsmNetworkBuildConfig.pt2matsimComparableConfig(), false);
+                OsmNetworkBuildConfig.compactRoadNetworkConfig(), false);
         assertTrue(withoutService.network().getLinks().isEmpty(),
-                "parity preset drops the service way");
+                "compact preset drops the service way");
         assertEquals(0, withoutService.network().getNodes().size());
     }
 
-    /**
-     * Bus is added to car roads so transit mapping can route buses over the road network (matching
-     * pt2MATSim's {@code bus,car} labelling).
-     */
+    /** Bus is added to car roads so buses can be routed over the road network. */
     @Test
     void busIsAddedToCarRoads() {
         Map<String, OsmNodeRecord> ns = new TreeMap<>();
@@ -89,7 +86,7 @@ final class OsmNetworkScopeTest {
         assertTrue(modes.contains("bus"), "car roads must also allow bus, got " + modes);
     }
 
-    /** The 500 m cap must not split rail/tram links (it applies to car roads only). */
+    /** The contracted-link length cap must not split rail links (it applies to car roads only). */
     @Test
     void lengthCapDoesNotSplitRail() {
         Map<String, OsmNodeRecord> ns = new TreeMap<>();
@@ -103,16 +100,16 @@ final class OsmNetworkScopeTest {
                 OsmProvenance.defaultFor("f.osm", "EPSG:3857"));
 
         var net = OsmTopologyBuilder.build(result,
-                OsmNetworkBuildConfig.pt2matsimComparableConfig(), false).network();
-        // Rail is bidirectional and must not be split by the car length cap: A and C retained only,
-        // so one physical span -> 2 directed links.
+                OsmNetworkBuildConfig.compactRoadNetworkConfig(), false).network();
+        // Rail is bidirectional and not split by the car length cap: A and C retained only, so one
+        // physical span -> 2 directed links.
         assertEquals(2, net.getLinks().size(),
                 "rail must not be split by the car length cap");
     }
 
-    /** Tram defaults to oneway in pt2MATSim (1 directed link per span); rail is bidirectional. */
+    /** Rail and tram tracks are bidirectional by default; only an explicit oneway tag makes oneway. */
     @Test
-    void tramDefaultsToOnewayRailToBidirectional() {
+    void railAndTramAreBidirectionalByDefault() {
         Map<String, OsmNodeRecord> ns = new TreeMap<>();
         ns.put("A", n("A", 0));
         ns.put("B", n("B", 100));
@@ -125,9 +122,28 @@ final class OsmNetworkScopeTest {
                 OsmProvenance.defaultFor("f.osm", "EPSG:3857"));
 
         var net = OsmTopologyBuilder.build(result,
-                OsmNetworkBuildConfig.pt2matsimComparableConfig(), false).network();
-        // tram: 1 directed; rail: 2 directed => 3 total.
-        assertEquals(3, net.getLinks().size(),
-                "tram oneway (1) + rail bidirectional (2) = 3");
+                OsmNetworkBuildConfig.compactRoadNetworkConfig(), false).network();
+        // tram: 2 directed; rail: 2 directed => 4 total.
+        assertEquals(4, net.getLinks().size(),
+                "rail and tram are bidirectional unless explicitly tagged oneway");
+    }
+
+    /** An explicit oneway tag makes a car road a single directed link (raw engine, no cleaning). */
+    @Test
+    void explicitOnewayTagYieldsSingleDirectedLink() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0));
+        ns.put("B", n("B", 100));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B"),
+                OsmTagSet.of(Map.of("highway", "residential", "oneway", "yes"))));
+        OsmImportResult result = new OsmImportResult(ns, ws, new TreeMap<>(), List.of(),
+                OsmProvenance.defaultFor("f.osm", "EPSG:3857"));
+
+        // materializeGeometryConfig does not clean; direction is what we assert here.
+        var net = OsmTopologyBuilder.build(result,
+                OsmNetworkBuildConfig.materializeGeometryConfig(), false).network();
+        assertEquals(1, net.getLinks().size(),
+                "an explicit oneway car road yields exactly one directed link");
     }
 }

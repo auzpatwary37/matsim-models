@@ -41,13 +41,21 @@ public final class OsmNetworkCleaner {
 
     /**
      * @param routableModes modes for which strongly connected routability must hold; each is cleaned
-     *                      independently to its largest SCC. Modes not listed keep sinks/sources.
+     *                      independently to its largest strongly connected component.
      */
     public static CleanResult clean(Network network, Set<String> routableModes) {
         return clean(network, routableModes, linkId -> List.of());
     }
 
     /**
+     * Cleans only the configured <b>routable subnetworks</b>: each routable mode (e.g. {@code car},
+     * {@code bus}) is reduced to its largest <b>strongly</b> connected component, so every surviving
+     * link can be reached and returned from. All other modes (rail, tram, and any other transit
+     * subnetwork) are <b>not</b> connectivity-cleaned — they legitimately keep sinks and sources: a
+     * oneway transit line has no directed return path, so strong connectivity must not be applied to
+     * it. A link is removed only if it is outside the kept component for <b>every</b> routable mode
+     * it permits.
+     *
      * @param sourceWayResolver maps a network link id to its source OSM way ids, so quarantined
      *                           components can report the source OSM ids they were built from.
      */
@@ -68,19 +76,20 @@ public final class OsmNetworkCleaner {
         }
         removeLinks(network, invalid);
 
-        // Step 2: per routable mode, keep only links in the largest SCC.
-        Set<String> everRoutable = new TreeSet<>();
+        // Step 2: clean ONLY the configured routable subnetworks to their largest SCC. Transit modes
+        // that are not declared routable are left untouched (sinks/sources allowed).
+        Set<String> routableLinks = new TreeSet<>();
         Set<String> kept = new TreeSet<>();
         for (String mode : normalizedRoutable) {
             Set<String> modeLinks = linksPermittingMode(network, mode);
             if (modeLinks.isEmpty()) {
                 continue;
             }
-            everRoutable.addAll(modeLinks);
+            routableLinks.addAll(modeLinks);
             kept.addAll(largestStronglyConnectedComponent(network, modeLinks));
         }
 
-        Set<String> toRemove = new TreeSet<>(everRoutable);
+        Set<String> toRemove = new TreeSet<>(routableLinks);
         toRemove.removeAll(kept);
 
         // Step 3: quarantine removed links as coherent undirected components.

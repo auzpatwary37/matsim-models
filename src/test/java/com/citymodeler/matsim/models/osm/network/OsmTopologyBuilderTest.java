@@ -243,37 +243,38 @@ class OsmTopologyBuilderTest {
         return res(ns, ws);
     }
 
-    /** Cleaning is on by default, so isolated non-routable stubs are removed and quarantined. */
+    /** Cleaning is on by default; isolated stubs outside the largest routable (car,bus) component go. */
     @Test
     void defaultConfigCleansIsolatedNonTransitStub() {
         CollapsedTopology t = OsmTopologyBuilder.build(cleanupFixture(),
                 OsmNetworkBuildConfig.defaultConfig(), false);
         Set<String> nodeIds = t.network().getNodes().keySet().stream()
                 .map(Object::toString).collect(java.util.stream.Collectors.toSet());
-        assertFalse(nodeIds.contains("osm_node_X"), "non-transit stub node X must be removed");
-        assertFalse(nodeIds.contains("osm_node_Y"), "non-transit stub node Y must be removed");
-        // Only the main junction survives (6 directed links); both isolated stubs are quarantined.
+        assertFalse(nodeIds.contains("osm_node_X"), "car-only stub node X must be removed");
+        assertFalse(nodeIds.contains("osm_node_Y"), "car-only stub node Y must be removed");
+        // Only the main junction survives; the isolated busway stub is its own bus component
+        // (bus is a configured routable subnetwork) so it is removed too.
         assertEquals(6, t.network().getLinks().size());
-        assertEquals(2, t.quarantinedComponents().size(), "both isolated stubs must be quarantined");
+        assertEquals(2, t.quarantinedComponents().size());
         assertTrue(t.issues().stream().anyMatch(i -> "quarantined-component".equals(i.code())));
     }
 
     /**
-     * Since bus is added to all car roads, the bus routable network is the main car component; an
-     * isolated busway stub is a separate small bus component and is quarantined, matching pt2MATSim's
-     * per-mode largest-SCC cleaning. The X-Y car stub is likewise removed.
+     * Only the configured routable subnetworks (car, bus) are cleaned to their largest component.
+     * The isolated car stub and the isolated busway stub are both removed; non-routable transit
+     * subnetworks (rail/tram) are not cleaned and keep sinks/sources.
      */
     @Test
-    void cleanupQuarantinesIsolatedStubsIncludingIsolatedBusway() {
+    void cleanupRemovesIsolatedStubsInRoutableSubnetworks() {
         CollapsedTopology t = OsmTopologyBuilder.build(cleanupFixture(),
                 OsmNetworkBuildConfig.defaultConfigWithCleanup(), false);
 
         Set<String> nodeIds = t.network().getNodes().keySet().stream()
                 .map(Object::toString).collect(java.util.stream.Collectors.toSet());
-        assertFalse(nodeIds.contains("osm_node_X"), "non-transit stub node X must be removed");
-        assertFalse(nodeIds.contains("osm_node_Y"), "non-transit stub node Y must be removed");
-        assertFalse(nodeIds.contains("osm_node_P"), "isolated busway stub P must be quarantined");
-        assertFalse(nodeIds.contains("osm_node_Q"), "isolated busway stub Q must be quarantined");
+        assertFalse(nodeIds.contains("osm_node_X"), "car-only stub node X must be removed");
+        assertFalse(nodeIds.contains("osm_node_Y"), "car-only stub node Y must be removed");
+        assertFalse(nodeIds.contains("osm_node_P"), "isolated busway stub is in the bus subnetwork -> removed");
+        assertFalse(nodeIds.contains("osm_node_Q"), "isolated busway stub is in the bus subnetwork -> removed");
         assertTrue(nodeIds.contains("osm_node_A"), "main component node A must survive");
         assertTrue(nodeIds.contains("osm_node_B"), "main component node B must survive");
         assertEquals(6, t.network().getLinks().size());

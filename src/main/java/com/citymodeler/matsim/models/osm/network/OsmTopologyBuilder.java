@@ -217,14 +217,14 @@ public final class OsmTopologyBuilder {
     }
 
     /**
-     * Retains additional routing nodes so that no contracted CAR link exceeds {@code cap} metres,
-     * mirroring pt2MATSim's {@code maxLinkLength} policy: walk each maximal chain between existing
-     * routing nodes and, where the distance since the last kept node would exceed the cap, promote
-     * the node at which it exceeds to a routing node. A resulting link may overshoot the cap by at
-     * most one atomic segment (as in pt2MATSim). A non-positive cap disables the policy.
+     * Retains additional routing nodes so that no contracted CAR link exceeds {@code cap} metres:
+     * walk each maximal chain between existing routing nodes and, where the distance since the last
+     * kept node would exceed the cap, promote the node at which it exceeds to a routing node. A
+     * resulting link may overshoot the cap by at most one atomic segment. A non-positive cap disables
+     * the policy (the default: contract freely).
      *
-     * <p>The cap applies to car roads only: rail/tram tracks are not split by length (pt2MATSim does
-     * not length-cap rail, and applying the car cap to rail over-segments it).
+     * <p>The cap applies to car roads only: rail/tram tracks are not split by length, because a long
+     * track span between junctions is normal and splitting it would fabricate nodes OSM does not have.
      */
     private static Set<String> enforceMaxLinkLength(OsmSegmentGraph graph, Set<String> routingBase,
                                                     double cap) {
