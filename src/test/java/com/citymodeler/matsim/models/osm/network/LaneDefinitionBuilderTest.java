@@ -193,6 +193,40 @@ class LaneDefinitionBuilderTest {
     }
 
     @Test
+    void contradictoryDirectionalTagsArePropagatedAndNeverExceedTheDeclaredTotal() {
+        // Spec §1a step 1: lanes=2 contradicted by forward=3 + backward=1 must not yield 4 physical
+        // lanes; the resolver falls back to T=2 -> 1 per direction, and the resolver-level
+        // inconsistent-lane-tags issue must reach the LaneDefinitionResult (not be swallowed).
+        Network network = junction();
+        LaneDefinitionResult result = build(network, way(Map.of(
+                "highway", "primary", "lanes", "2",
+                "lanes:forward", "3", "lanes:backward", "1")));
+
+        assertTrue(result.issues().stream()
+                        .anyMatch(i -> "inconsistent-lane-tags".equals(i.code())),
+                "resolver issue must propagate to the bundle report: " + result.issues());
+        assertEquals(1, laneCount(result), "fallback T=2 -> 1 lane, never the contradictory 3");
+        assertEquals(1, lane(result).getAttributes().getAttribute("osm:lanes.count"),
+                "the physical count comes from the T=2 fallback, not the contradictory forward=3");
+    }
+
+    @Test
+    void resolverUndeterminedSplitIssueIsPropagated() {
+        // An odd bidirectional total records undetermined-lane-split in the resolver; the builder
+        // must carry it into the result so the bundle report is not silent about the caveat.
+        Network network = junction();
+        LaneDefinitionResult result = build(network, way(Map.of(
+                "highway", "primary", "lanes", "3")));
+
+        assertTrue(result.issues().stream()
+                        .anyMatch(i -> "undetermined-lane-split".equals(i.code())),
+                "undetermined-split issue must propagate: " + result.issues());
+        assertEquals(2, laneCount(result));
+        assertEquals(3.0, lane(result).getAttributes().getAttribute("osm:lanes.total"),
+                "the declared physical total is preserved on the lane (spec §1e caveat)");
+    }
+
+    @Test
     void missingWayIsReportedNotSilentlyDropped() {
         Network network = new Network();
         network.createNode("a", 0, 0);

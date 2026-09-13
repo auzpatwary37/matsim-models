@@ -71,6 +71,29 @@ class OsmGtfsBundleRunnerLanesTest {
                         + result.warnings());
     }
 
+    @Test
+    void contradictoryDeclaredTotalIsNeverSilentlyExceeded(@TempDir Path out) throws Exception {
+        // lanes=2 with lanes:forward=3 + lanes:backward=1 (4 directed) contradicts the declared
+        // total. The bundle must either keep the directed physical count within the declared total
+        // OR surface an explicit inconsistent-lane-tags diagnostic — never silently exceed.
+        Path osm = Path.of("src/test/resources/osm/lane-inconsistent-tags.osm");
+        OsmGtfsBundleRunner.BundleResult result =
+                new OsmGtfsBundleRunner().run(osm, null, null, out);
+
+        boolean hasDiagnostic = result.warnings().stream()
+                .anyMatch(w -> w.contains("inconsistent-lane-tags"));
+        assertTrue(hasDiagnostic,
+                "a contradictory declared total must be reported: " + result.warnings());
+
+        Lanes lanes = new LanesXmlReader().read(result.lanesFile());
+        int maxDirectedLaneObjects = lanes.getLanesToLinkAssignments().values().stream()
+                .mapToInt(a -> a.getLanes().size())
+                .max().orElse(0);
+        assertTrue(maxDirectedLaneObjects <= 2,
+                "the contradictory forward=3 value must not be used as a physical count; got "
+                        + maxDirectedLaneObjects);
+    }
+
     /** Link ids whose to-node has no outgoing links (a terminal / dead-end link). */
     private static Set<String> deadEndLinkIds(Network network) {
         Set<String> deadEnds = new LinkedHashSet<>();

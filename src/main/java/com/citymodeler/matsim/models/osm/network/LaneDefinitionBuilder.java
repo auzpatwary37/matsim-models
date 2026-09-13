@@ -69,6 +69,13 @@ public final class LaneDefinitionBuilder {
             boolean oneway = isOneway(way, rule, config);
             OsmLaneCount count = countResolver.resolve(way.tags(), ref.forward(), oneway,
                     rule.lanesPerDirection());
+            // Resolver-level findings (inconsistent-lane-tags, undetermined-lane-split,
+            // malformed-lane-count) belong in the bundle report too; otherwise a contradictory tag
+            // set silently loses its diagnostic between the resolver and the decomposition.
+            for (String code : count.issueCodes()) {
+                issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, code,
+                        "Link " + linkId + " lane resolution: " + code, null));
+            }
             String turnLanesTag = turnLanes(way, ref.forward(), oneway, count);
             if (turnLanesTag == null && hasBareTurnLanes(way, ref.forward())) {
                 // A whole-carriageway turn:lanes on a bidirectional way with an unknown split is
