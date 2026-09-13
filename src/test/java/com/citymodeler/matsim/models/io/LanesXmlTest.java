@@ -2,11 +2,15 @@ package com.citymodeler.matsim.models.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
 
 import org.junit.jupiter.api.Test;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
 import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.lanes.Lane;
@@ -24,7 +28,6 @@ class LanesXmlTest {
                             <leadsTo>
                                 <toLink refId="l2"/>
                                 <toLink refId="l3"/>
-                                <toLane refId="lane-2"/>
                             </leadsTo>
                             <capacity vehiclesPerHour="700.0"/>
                             <startsAt meterFromLinkEnd="45.0"/>
@@ -48,11 +51,127 @@ class LanesXmlTest {
         Lane lane = assignment.getLanes().get(Id.create("lane-1", Lane.class));
         assertEquals(2, lane.getToLinkIds().size());
         assertEquals("l2", lane.getToLinkIds().get(0).toString());
-        assertEquals("lane-2", lane.getToLaneIds().get(0).toString());
         assertEquals(700.0, lane.getCapacityVehiclesPerHour());
         assertEquals(45.0, lane.getStartsAtMeterFromLinkEnd());
         assertEquals("1", lane.getAlignment());
         assertEquals("bus", lane.getAttributes().getAttribute("lane-kind"));
+    }
+
+    @Test
+    void toLaneOnlyLaneRoundTrips() {
+        String xml = """
+                <laneDefinitions xmlns="http://www.matsim.org/files/dtd">
+                    <lanesToLinkAssignment linkIdRef="l1">
+                        <lane id="lane-1">
+                            <leadsTo>
+                                <toLane refId="lane-2"/>
+                                <toLane refId="lane-3"/>
+                            </leadsTo>
+                            <alignment>0</alignment>
+                        </lane>
+                    </lanesToLinkAssignment>
+                </laneDefinitions>
+                """;
+
+        Lanes lanes = new LanesXmlReader().read(xml);
+        Lanes roundTripped = new LanesXmlReader().read(new LanesXmlWriter().writeToString(lanes));
+
+        Lane lane = roundTripped.getLanesToLinkAssignments().get(Id.create("l1", Link.class))
+                .getLanes().get(Id.create("lane-1", Lane.class));
+        assertEquals(0, lane.getToLinkIds().size());
+        assertEquals(2, lane.getToLaneIds().size());
+        assertEquals("lane-2", lane.getToLaneIds().get(0).toString());
+    }
+
+    @Test
+    void bothPresentEmitsToLinkAndPreservesDroppedToLaneIds() {
+        Lanes lanes = new Lanes();
+        LanesToLinkAssignment assignment = new LanesToLinkAssignment(Id.create("l1", Link.class));
+        Lane lane = new Lane(Id.create("l1_l0", Lane.class));
+        lane.addToLinkId(Id.create("l2", Link.class));
+        lane.addToLaneId(Id.create("l1_l1", Lane.class));
+        lane.addToLaneId(Id.create("l1_l2", Lane.class));
+        lane.setAlignment("0");
+        assignment.addLane(lane);
+        lanes.addAssignment(assignment);
+
+        String xml = new LanesXmlWriter().writeToString(lanes);
+        Lanes reparsed = new LanesXmlReader().read(xml);
+
+        Lane reparsedLane = reparsed.getLanesToLinkAssignments().get(Id.create("l1", Link.class))
+                .getLanes().get(Id.create("l1_l0", Lane.class));
+        assertEquals(1, reparsedLane.getToLinkIds().size());
+        assertEquals("l2", reparsedLane.getToLinkIds().get(0).toString());
+        assertEquals(0, reparsedLane.getToLaneIds().size());
+        assertEquals("l1_l1,l1_l2", reparsedLane.getAttributes().getAttribute("osm:lane.toLaneIds"));
+    }
+
+    @Test
+    void emptyLeadsToThrows() {
+        Lanes lanes = new Lanes();
+        LanesToLinkAssignment assignment = new LanesToLinkAssignment(Id.create("l1", Link.class));
+        Lane lane = new Lane(Id.create("l1_l0", Lane.class));
+        lane.setAlignment("0");
+        assignment.addLane(lane);
+        lanes.addAssignment(assignment);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> new LanesXmlWriter().writeToString(lanes));
+        assertTrue(exception.getMessage().contains("l1_l0"));
+    }
+
+    @Test
+    void writtenRootHasNoAttributesChild() {
+        Lanes lanes = new Lanes();
+        LanesToLinkAssignment assignment = new LanesToLinkAssignment(Id.create("l1", Link.class));
+        Lane lane = new Lane(Id.create("l1_l0", Lane.class));
+        lane.addToLinkId(Id.create("l2", Link.class));
+        lane.setAlignment("0");
+        assignment.addLane(lane);
+        lanes.addAssignment(assignment);
+        lanes.getAttributes().putAttribute("legacy-root", "ignored");
+
+        String xml = new LanesXmlWriter().writeToString(lanes);
+        Document document = XmlSupport.parse(xml);
+        Element root = document.getDocumentElement();
+        assertEquals("laneDefinitions", root.getTagName());
+        assertNull(XmlSupport.child(root, "attributes"));
+    }
+
+    @Test
+    void zeroOptionalFieldsRoundTripStable() {
+        Lanes lanes = new Lanes();
+        LanesToLinkAssignment assignment = new LanesToLinkAssignment(Id.create("l1", Link.class));
+        Lane lane = new Lane(Id.create("l1_l0", Lane.class));
+        lane.addToLinkId(Id.create("l2", Link.class));
+        lane.setCapacityVehiclesPerHour(0.0);
+        lane.setStartsAtMeterFromLinkEnd(0.0);
+        lane.setAlignment(null);
+        assignment.addLane(lane);
+        lanes.addAssignment(assignment);
+
+        Lanes roundTripped = new LanesXmlReader().read(new LanesXmlWriter().writeToString(lanes));
+        Lane reparsed = roundTripped.getLanesToLinkAssignments().get(Id.create("l1", Link.class))
+                .getLanes().get(Id.create("l1_l0", Lane.class));
+        assertEquals(0.0, reparsed.getCapacityVehiclesPerHour());
+        assertEquals(0.0, reparsed.getStartsAtMeterFromLinkEnd());
+    }
+
+    @Test
+    void writerDoesNotMutateCallerAttributesOnAlignmentNormalization() {
+        Lanes lanes = new Lanes();
+        LanesToLinkAssignment assignment = new LanesToLinkAssignment(Id.create("l1", Link.class));
+        Lane lane = new Lane(Id.create("l1_l0", Lane.class));
+        lane.addToLinkId(Id.create("l2", Link.class));
+        lane.setAlignment("left");
+        assignment.addLane(lane);
+        lanes.addAssignment(assignment);
+
+        new LanesXmlWriter().writeToString(lanes);
+
+        assertNull(lane.getAttributes().getAttribute("osm:lane.alignmentProvenance"));
+        assertNull(lane.getAttributes().getAttribute("osm:lane.alignmentRaw"));
+        assertEquals("left", lane.getAlignment());
     }
 
     @Test

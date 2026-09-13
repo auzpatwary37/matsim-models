@@ -11,6 +11,12 @@ import com.citymodeler.matsim.models.lanes.Lanes;
 import com.citymodeler.matsim.models.lanes.LanesToLinkAssignment;
 import com.citymodeler.matsim.models.network.Link;
 
+/**
+ * Reads the published MATSim {@code laneDefinitions_v2.0} shape. Feeding a
+ * legacy {@code <lanes>/<assignment>} document yields an empty model (the
+ * legacy element names are not recognized); that tolerance is intentional and
+ * requires no special handling.
+ */
 public final class LanesXmlReader {
     private static final String SCHEMA = "/schemas/lanes.xsd";
     private final boolean validateSchema;
