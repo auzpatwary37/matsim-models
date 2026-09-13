@@ -72,6 +72,11 @@ class DeterministicOutputTest {
 
     @Test
     void identicalFeedImportProducesByteIdenticalSchedule(@TempDir Path feedDir) throws Exception {
+        // Smoke test only: both imports happen in one JVM, so this cannot detect the per-JVM
+        // Map.copyOf hash-salt bug (the salt is fixed within a process). Cross-process determinism is
+        // guaranteed by the canonical key/row order asserted in parsedFeedExposesCanonicalKeyOrder
+        // and canonicalFrequencyRowOrder; this test merely pins that two builds in the same process
+        // agree.
         writeFeed(feedDir, 20260913L);
 
         GtfsImportConfig config = GtfsImportConfig.forFolder(feedDir,
@@ -112,14 +117,18 @@ class DeterministicOutputTest {
 
     /**
      * Regression guard for the per-JVM hash-salt determinism bug. The parsed feed must expose its
-     * entity maps in a canonical (natural key) order: the builder numbers routes ({@code _r0},
-     * {@code _r1}, ...) by iterating these maps, so a {@code Map.copyOf}-style unordered view makes
-     * the serialized schedule depend on process identity, while preserving CSV physical row order
-     * would make it depend on row order. Canonical order is invariant to both.
+     * keyed maps in a canonical (natural key) order: the builder numbers routes ({@code _r0},
+     * {@code _r1}, ...) and walks stop times/shapes by iterating these maps, so a
+     * {@code Map.copyOf}-style unordered view makes the serialized schedule depend on process
+     * identity, while preserving CSV physical row order would make it depend on row order. Canonical
+     * order is invariant to both. Every keyed map on the feed is covered here.
      */
     @Test
     void parsedFeedExposesCanonicalKeyOrder(@TempDir Path feedDir) throws Exception {
         writeFeed(feedDir, 333L);
+        writeCsv(feedDir, "shapes.txt",
+                "shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence",
+                List.of("SH_B,45.50,-73.50,2", "SH_A,45.50,-73.50,1", "SH_B,45.52,-73.52,1"));
         GtfsImportConfig config = GtfsImportConfig.forFolder(feedDir,
                 GtfsImportConfig.ServiceDateSelection.DAY_WITH_MOST_TRIPS);
 
@@ -129,14 +138,74 @@ class DeterministicOutputTest {
         assertEquals(new TreeSet<>(csvFirstColumn(feedDir, "stops.txt")),
                 new TreeSet<>(feed.stops().keySet()),
                 "stop set must match the source");
-        for (List<String> keys : List.of(
-                new ArrayList<>(feed.stops().keySet()),
-                new ArrayList<>(feed.routes().keySet()),
-                new ArrayList<>(feed.trips().keySet()))) {
-            List<String> sorted = new ArrayList<>(keys);
+
+        java.util.Map<String, List<String>> keysByMap = new java.util.LinkedHashMap<>();
+        keysByMap.put("stops", new ArrayList<>(feed.stops().keySet()));
+        keysByMap.put("routes", new ArrayList<>(feed.routes().keySet()));
+        keysByMap.put("trips", new ArrayList<>(feed.trips().keySet()));
+        keysByMap.put("stopTimesByTrip", new ArrayList<>(feed.stopTimesByTrip().keySet()));
+        keysByMap.put("shapesByShapeId", new ArrayList<>(feed.shapesByShapeId().keySet()));
+
+        for (var entry : keysByMap.entrySet()) {
+            List<String> sorted = new ArrayList<>(entry.getValue());
             Collections.sort(sorted);
-            assertEquals(sorted, keys, "feed maps must iterate in canonical key order: " + keys);
+            assertEquals(sorted, entry.getValue(),
+                    "feed map " + entry.getKey() + " must iterate in canonical key order");
         }
+        // The shapes fixture actually has multiple distinct shape ids, so the guard is non-vacuous.
+        assertTrue(feed.shapesByShapeId().keySet().containsAll(List.of("SH_A", "SH_B")));
+    }
+
+    /**
+     * Frequency rows are a list, not a keyed map, so the map canonicalization does not cover them.
+     * They must still be in a canonical total order before they reach the departure builder, which
+     * emits frequency departures in list order. This test shuffles {@code frequencies.txt} rows
+     * between two builds and asserts the serialized schedule is byte-identical.
+     */
+    @Test
+    void canonicalFrequencyRowOrderProducesByteIdenticalSchedule(@TempDir Path feedDir) throws Exception {
+        GtfsImportConfig config = GtfsImportConfig.forFolder(feedDir,
+                GtfsImportConfig.ServiceDateSelection.DAY_WITH_MOST_TRIPS);
+
+        writeFeedWithFrequencies(feedDir, 111L);
+        List<String> rawBefore = frequencyFileRows(feedDir);
+        String xmlBefore = new TransitScheduleXmlWriter().writeToString(
+                new GtfsTransitScheduleBuilder().build(new GtfsImporter().read(config), config).schedule());
+
+        writeFeedWithFrequencies(feedDir, 222L);
+        List<String> rawAfter = frequencyFileRows(feedDir);
+        // Prove the shuffle is real: the parsed physical row order actually changed.
+        assertNotEquals(rawBefore, rawAfter, "frequency shuffle must reorder the source rows");
+        String xmlAfter = new TransitScheduleXmlWriter().writeToString(
+                new GtfsTransitScheduleBuilder().build(new GtfsImporter().read(config), config).schedule());
+
+        assertEquals(xmlBefore, xmlAfter, "schedule XML must not depend on frequencies.txt row order");
+        assertTrue(xmlBefore.contains("<departure"), "fixture must emit frequency departures");
+    }
+
+    private static List<String> frequencyFileRows(Path dir) throws IOException {
+        List<String> rows = new ArrayList<>(Files.readAllLines(dir.resolve("frequencies.txt")));
+        rows.remove(0); // header
+        rows.removeIf(String::isBlank);
+        return rows;
+    }
+
+    private static void writeFeedWithFrequencies(Path dir, long shuffleSeed) throws IOException {
+        Random random = new Random(shuffleSeed);
+        writeCsv(dir, "agency.txt", AGENCY_HEADER, AGENCY_ROWS);
+        writeCsv(dir, "stops.txt", STOPS_HEADER, STOP_ROWS);
+        writeCsv(dir, "routes.txt", ROUTES_HEADER, ROUTE_ROWS);
+        writeCsv(dir, "trips.txt", TRIPS_HEADER, TRIP_ROWS);
+        writeCsv(dir, "stop_times.txt", STOP_TIMES_HEADER, STOP_TIME_ROWS);
+        writeCsv(dir, "calendar.txt", CALENDAR_HEADER, CALENDAR_ROWS);
+        // Multiple distinct frequency rows for one trip: shuffled row order must not change output.
+        List<String> freqRows = List.of(
+                "T1,06:00:00,07:00:00,600,1",
+                "T1,07:00:00,08:00:00,900,0",
+                "T2,09:00:00,10:00:00,1200,1");
+        writeCsv(dir, "frequencies.txt",
+                "trip_id,start_time,end_time,headway_secs,exact_times",
+                shuffled(freqRows, random));
     }
 
     private static List<String> csvFirstColumn(Path dir, String name) throws IOException {

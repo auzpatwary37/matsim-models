@@ -1,6 +1,8 @@
 package com.citymodeler.matsim.models.gtfs;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,7 +41,7 @@ public final class GtfsFeed {
         this.stopTimesByTrip = canonicalMap(stopTimesByTrip);
         this.calendarRows = List.copyOf(calendarRows);
         this.calendarDatesRows = List.copyOf(calendarDatesRows);
-        this.frequencyRows = List.copyOf(frequencyRows);
+        this.frequencyRows = canonicalFrequencyRows(frequencyRows);
         this.shapesByShapeId = canonicalMap(shapesByShapeId);
         this.warnings = List.copyOf(warnings);
     }
@@ -54,6 +56,24 @@ public final class GtfsFeed {
      */
     private static <V> Map<String, V> canonicalMap(Map<String, V> source) {
         return Collections.unmodifiableMap(new TreeMap<>(source));
+    }
+
+    /**
+     * Returns the frequency rows in a canonical, permutation-invariant total order. Rows are keyed by
+     * the stable tuple {@code (trip_id, start_time, end_time, headway_secs, exact_times)}, so a feed
+     * whose {@code frequencies.txt} rows are shuffled produces the same departure sequence. The
+     * departure builder emits frequency departures in list order, so without this a shuffled feed
+     * would serialize different departure element order.
+     */
+    private static List<GtfsFrequencyRow> canonicalFrequencyRows(List<GtfsFrequencyRow> source) {
+        List<GtfsFrequencyRow> rows = new ArrayList<>(source);
+        rows.sort(Comparator
+                .comparing(GtfsFrequencyRow::tripId)
+                .thenComparingInt(GtfsFrequencyRow::startTime)
+                .thenComparingInt(GtfsFrequencyRow::endTime)
+                .thenComparingInt(GtfsFrequencyRow::headwaySecs)
+                .thenComparingInt(GtfsFrequencyRow::exactTimes));
+        return Collections.unmodifiableList(rows);
     }
 
     public String feedId() { return feedId; }
