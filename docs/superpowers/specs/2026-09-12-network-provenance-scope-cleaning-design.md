@@ -145,6 +145,28 @@ for `build()`/`simplify()`. The old `<3-link non-transit` behavior is removed.
   whose links no longer exist.
 - `OsmStopHintExtractor.findParentRelations` is O(n²)-ish on large inputs (pre-existing); the
   Luxembourg run takes ~15 min and is dominated by it, not by cleaning.
-- pt2MATSim additionally retains ~1,151 transit-carrying `service` links; our parity preset does not
-  yet special-case transit on excluded classes.
+- pt2MATSim additionally retains ~1,151 transit-carrying `service` links (`keepWaysWithPublicTransit`);
+  our parity preset excludes all service ways.
+
+## Maximum contracted-link length (scope-parity follow-up)
+
+Diagnosis of the earlier parity undershoot (ours 86,091 vs pt2MATSim 105,125 links) found it was not a
+missing region and not a connectivity defect (both cleaned car subgraphs were 100% one SCC); it was
+that pt2MATSim caps contracted link length at **500 m** (`maxLinkLength`) and retains a degree-2 node
+where dissolving it would exceed the cap, whereas our engine had no cap and emitted very long links
+(ours max 10,007 m vs pt2M 3,628 m). On the shared ways we already matched pt2MATSim's link density
+(ratio 0.99).
+
+`OsmNetworkBuildConfig.maxContractedLinkLengthMeters()` adds that cap (default 0 = no cap;
+`pt2matsimComparableConfig()` sets 500 m). Enforcement walks each chain and promotes the node where
+the accumulated length first exceeds the cap, so an emitted link may overshoot by at most one atomic
+segment — matching pt2MATSim's semantics.
+
+## Road-name scoring for stop mapping
+
+The Phase-1 build now emits `osm:name` / `osm:sourceNames` on links (54.4% of Luxembourg links named).
+`StopCandidateScorer` uses them for the spec-mandated "same name similarity" candidate criterion via
+`CandidateScoreWeights.nameSimilarity`: normalized exact match scores 1.0, containment 0.75, otherwise
+a token overlap. This disambiguates among nearby candidate links (e.g. both sides of a dual
+carriageway) using the GTFS stop name.
 

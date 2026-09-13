@@ -133,23 +133,37 @@ guaranteed. Removed components are reported as quarantine issues (never silently
 
 ### Scope parity preset
 
-`OsmNetworkBuildConfig.pt2matsimComparableConfig()` excludes `highway=service` to match pt2MATSim's
-default OSM-converter scope (which defines no service default parameters). Re-measured Luxembourg:
+`OsmNetworkBuildConfig.pt2matsimComparableConfig()` matches pt2MATSim's default OSM-converter scope and
+contraction policy: it excludes `highway=service` (pt2MATSim defines no service default parameters) and
+caps contracted link length at **500 m** (`maxLinkLength`), so a degree-2 node is retained where
+dissolving it would produce a longer link.
 
 | network | ours nodes/links | pt2MATSim nodes/links |
 |---|---|---|
 | default scope, post-cleaning (service kept) | 73,347 / 161,016 | — (177,968 links when pt2M keeps service) |
-| parity preset (service excluded) | 39,464 / 86,091 | 49,549 / 105,125 |
+| parity preset (service excluded, 500 m cap) | **51,402 / 109,220** | **49,549 / 105,125** |
 
-Two honest observations:
+The parity preset now matches pt2MATSim to **+3.9%** on links (was −18% before the cap). The car
+routable subgraph is **one strongly connected component (100.0% of its nodes)** in both networks.
 
-- **Like-for-like (service kept) we are now within ~10%**: ours 161,016 vs pt2MATSim's service-kept
-  177,968 links. The remaining gap is the earlier motorway piece-count policy, not scope.
-- **The parity preset undershoots** pt2MATSim (86,091 vs 105,125) because our cleaner is stricter:
-  `service` ways are highly connective, so excluding them disconnects many non-service fragments,
-  which the SCC cleaner then removes. pt2MATSim keeps dead-ends/sources for modes outside its
-  configured routable subnetworks. This is a policy difference in dead-end aggressiveness, tunable via
-  `routableModes`, not an over/under-segmentation defect. The default project config keeps service.
+**How the gap was diagnosed.** A spatial difference map (links rasterized to 50 m cells, proximity
+join) showed the earlier deficit was *not* a missing region — it was scattered short fragments — and an
+independent SCC audit showed both cleaned car graphs were already 100% strongly connected (so our
+connectivity was not broken). The cause was contraction policy: pt2MATSim stops thinning at 500 m
+(its longest link 3,628 m), while we had no cap (our longest 10,007 m). On the 37,770 shared OSM ways
+our link density already matched pt2MATSim (ratio 0.99); the deficit was long merged links, not missing
+roads. Adding the same 500 m cap reproduces pt2MATSim's counts.
+
+Remaining per-class delta is policy, not connectivity: `(rail/other)` +2,476 (we admit more rail/tram),
+`service` −1,151 (pt2MATSim keeps transit-carrying service via `keepWaysWithPublicTransit`, which we
+exclude entirely), and small `residential`/`secondary`/`tertiary` over-counts from the cap boundary.
+
+### Road-name provenance for stop mapping
+
+Links carry `osm:name` / `osm:sourceNames` (54.4% of Luxembourg links named). `StopCandidateScorer`
+now uses them for the spec's "same name similarity" candidate criterion
+(`CandidateScoreWeights.nameSimilarity`), disambiguating among nearby candidate links using the GTFS
+stop name.
 
 ### Provenance now emitted per link
 
