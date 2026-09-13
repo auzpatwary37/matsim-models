@@ -119,13 +119,36 @@ class TransitNetworkMapperTest {
     @Test
     void weightValidationRejectsNegatives() {
         assertThrows(IllegalArgumentException.class, () ->
-                new CandidateScoreWeights(-1, 0).validate());
+                new CandidateScoreWeights(-1, 0, 0).validate());
+    }
+
+    /**
+     * Road-name similarity (spec §Stop-Link Candidate Scoring) prefers a candidate whose source road
+     * name matches the stop name, which disambiguates among several nearby links.
+     */
+    @Test
+    void nameSimilarityScoresMatchingCandidateHigher() {
+        Link named = network.getLinks().get(Id.create("l1", Link.class));
+        named.getAttributes().putAttribute("osm:name", "Rue de Hamm");
+        // A second, identical link with an unrelated name.
+        Node a = network.getNodes().get(Id.create("A", Node.class));
+        Node b = network.getNodes().get(Id.create("B", Node.class));
+        Link other = new Link(Id.create("l2", Link.class), a.getId(), b.getId(),
+                100.0, 900.0, 13.9, 2.0, Set.of("car", "pt"));
+        other.getAttributes().putAttribute("osm:name", "Avenue de la Liberté");
+        network.addLink(other);
+        network.postProcess();
+
+        assertTrue(StopCandidateScorer.nameSimilarity("Hamm", named) > 0.5,
+                "stop 'Hamm' should match 'Rue de Hamm'");
+        assertEquals(0.0, StopCandidateScorer.nameSimilarity("Hamm", other));
+        assertEquals(0.0, StopCandidateScorer.nameSimilarity("   ", named));
     }
 
     @Test
     void weightValidationRejectsAllZero() {
         assertThrows(IllegalArgumentException.class, () ->
-                new CandidateScoreWeights(0, 0).validate());
+                new CandidateScoreWeights(0, 0, 0).validate());
     }
 
     @Test

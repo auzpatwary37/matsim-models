@@ -45,7 +45,7 @@ public final class StopCandidateScorer {
             // Mode compatibility: reject links that cannot carry the requested mode
             if (!isModeCompatible(link, mode)) continue;
 
-            double score = computeScore(nl.distance(), link, w, mode);
+            double score = computeScore(nl.distance(), link, w, mode, stop.getName());
             candidates.add(new StopCandidate(linkId, nl.distance(), score, false, false, false));
         }
         candidates.sort(Comparator.comparingDouble(StopCandidate::score).reversed());
@@ -96,7 +96,8 @@ public final class StopCandidateScorer {
         return false;
     }
 
-    private double computeScore(double distance, Link link, CandidateScoreWeights w, String mode) {
+    private double computeScore(double distance, Link link, CandidateScoreWeights w, String mode,
+                                String stopName) {
         double score = 0;
         // Primary: inverse distance
         score -= w.distance() * distance / 100.0;
@@ -105,6 +106,77 @@ public final class StopCandidateScorer {
         if (modes != null && modes.contains(mode)) {
             score += w.modeCompatibility();
         }
+        // Name similarity: a candidate whose source road name matches the stop name is preferred,
+        // which disambiguates among several nearby links (e.g. both sides of a dual carriageway).
+        if (w.nameSimilarity() > 0) {
+            score += w.nameSimilarity() * nameSimilarity(stopName, link);
+        }
         return score;
+    }
+
+    /** Normalized name similarity in [0,1] between the stop name and the link's source road name(s). */
+    static double nameSimilarity(String stopName, Link link) {
+        if (stopName == null || stopName.isBlank()) {
+            return 0.0;
+        }
+        String stop = normalizeName(stopName);
+        if (stop.isEmpty()) {
+            return 0.0;
+        }
+        double best = 0.0;
+        for (String candidate : linkNames(link)) {
+            String name = normalizeName(candidate);
+            if (name.isEmpty()) {
+                continue;
+            }
+            if (name.equals(stop)) {
+                return 1.0;
+            }
+            if (name.contains(stop) || stop.contains(name)) {
+                best = Math.max(best, 0.75);
+            } else {
+                best = Math.max(best, tokenOverlap(stop, name));
+            }
+        }
+        return best;
+    }
+
+    private static List<String> linkNames(Link link) {
+        List<String> names = new ArrayList<>();
+        addNames(link.getAttributes().getAttribute("osm:name"), names);
+        addNames(link.getAttributes().getAttribute("osm:sourceNames"), names);
+        return names;
+    }
+
+    private static void addNames(Object value, List<String> out) {
+        if (value == null) {
+            return;
+        }
+        for (String part : value.toString().split(",")) {
+            String trimmed = part.trim();
+            if (!trimmed.isEmpty() && !out.contains(trimmed)) {
+                out.add(trimmed);
+            }
+        }
+    }
+
+    private static String normalizeName(String value) {
+        return value.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", " ")
+                .trim();
+    }
+
+    /** Jaccard-ish token overlap so "Rue de Hamm" matches "Hamm" and shares partial words. */
+    private static double tokenOverlap(String a, String b) {
+        Set<String> ta = new java.util.TreeSet<>(List.of(a.split(" ")));
+        Set<String> tb = new java.util.TreeSet<>(List.of(b.split(" ")));
+        ta.removeIf(t -> t.length() < 3);
+        tb.removeIf(t -> t.length() < 3);
+        if (ta.isEmpty() || tb.isEmpty()) {
+            return 0.0;
+        }
+        Set<String> shared = new java.util.TreeSet<>(ta);
+        shared.retainAll(tb);
+        return shared.isEmpty() ? 0.0 : (double) shared.size() / Math.max(ta.size(), tb.size());
     }
 }

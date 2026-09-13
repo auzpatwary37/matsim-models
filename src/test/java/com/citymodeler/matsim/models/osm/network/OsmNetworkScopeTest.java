@@ -67,4 +67,36 @@ final class OsmNetworkScopeTest {
                 "parity preset drops the service way");
         assertEquals(0, withoutService.network().getNodes().size());
     }
+
+    /**
+     * The pt2MATSim parity preset caps contracted link length at 500 m: along a chain, the interior
+     * node where the accumulated length first exceeds the cap is retained, so the chain is split
+     * there (the emitted link may overshoot the cap by up to one atomic segment, as in pt2MATSim).
+     */
+    @Test
+    void parityPresetCapsContractedLinkLength() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0));
+        ns.put("B", n("B", 400));
+        ns.put("C", n("C", 800));
+        ns.put("D", n("D", 1200));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B", "C", "D"),
+                OsmTagSet.of(Map.of("highway", "residential"))));
+        OsmImportResult result = new OsmImportResult(ns, ws, new TreeMap<>(), List.of(),
+                OsmProvenance.defaultFor("f.osm", "EPSG:3857"));
+
+        // Default (no cap): one contracted link each direction between the endpoints.
+        CollapsedTopology uncapped = OsmTopologyBuilder.build(result,
+                OsmNetworkBuildConfig.defaultConfig(), false);
+        assertEquals(2, uncapped.network().getLinks().size());
+
+        // Parity preset (500 m cap): C is retained where A->B->C exceeds the cap -> 4 directed links.
+        CollapsedTopology capped = OsmTopologyBuilder.build(result,
+                OsmNetworkBuildConfig.pt2matsimComparableConfig(), false);
+        assertEquals(4, capped.network().getLinks().size());
+        assertTrue(capped.network().getNodes().containsKey(
+                com.citymodeler.matsim.models.api.Id.create("osm_node_C",
+                        com.citymodeler.matsim.models.network.Node.class)));
+    }
 }

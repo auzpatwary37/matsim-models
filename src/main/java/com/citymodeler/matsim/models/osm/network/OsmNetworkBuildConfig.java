@@ -17,13 +17,17 @@ public final class OsmNetworkBuildConfig {
     private final boolean cleanupIsolatedComponents;
     private final Set<String> excludedHighwayClasses;
     private final Set<String> routableModes;
+    private final double maxContractedLinkLengthMeters;
 
     private OsmNetworkBuildConfig(OsmGeometryMode geometryMode, boolean preserveTransitStopNodes,
                                    Set<String> explicitOsmNodeIdsToKeep, double sharpBendAngleDegrees,
                                    Map<String, OsmWayRule> rulesByKeyValue,
                                    boolean preserveCrossingNodes, boolean preserveBarrierNodes,
                                    boolean cleanupIsolatedComponents, Set<String> excludedHighwayClasses,
-                                   Set<String> routableModes) {
+                                   Set<String> routableModes, double maxContractedLinkLengthMeters) {
+        if (maxContractedLinkLengthMeters < 0) {
+            throw new IllegalArgumentException("maxContractedLinkLengthMeters must be >= 0");
+        }
         this.geometryMode = geometryMode;
         this.preserveTransitStopNodes = preserveTransitStopNodes;
         this.explicitOsmNodeIdsToKeep = Set.copyOf(explicitOsmNodeIdsToKeep);
@@ -34,39 +38,41 @@ public final class OsmNetworkBuildConfig {
         this.cleanupIsolatedComponents = cleanupIsolatedComponents;
         this.excludedHighwayClasses = Set.copyOf(excludedHighwayClasses);
         this.routableModes = Set.copyOf(routableModes);
+        this.maxContractedLinkLengthMeters = maxContractedLinkLengthMeters;
     }
 
     public static OsmNetworkBuildConfig materializeGeometryConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
-                true, Set.of(), 35.0, defaultRules(), false, true, false, Set.of(), defaultRoutableModes());
+                true, Set.of(), 35.0, defaultRules(), false, true, false, Set.of(), defaultRoutableModes(), 0.0);
     }
 
     /** Materialize-geometry config that additionally enforces routable cleaning (bundle pipeline). */
     public static OsmNetworkBuildConfig materializeGeometryConfigWithCleanup() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
-                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes());
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(), 0.0);
     }
 
     public static OsmNetworkBuildConfig defaultConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
-                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes());
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(), 0.0);
     }
 
     /** Default contraction config that additionally removes isolated non-transit components. */
     public static OsmNetworkBuildConfig defaultConfigWithCleanup() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
-                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes());
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(), 0.0);
     }
 
     /**
-     * Scope comparable to pt2MATSim's default OSM converter, which defines no {@code highway=service}
-     * default parameters and therefore drops service roads while keeping everything else. This is a
-     * comparison preset only; the project default still includes service ways.
+     * Scope comparable to pt2MATSim's default OSM converter: excludes {@code highway=service} (pt2MATSim
+     * defines no service default parameters) and caps contracted link length at 500 m (pt2MATSim's
+     * {@code maxLinkLength}), so degree-2 nodes are retained where dissolving them would exceed the cap.
+     * Comparison preset only; the project default still keeps service ways with no length cap.
      */
     public static OsmNetworkBuildConfig pt2matsimComparableConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
                 true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of("service"),
-                defaultRoutableModes());
+                defaultRoutableModes(), 500.0);
     }
 
     private static Set<String> defaultRoutableModes() {
@@ -109,6 +115,15 @@ public final class OsmNetworkBuildConfig {
     /** Modes for which the cleaner enforces strongly connected routability. */
     public Set<String> routableModes() {
         return routableModes;
+    }
+
+    /**
+     * Maximum length (metres) of a contracted link; {@code 0} means no cap. When positive, a
+     * degree-2 node is retained as a routing node if dissolving it would make the merged link longer
+     * than this value.
+     */
+    public double maxContractedLinkLengthMeters() {
+        return maxContractedLinkLengthMeters;
     }
 
     public OsmWayRule resolveRule(OsmTagSet tags) {

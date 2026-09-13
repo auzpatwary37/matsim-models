@@ -20,7 +20,7 @@ public final class OsmSegmentGraph {
             Set<String> forwardModes, Set<String> backwardModes,
             double forwardSpeed, double backwardSpeed,
             double forwardLanes, double backwardLanes, double capacityPerLane,
-            boolean forwardAllowed, boolean backwardAllowed) {
+            boolean forwardAllowed, boolean backwardAllowed, double length) {
         public Segment {
             Objects.requireNonNull(wayId, "wayId");
             Objects.requireNonNull(nodeA, "nodeA");
@@ -106,9 +106,14 @@ public final class OsmSegmentGraph {
                 double backwardSpeed = speed.resolve(way, rule, false);
                 double forwardLanes = lanes.resolve(way, rule, true, oneway);
                 double backwardLanes = lanes.resolve(way, rule, false, oneway);
+                OsmNodeRecord ra = importResult.nodes().get(a);
+                OsmNodeRecord rb = importResult.nodes().get(b);
+                double length = Math.hypot(
+                        ra.projectedCoord().getX() - rb.projectedCoord().getX(),
+                        ra.projectedCoord().getY() - rb.projectedCoord().getY());
                 out.add(new Segment(way.id(), i, a, b,
                         forwardModes, backwardModes, forwardSpeed, backwardSpeed,
-                        forwardLanes, backwardLanes, rule.capacityPerLane(), fwd, bwd));
+                        forwardLanes, backwardLanes, rule.capacityPerLane(), fwd, bwd, length));
             }
         }
         out.sort(Comparator.comparing((Segment s) -> s.wayId())

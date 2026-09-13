@@ -105,6 +105,7 @@ public final class OsmTopologyBuilder {
                 config.preserveCrossingNodes(), config.preserveBarrierNodes());
 
         Set<String> routing = OsmRoutingNodeSelector.select(graph, classification, keepAllGeometryNodes);
+        routing = enforceMaxLinkLength(graph, routing, config.maxContractedLinkLengthMeters());
         routing = anchorCycles(graph, routing);
 
         Map<String, OsmNodeRecord> nodeRecords = importResult.nodes();
@@ -214,6 +215,67 @@ public final class OsmTopologyBuilder {
 
         return new CollapsedTopology(network, collapsedLinks, linkIdsByOsmWayId, geometry,
                 classification, new TreeSet<>(routing), issues, quarantined);
+    }
+
+    /**
+     * Retains additional routing nodes so that no contracted link exceeds {@code cap} metres,
+     * mirroring pt2MATSim's {@code maxLinkLength} policy: walk each maximal chain between existing
+     * routing nodes and, where the distance since the last kept node would exceed the cap, promote
+     * the node at which it exceeds to a routing node. A resulting link may overshoot the cap by at
+     * most one atomic segment (as in pt2MATSim). A non-positive cap disables the policy.
+     */
+    private static Set<String> enforceMaxLinkLength(OsmSegmentGraph graph, Set<String> routingBase,
+                                                    double cap) {
+        if (cap <= 0.0) {
+            return routingBase;
+        }
+        Set<String> promotions = new TreeSet<>();
+        Set<String> visited = new HashSet<>();
+        for (String start : new TreeSet<>(routingBase)) {
+            for (OsmSegmentGraph.Segment firstSeg : graph.segmentsFrom(start)) {
+                String neighbour = graph.other(firstSeg, start);
+                if (!OsmSegmentGraph.allowsTravel(firstSeg, start, neighbour)) {
+                    continue;
+                }
+                boolean chainForward = firstSeg.nodeA().equals(start)
+                        && firstSeg.nodeB().equals(neighbour);
+                if (visited.contains(segmentKey(firstSeg, chainForward))) {
+                    continue;
+                }
+                String cur = start;
+                OsmSegmentGraph.Segment seg = firstSeg;
+                double sinceLastKept = 0.0;
+                while (true) {
+                    String next = graph.other(seg, cur);
+                    if (!OsmSegmentGraph.allowsTravel(seg, cur, next)) {
+                        break;
+                    }
+                    boolean traversedForward = seg.nodeA().equals(cur) && seg.nodeB().equals(next);
+                    if (!visited.add(segmentKey(seg, traversedForward))) {
+                        break;
+                    }
+                    sinceLastKept += seg.length();
+                    if (routingBase.contains(next)) {
+                        break;
+                    }
+                    if (sinceLastKept > cap) {
+                        promotions.add(next);
+                        sinceLastKept = 0.0;
+                    } else if (promotions.contains(next)) {
+                        sinceLastKept = 0.0;
+                    }
+                    OsmSegmentGraph.Segment continuation = otherIncident(graph, next, seg);
+                    if (continuation == null) {
+                        break;
+                    }
+                    cur = next;
+                    seg = continuation;
+                }
+            }
+        }
+        Set<String> result = new TreeSet<>(routingBase);
+        result.addAll(promotions);
+        return result;
     }
 
     /**
