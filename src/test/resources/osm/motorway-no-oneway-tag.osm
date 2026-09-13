@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="matsim-models-test">
+  <!-- A motorway with no oneway tag: the motorway rule defaults to one-way, so the network emits
+       only forward directed links and lanes=3 is that direction's count. The trailing residential
+       way gives the motorway's final node an outgoing link so every motorway link is eligible. -->
+  <node id="1" lat="0.000000" lon="0.000000" />
+  <node id="2" lat="0.000000" lon="0.001000" />
+  <node id="3" lat="0.000000" lon="0.002000" />
+  <node id="4" lat="0.000000" lon="0.003000" />
+  <way id="20">
+    <nd ref="1" /><nd ref="2" /><nd ref="3" />
+    <tag k="highway" v="motorway" />
+    <tag k="lanes" v="3" />
+  </way>
+  <way id="21">
+    <nd ref="3" /><nd ref="4" />
+    <tag k="highway" v="residential" />
+  </way>
+</osm>

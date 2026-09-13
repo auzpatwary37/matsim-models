@@ -46,7 +46,8 @@ public final class CrsUtils {
         CoordinateReferenceSystem wgs84 = crsFactory.createFromName("EPSG:4326");
         CoordinateReferenceSystem target = crsFactory.createFromName(crs);
         CoordinateTransform transform = new CoordinateTransformFactory().createTransform(wgs84, target);
-        return new Projector(crs, transform);
+        CoordinateTransform inverse = new CoordinateTransformFactory().createTransform(target, wgs84);
+        return new Projector(crs, transform, inverse);
     }
 
     /** Projects WGS84 coordinates into a specific target CRS. */
@@ -58,10 +59,12 @@ public final class CrsUtils {
     public static final class Projector {
         private final String targetCrs;
         private final CoordinateTransform transform;
+        private final CoordinateTransform inverse;
 
-        private Projector(String targetCrs, CoordinateTransform transform) {
+        private Projector(String targetCrs, CoordinateTransform transform, CoordinateTransform inverse) {
             this.targetCrs = targetCrs;
             this.transform = transform;
+            this.inverse = inverse;
         }
 
         public String targetCrs() {
@@ -70,11 +73,23 @@ public final class CrsUtils {
 
         /** Projects a WGS84 (lon, lat) point into the target CRS (meters). */
         public Coord project(double lon, double lat) {
-            ProjCoordinate src = new ProjCoordinate(lon, lat);
+            return apply(transform, lon, lat);
+        }
+
+        /**
+         * Inverse-projects a target-CRS (x, y) point back to WGS84 lon/lat. This is the contract
+         * GeoJSON export relies on: projected metres must never be written as if they were degrees.
+         */
+        public Coord unproject(double x, double y) {
+            return apply(inverse, x, y);
+        }
+
+        private Coord apply(CoordinateTransform coordinateTransform, double a, double b) {
+            ProjCoordinate src = new ProjCoordinate(a, b);
             ProjCoordinate dst = new ProjCoordinate();
-            if (transform.transform(src, dst) == null) {
+            if (coordinateTransform.transform(src, dst) == null) {
                 throw new MatsimParseException(
-                        "Failed to project WGS84 (" + lon + ", " + lat + ") into " + targetCrs);
+                        "Failed to transform coordinate (" + a + ", " + b + ") via " + targetCrs);
             }
             return new Coord(dst.x, dst.y);
         }

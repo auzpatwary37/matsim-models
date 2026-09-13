@@ -150,4 +150,30 @@ class GtfsServiceSelectorTest {
         assertTrue(sel.warnings().stream().anyMatch(w -> w.contains("exceeds")),
                 "over-limit span must be reported");
     }
+
+    /**
+     * Determinism: when several dates tie for the highest service/trip count the earliest date must
+     * win, not an arbitrary {@code HashMap}/{@code Stream.max} pick.
+     */
+    @Test
+    void tieBreaksOnEarliestDateDeterministically() {
+        // Saturday 2025-01-04 and Sunday 2025-01-05 each have exactly one active service.
+        GtfsCalendarRow row = new GtfsCalendarRow("SVC", 0, 0, 0, 0, 0, 1, 1, "20250104", "20250105");
+        GtfsFeed feed = feedWithCalendar(row);
+
+        LocalDate expected = LocalDate.of(2025, 1, 4);
+        for (int i = 0; i < 25; i++) {
+            assertEquals(expected, GtfsServiceSelector.dayWithMostServices(feed));
+        }
+
+        GtfsFeed tripFeed = new GtfsFeed("feed1", "A1", "UTC",
+                Map.of(),
+                Map.of("R1", new GtfsRoute("R1", "A1", "1", "Line 1", null, 3, null, null)),
+                Map.of("T1", new GtfsTrip("T1", "R1", "SVC", "Down", null, 0, true, null, null, false, false)),
+                Map.of("T1", List.of()),
+                List.of(row), List.of(), List.of(), Map.of(), List.of());
+        for (int i = 0; i < 25; i++) {
+            assertEquals(expected, GtfsServiceSelector.dayWithMostTrips(tripFeed));
+        }
+    }
 }

@@ -53,4 +53,24 @@ class CrsUtilsTest {
         assertEquals(p1.getX(), p2.getX(), 1e-9);
         assertEquals(p1.getY(), p2.getY(), 1e-9);
     }
+
+    @Test
+    void projectThenUnprojectReturnsTheOriginalWgs84Coordinate() {
+        CrsUtils.Projector projector = CrsUtils.forCrs("EPSG:3857");
+        Coord projected = projector.project(-73.560, 45.500);
+        Coord roundTripped = projector.unproject(projected.getX(), projected.getY());
+
+        assertEquals(-73.560, roundTripped.getX(), 1e-6);
+        assertEquals(45.500, roundTripped.getY(), 1e-6);
+    }
+
+    @Test
+    void unprojectedGeometryIsWgs84Shaped() {
+        CrsUtils.Projector projector = CrsUtils.forCrs("EPSG:3857");
+        Coord wgs84 = projector.unproject(-8_200_000, 5_700_000);
+        assertTrue(wgs84.getX() >= -180.0 && wgs84.getX() <= 180.0,
+                "lon must be a WGS84 degree, got " + wgs84.getX());
+        assertTrue(wgs84.getY() >= -90.0 && wgs84.getY() <= 90.0,
+                "lat must be a WGS84 degree, got " + wgs84.getY());
+    }
 }

@@ -1,8 +1,12 @@
 package com.citymodeler.matsim.models.gtfs;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 /**
  * A single parsed GTFS feed with all its entities.
@@ -31,15 +35,45 @@ public final class GtfsFeed {
         this.feedId = Objects.requireNonNull(feedId, "feedId");
         this.agencyId = agencyId;
         this.agencyTimezone = agencyTimezone;
-        this.stops = Map.copyOf(stops);
-        this.routes = Map.copyOf(routes);
-        this.trips = Map.copyOf(trips);
-        this.stopTimesByTrip = Map.copyOf(stopTimesByTrip);
+        this.stops = canonicalMap(stops);
+        this.routes = canonicalMap(routes);
+        this.trips = canonicalMap(trips);
+        this.stopTimesByTrip = canonicalMap(stopTimesByTrip);
         this.calendarRows = List.copyOf(calendarRows);
         this.calendarDatesRows = List.copyOf(calendarDatesRows);
-        this.frequencyRows = List.copyOf(frequencyRows);
-        this.shapesByShapeId = Map.copyOf(shapesByShapeId);
+        this.frequencyRows = canonicalFrequencyRows(frequencyRows);
+        this.shapesByShapeId = canonicalMap(shapesByShapeId);
         this.warnings = List.copyOf(warnings);
+    }
+
+    /**
+     * Wraps a map in an unmodifiable view with a canonical key order (natural String ordering).
+     * Two reasons: (1) {@code Map.copyOf} returns a JDK immutable map whose iteration order is
+     * salted per JVM run, so the schedule builder's route numbering (which walks these maps) became
+     * process-dependent; (2) preserving the CSV physical row order would instead make output depend
+     * on row order, so shuffling a feed's rows would change it. Canonical ordering is invariant to
+     * both, keeping built schedules byte-stable across runs and row permutations.
+     */
+    private static <V> Map<String, V> canonicalMap(Map<String, V> source) {
+        return Collections.unmodifiableMap(new TreeMap<>(source));
+    }
+
+    /**
+     * Returns the frequency rows in a canonical, permutation-invariant total order. Rows are keyed by
+     * the stable tuple {@code (trip_id, start_time, end_time, headway_secs, exact_times)}, so a feed
+     * whose {@code frequencies.txt} rows are shuffled produces the same departure sequence. The
+     * departure builder emits frequency departures in list order, so without this a shuffled feed
+     * would serialize different departure element order.
+     */
+    private static List<GtfsFrequencyRow> canonicalFrequencyRows(List<GtfsFrequencyRow> source) {
+        List<GtfsFrequencyRow> rows = new ArrayList<>(source);
+        rows.sort(Comparator
+                .comparing(GtfsFrequencyRow::tripId)
+                .thenComparingInt(GtfsFrequencyRow::startTime)
+                .thenComparingInt(GtfsFrequencyRow::endTime)
+                .thenComparingInt(GtfsFrequencyRow::headwaySecs)
+                .thenComparingInt(GtfsFrequencyRow::exactTimes));
+        return Collections.unmodifiableList(rows);
     }
 
     public String feedId() { return feedId; }
