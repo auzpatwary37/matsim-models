@@ -29,10 +29,11 @@ final class OsmLaneHintExtractorTest {
         nodes.put("A", node("A", 0));
         nodes.put("B", node("B", 100));
         Map<String, OsmWayRecord> ways = new TreeMap<>();
-        // Bidirectional way carrying lanes=2 with explicit per-direction lanes, so the unchanged
-        // OsmLaneResolver reports 2 lanes per direction (a bare lanes=2 would be halved to 1).
+        // Bidirectional way carrying a consistent lane tag set: lanes=4 = forward 2 + backward 2, so
+        // the (now shared, validated) resolver reports 2 lanes per direction. The tags must sum to the
+        // declared total, otherwise the set is inconsistent and falls back to the total-derived split.
         ways.put("10", new OsmWayRecord("10", List.of("A", "B"), OsmTagSet.of(Map.of(
-                "highway", "residential", "lanes", "2",
+                "highway", "residential", "lanes", "4",
                 "lanes:forward", "2", "lanes:backward", "2",
                 "turn:lanes", "through|left"))));
         return new OsmImportResult(nodes, ways, new TreeMap<>(), List.of(),

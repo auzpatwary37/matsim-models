@@ -62,6 +62,15 @@ rule.defaultOneway())`, with `oneway = !(forwardAllowed && backwardAllowed)` —
 hand-written `oneway=*` parser. This guarantees a way emitted one-way in `network.xml` (including
 rule-default one-way such as `motorway`) is treated one-way when generating `laneDefinitions.xml`.
 
+**The lane-count hierarchy is shared with the network.** The base network's per-direction count
+(`network.xml` `permlanes` and `link.capacity = permlanes × capacityPerLane`) is produced by the
+SAME `OsmDirectionalLaneResolver` used for `laneDefinitions.xml`, via the thin `OsmLaneResolver` adapter. The network therefore also: validates the whole tag set against `lanes=*`
+(contradictory directional tags fall back to the total-derived split rather than inflating
+`permlanes`), never duplicates `lanes:both_ways`, uses `rule.lanesPerDirection()` when tags are
+absent, and emits an **integral** count (an odd bidirectional total rounds to `round(T / 2)` with the
+`undetermined-split` flag, never a fractional `permlanes`). The two artifacts cannot disagree on lane
+count.
+
 1. **Validate the whole tag set first** (only when `lanes=*` is present; this applies to **both
    bidirectional and one-way** ways — the one-way variant is stated in step 2). For a bidirectional
    way the set is **inconsistent** when any of:
