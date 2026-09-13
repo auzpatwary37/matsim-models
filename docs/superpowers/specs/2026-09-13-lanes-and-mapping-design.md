@@ -97,9 +97,14 @@ Deterministic handling per token (a lane cell may contain several indications jo
 | `merge_to_left` | merge left | lane ends; **no** `leadsTo` link; attribute `osm:lane.merge=left` |
 | `merge_to_right` | merge right | lane ends; no `leadsTo`; attribute `osm:lane.merge=right` |
 | `none` | no marked indication | lane unrestricted by turn marking → all geometrically-available outgoing links, confidence `none-observed` |
-| empty cell | missing indication | eligibility unknown (not unrestricted): no `leadsTo`, confidence `absent`, issue |
+| empty cell | missing indication | eligibility unknown (not observed): all geometrically-available outgoing links, confidence `absent`, issue |
 | multiple via `;` | e.g. `left;through` | union of each token's resolution; shared lane (see 1c) |
-| unknown token | e.g. `left_turn` or a misspelling | keep raw token, **no** guessed movement, confidence `unsupported`, issue |
+| unknown token | e.g. `left_turn` or a misspelling | keep raw token, **no** guessed movement: all geometrically-available outgoing links, confidence `unsupported`, issue |
+
+Because the published `laneDefinitions_v2.0` XSD makes `<leadsTo>` mandatory, every lane must carry
+at least one `toLink`. When turn evidence is missing or unsupported we therefore emit **all
+geometrically-available outgoing links** as a conventional "unrestricted" lane and record *why* in the
+confidence/provenance attribute, so the fallback is never mistaken for observed eligibility.
 
 Turn type of each outgoing link is inferred from the bearing delta between the incoming link's final
 segment heading and the outgoing link's initial segment heading, bucketed into the classes above.
@@ -120,11 +125,12 @@ Never silently “trust `turn:lanes`”. When token count ≠ resolved lane coun
 
 ### 1d. Absent `turn:lanes`
 
-When no turn tagging exists for the direction, each lane is created with **no `leadsTo` links** and
-confidence `absent`. This means movement eligibility is **unknown / unrestricted by available
-lane-tag evidence** — it does **not** mean every movement was observed as allowed. The distinction is
-carried in the confidence/provenance attribute so downstream signal work can choose conservative
-defaults rather than assume observed eligibility.
+When no turn tagging exists for the direction, each lane is created with `leadsTo` = all
+geometrically-available outgoing links (the schema-mandatory "unrestricted" fallback) and confidence
+`absent`. This means movement eligibility is **unknown / unrestricted by available lane-tag
+evidence** — it does **not** mean every movement was observed as allowed. The distinction is carried
+in the confidence/provenance attribute so downstream signal work can choose conservative defaults
+rather than assume observed eligibility.
 
 ### 1e. Capacity (attached to the lane, not double-counted)
 
@@ -173,8 +179,15 @@ Replace the simplified writer/reader output with the published `laneDefinitions_
 ```
 
 - `leadsTo` may contain `toLink` and/or `toLane` (lane-to-lane across the junction when known).
-- `capacity`, `startsAt`, `alignment` are emitted only when we have a value; otherwise omitted
-  (schema defaults), so absence is explicit rather than fabricated.
+- `leadsTo` is **mandatory** in the published XSD: emit all geometrically-available outgoing links
+  (conventionally the "unrestricted" lane) with a provenance attribute recording the evidence
+  (`observed`, `none-observed`, `absent`, `unsupported`).
+- `alignment` is **mandatory** (`xs:int`): emit `0` and tag `osm:lane.alignmentProvenance=default`
+  when no alignment was parsed from lane data.
+- `capacity`, `startsAt`, `representedLanes` are optional and emitted only when we have a value;
+  otherwise omitted (schema defaults), so absence is explicit rather than fabricated.
+- Child element order must follow the XSD: `leadsTo, representedLanes, capacity, startsAt,
+  alignment, attributes`.
 - Keep `LanesXmlReader` able to read the old simplified fixture for backward compatibility, or
   migrate that fixture — decide during implementation based on test impact.
 
