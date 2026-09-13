@@ -87,6 +87,76 @@ class OsmDirectionalLaneResolverTest {
     }
 
     @Test
+    void onewayConsistentDirectionalTagAndTotalIsAccepted() {
+        // Spec §1a step 2: direction 3 + both_ways 0 == total 3 -> consistent.
+        OsmTagSet t = tags(Map.of("oneway", "yes", "lanes", "3", "lanes:forward", "3"));
+        OsmLaneCount fwd = resolver.resolve(t, true, true, 1.0);
+        assertEquals(3, fwd.lanes());
+        assertEquals(LaneConfidence.PRESENT, fwd.confidence());
+        assertFalse(fwd.issueCodes().contains("inconsistent-lane-tags"));
+        // Direction 3 + both_ways 1 == total 4 -> also consistent.
+        OsmTagSet withBoth = tags(Map.of("oneway", "yes", "lanes", "4", "lanes:both_ways", "1",
+                "lanes:forward", "3"));
+        OsmLaneCount fwdBoth = resolver.resolve(withBoth, true, true, 1.0);
+        assertEquals(3, fwdBoth.lanes());
+        assertEquals(LaneConfidence.PRESENT, fwdBoth.confidence());
+        assertFalse(fwdBoth.issueCodes().contains("inconsistent-lane-tags"));
+    }
+
+    @Test
+    void onewayDirectionalTagGreaterThanTotalIsInconsistentAndFallsBackToTotal() {
+        // oneway=yes, lanes=2, lanes:forward=3 -> 3 != 2: contradicted; ignore 3, fall back to 2.
+        OsmTagSet t = tags(Map.of("oneway", "yes", "lanes", "2", "lanes:forward", "3"));
+        OsmLaneCount c = resolver.resolve(t, true, true, 1.0);
+        assertTrue(c.issueCodes().contains("inconsistent-lane-tags"));
+        assertEquals(2, c.lanes(), "contradictory directional count is ignored; lanes=* wins");
+        assertEquals(LaneConfidence.PRESENT, c.confidence());
+    }
+
+    @Test
+    void onewayReverseDirectionalTagIsValidatedAgainstTotal() {
+        // Reverse one-way travelled direction uses lanes:backward.
+        OsmTagSet consistent = tags(Map.of("oneway", "yes", "lanes", "3", "lanes:backward", "3"));
+        OsmLaneCount ok = resolver.resolve(consistent, false, true, 1.0);
+        assertEquals(3, ok.lanes());
+        assertFalse(ok.issueCodes().contains("inconsistent-lane-tags"));
+
+        OsmTagSet contradict = tags(Map.of("oneway", "yes", "lanes", "2", "lanes:backward", "3"));
+        OsmLaneCount bad = resolver.resolve(contradict, false, true, 1.0);
+        assertTrue(bad.issueCodes().contains("inconsistent-lane-tags"));
+        assertEquals(2, bad.lanes());
+    }
+
+    @Test
+    void onewayDirectionalTagWithoutTotalIsAuthoritative() {
+        OsmTagSet t = tags(Map.of("oneway", "yes", "lanes:forward", "3"));
+        OsmLaneCount c = resolver.resolve(t, true, true, 1.0);
+        assertEquals(3, c.lanes());
+        assertEquals(LaneConfidence.PRESENT, c.confidence());
+        assertFalse(c.issueCodes().contains("inconsistent-lane-tags"));
+    }
+
+    @Test
+    void onewayTotalWithoutDirectionalTagUsesTotal() {
+        OsmTagSet t = tags(Map.of("oneway", "yes", "lanes", "2"));
+        OsmLaneCount c = resolver.resolve(t, true, true, 1.0);
+        assertEquals(2, c.lanes());
+        assertEquals(LaneConfidence.PRESENT, c.confidence());
+        assertFalse(c.issueCodes().contains("inconsistent-lane-tags"));
+    }
+
+    @Test
+    void onewayContradictoryBothWaysIsReportedNotSilentlyAccepted() {
+        // oneway=yes, lanes=2, both_ways=1, forward=3 -> 3 + 1 = 4 != 2: impossible combination.
+        OsmTagSet t = tags(Map.of("oneway", "yes", "lanes", "2", "lanes:both_ways", "1",
+                "lanes:forward", "3"));
+        OsmLaneCount c = resolver.resolve(t, true, true, 1.0);
+        assertTrue(c.issueCodes().contains("inconsistent-lane-tags"));
+        assertEquals(2, c.lanes(), "fall back to the declared total, never 3 or 4");
+        assertEquals(1.0, c.bothWays(), "both_ways is still preserved as provenance");
+    }
+
+    @Test
     void bidirectionalEvenTotalSplitsEvenly() {
         assertEquals(1, resolver.resolve(tags(Map.of("lanes", "2")), true, false, 1.0).lanes());
         assertEquals(2, resolver.resolve(tags(Map.of("lanes", "4")), true, false, 1.0).lanes());

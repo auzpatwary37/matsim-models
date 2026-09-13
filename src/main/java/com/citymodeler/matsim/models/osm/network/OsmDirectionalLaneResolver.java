@@ -10,13 +10,14 @@ import com.citymodeler.matsim.models.osm.OsmTagSet;
  *
  * <p>{@code lanes=*} is the total across BOTH directions; only an explicit directional tag or the
  * oneway assumption gives an unambiguous per-direction count. When a declared {@code lanes=*}
- * exists the WHOLE tag set is validated first (spec §1a step 1): explicit directional tags are
- * authoritative only within an internally consistent set and are never permission to exceed the
- * declared physical total. On inconsistency the contradictory directional values are not used as
- * physical counts; resolution falls back to the total-derived split/undetermined path. A
- * bidirectional way with an even directional total uses the OSM-documented even split; an odd total
- * is left undetermined and produces {@code round(T / 2)} physical lane objects rather than a
- * fabricated per-direction count.</p>
+ * exists the WHOLE tag set is validated first (spec §1a step 1), for one-way and bidirectional ways
+ * alike: explicit directional tags are authoritative only within an internally consistent set and
+ * are never permission to exceed the declared physical total. On inconsistency the contradictory
+ * directional values are not used as physical counts. For a bidirectional way resolution falls back
+ * to the total-derived split/undetermined path; for a one-way way it falls back to {@code lanes=*}
+ * (the travelled direction's declared total). A bidirectional way with an even directional total
+ * uses the OSM-documented even split; an odd total is left undetermined and produces
+ * {@code round(T / 2)} physical lane objects rather than a fabricated per-direction count.</p>
  *
  * <p>{@code lanes:both_ways} is preserved as provenance only (spec §1a step 5): it is never added to
  * a direction's count, so the directed lane objects sum to the declared physical total.</p>
@@ -42,10 +43,23 @@ public final class OsmDirectionalLaneResolver {
         Double opposite = forward ? backwardCount : forwardCount;
 
         if (oneway) {
-            // A single travelled direction: a directional tag wins, else the literal total (the
-            // wiki's one-way assumption), else the rule default. There is no cross-direction check.
+            // A single travelled direction: a directional tag wins over lanes=* only when it is
+            // consistent with the declared total (spec §1a step 1 applies to one-way roads too). On a
+            // one-way way lanes=* is the travelled direction's count, so the directional value plus
+            // any shared lanes must equal the total. Otherwise the contradictory directional count is
+            // ignored and lanes=* is used. With no total, a directional tag is authoritative as-is.
+            double both = bothWays != null ? bothWays : 0.0;
             if (directional != null) {
-                return laneCount(Math.round(directional), LaneConfidence.PRESENT, null, bothWays, issues);
+                if (total == null) {
+                    return laneCount(Math.round(directional), LaneConfidence.PRESENT, null, bothWays,
+                            issues);
+                }
+                if (Math.abs(directional + both - total) < 1e-9) {
+                    return laneCount(Math.round(directional), LaneConfidence.PRESENT, null, bothWays,
+                            issues);
+                }
+                issues.add("inconsistent-lane-tags");
+                return laneCount(Math.round(total), LaneConfidence.PRESENT, null, bothWays, issues);
             }
             if (total != null) {
                 return laneCount(Math.round(total), LaneConfidence.PRESENT, null, bothWays, issues);

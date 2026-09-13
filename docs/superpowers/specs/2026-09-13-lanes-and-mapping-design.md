@@ -62,8 +62,9 @@ rule.defaultOneway())`, with `oneway = !(forwardAllowed && backwardAllowed)` —
 hand-written `oneway=*` parser. This guarantees a way emitted one-way in `network.xml` (including
 rule-default one-way such as `motorway`) is treated one-way when generating `laneDefinitions.xml`.
 
-1. **Validate the whole tag set first** (only when `lanes=*` is present). The set is **inconsistent**
-   when any of:
+1. **Validate the whole tag set first** (only when `lanes=*` is present; this applies to **both
+   bidirectional and one-way** ways — the one-way variant is stated in step 2). For a bidirectional
+   way the set is **inconsistent** when any of:
    - both directional tags present and `lanes:forward + lanes:backward + lanes:both_ways != lanes`;
    - a directional tag exceeds the total: `lanes:forward + lanes:both_ways > lanes`, or
      `lanes:backward + lanes:both_ways > lanes`;
@@ -72,11 +73,16 @@ rule-default one-way such as `motorway`) is treated one-way when generating `lan
 
    On inconsistency: record `inconsistent-lane-tags`; preserve the raw values as provenance; **do
    not** use the contradictory directional values as physical counts; fall back to the total-derived
-   split (step 3). "Directional tags are authoritative" means authoritative **within an internally
+   split (step 4). "Directional tags are authoritative" means authoritative **within an internally
    consistent tag set** — never permission to exceed the declared `lanes`.
-2. **`oneway=yes`** → a single travelled direction: use the directional tag if present, else `lanes`
-   (the wiki's one-way assumption), else the rule default. There is no split, so no cross-direction
-   consistency check applies. `lanes:both_ways` is recorded as provenance only (see step 5).
+2. **`oneway=yes`** → a single travelled direction. Here `lanes=*` is the travelled direction's
+   count, so the same rule applies: when **both** a directional tag and `lanes=*` are present, the
+   directional value is accepted only if it is consistent with the declared total
+   (`lanes:forward + lanes:both_ways == lanes` for a forward-travelled way, and symmetrically for
+   `lanes:backward`). If it contradicts the total, record `inconsistent-lane-tags`, ignore the
+   contradictory directional count, and fall back to `lanes=*`. With no `lanes=*`, a directional tag
+   is authoritative as-is; with no directional tag, use `lanes=*`; if neither exists, use the rule
+   default. `lanes:both_ways` is recorded as provenance only (see step 5) and never duplicated.
 3. **Consistent set with `lanes:forward` / `lanes:backward`** → authoritative for their directions:
    - both present → use each directly;
    - a lone tag → use it for its direction and derive the other as
