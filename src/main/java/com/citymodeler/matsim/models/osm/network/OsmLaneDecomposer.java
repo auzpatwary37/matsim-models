@@ -1,0 +1,138 @@
+package com.citymodeler.matsim.models.osm.network;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import com.citymodeler.matsim.models.api.Id;
+import com.citymodeler.matsim.models.lanes.Lane;
+import com.citymodeler.matsim.models.lanes.LanesToLinkAssignment;
+import com.citymodeler.matsim.models.network.Link;
+import com.citymodeler.matsim.models.osm.OsmImportIssue;
+import com.citymodeler.matsim.models.osm.OsmIssueSeverity;
+
+/**
+ * Turns a resolved directional lane count plus {@code turn:lanes} cells into the lane model.
+ * Never fabricates a movement: when evidence is missing or unsupported a lane receives every
+ * geometrically-available outgoing link (the schema-mandatory "unrestricted" fallback) and the
+ * confidence attribute records why.
+ */
+public final class OsmLaneDecomposer {
+
+    public LaneDecomposition decompose(String linkId, OsmLaneCount count, List<OsmTurnLaneCell> cells,
+                                       List<String> outgoingLinkIds, MovementTurnClassifier classifier,
+                                       double capacityPerLane) {
+        List<OsmImportIssue> issues = new ArrayList<>();
+        int laneCount = count.lanes();
+        List<OsmTurnLaneCell> aligned = cells;
+
+        if (!cells.isEmpty() && cells.size() != laneCount) {
+            issues.add(issue("lane-count-mismatch",
+                    "Link " + linkId + " has " + laneCount + " lanes but " + cells.size()
+                            + " turn:lanes cells"));
+            if (LaneConfidence.UNDETERMINED_SPLIT.equals(count.confidence())
+                    || LaneConfidence.ABSENT.equals(count.confidence())) {
+                laneCount = cells.size();
+                aligned = cells;
+            }
+        }
+
+        LanesToLinkAssignment assignment = new LanesToLinkAssignment(Id.create(linkId, Link.class));
+        for (int i = 0; i < laneCount; i++) {
+            OsmTurnLaneCell cell = i < aligned.size() ? aligned.get(i) : null;
+            assignment.addLane(buildLane(linkId, i, cell, count, outgoingLinkIds, classifier,
+                    capacityPerLane, issues));
+        }
+        return new LaneDecomposition(assignment, issues);
+    }
+
+    private Lane buildLane(String linkId, int index, OsmTurnLaneCell cell, OsmLaneCount count,
+                           List<String> outgoingLinkIds, MovementTurnClassifier classifier,
+                           double capacityPerLane, List<OsmImportIssue> issues) {
+        Lane lane = new Lane(Id.create(linkId + "_l" + index, Lane.class));
+        lane.setCapacityVehiclesPerHour(capacityPerLane);
+        lane.getAttributes().putAttribute("osm:lane.count", index);
+        if (count.undeterminedTotal() != null) {
+            lane.getAttributes().putAttribute("osm:lanes.total", count.undeterminedTotal());
+        }
+
+        Set<String> toLinks = new LinkedHashSet<>();
+        String confidence = count.confidence();
+
+        if (cell == null || cell.empty()) {
+            confidence = LaneConfidence.ABSENT;
+            if (cell != null && cell.empty()) {
+                issues.add(issue("empty-turn-cell", "Link " + linkId + " lane " + index + " is empty"));
+            }
+            toLinks.addAll(outgoingLinkIds);
+        } else if (!cell.unsupportedTokens().isEmpty()) {
+            confidence = LaneConfidence.UNSUPPORTED;
+            issues.add(issue("unsupported-turn-token", "Link " + linkId + " lane " + index
+                    + " has unsupported token(s) " + cell.unsupportedTokens()));
+            toLinks.addAll(outgoingLinkIds);
+        } else if (!cell.indications().isEmpty()) {
+            if (LaneConfidence.UNDETERMINED_SPLIT.equals(count.confidence())
+                    || LaneConfidence.ABSENT.equals(count.confidence())) {
+                confidence = LaneConfidence.TURN_LANES_AUTHORITATIVE;
+            }
+            for (LaneTurnClass indication : cell.indications()) {
+                toLinks.addAll(resolve(linkId, indication, outgoingLinkIds, classifier));
+            }
+            if (toLinks.isEmpty()) {
+                confidence = LaneConfidence.PARTIAL;
+            }
+        }
+
+        if (cell != null && cell.merge() != LaneMerge.NONE) {
+            lane.getAttributes().putAttribute("osm:lane.merge",
+                    cell.merge() == LaneMerge.LEFT ? "left" : "right");
+            if (toLinks.isEmpty()) {
+                toLinks.addAll(outgoingLinkIds);
+                confidence = LaneConfidence.UNSUPPORTED;
+            }
+        }
+        if (toLinks.isEmpty()) {
+            toLinks.addAll(outgoingLinkIds);
+            confidence = LaneConfidence.ABSENT;
+        }
+        for (String id : toLinks) {
+            lane.addToLinkId(Id.create(id, Link.class));
+        }
+        lane.getAttributes().putAttribute("osm:lane.confidence", confidence);
+        if (cell != null) {
+            lane.getAttributes().putAttribute("osm:lane.rawToken", cell.raw());
+        }
+        lane.getAttributes().putAttribute("osm:lane.capacity.shared",
+                Boolean.toString(toLinks.size() > 1));
+        return lane;
+    }
+
+    private static List<String> resolve(String inLinkId, LaneTurnClass indication, List<String> outgoing,
+                                        MovementTurnClassifier classifier) {
+        Map<LaneTurnClass, List<String>> byClass = new LinkedHashMap<>();
+        for (String out : outgoing) {
+            byClass.computeIfAbsent(classifier.classify(inLinkId, out), k -> new ArrayList<>()).add(out);
+        }
+        List<String> direct = byClass.getOrDefault(indication, List.of());
+        if (!direct.isEmpty()) {
+            return direct;
+        }
+        // Documented, flagged fallbacks: a sharp turn with no sharp movement falls back to the base
+        // left/right movement; a base turn with only a slight movement falls back to it.
+        LaneTurnClass fallback = switch (indication) {
+            case SHARP_LEFT -> LaneTurnClass.LEFT;
+            case SHARP_RIGHT -> LaneTurnClass.RIGHT;
+            case LEFT -> LaneTurnClass.SLIGHT_LEFT;
+            case RIGHT -> LaneTurnClass.SLIGHT_RIGHT;
+            default -> LaneTurnClass.UNKNOWN;
+        };
+        return byClass.getOrDefault(fallback, List.of());
+    }
+
+    private static OsmImportIssue issue(String code, String message) {
+        return new OsmImportIssue(OsmIssueSeverity.WARNING, code, message, null);
+    }
+}
