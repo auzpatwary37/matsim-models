@@ -192,6 +192,64 @@ connectivity was not broken). The cause was contraction policy: pt2MATSim stops 
 our link density already matched pt2MATSim (ratio 0.99); the deficit was long merged links, not
 missing roads. Adding the same 500 m cap reproduces pt2MATSim's counts.
 
+### `laneDefinitions` — a new artifact with no black-box counterpart
+
+The `laneDefinitions.xml` produced by this branch is a **new artifact**. pt2MATSim is a
+network/schedule converter and emits no lane file, so there is **nothing to diff side-by-side**; the
+only comparable quantity remains the base network (the 1,176 / 2,465 vs 759 / 1,407 row above). What
+follows is our own output plus sanity checks, not a black-box comparison. Both runs below were made
+with the bundle runner on the unmodified `toronto.osm` fixture (same OSM both scopes); the lane file
+is emitted unconditionally by `OsmGtfsBundleRunner` (Part 3).
+
+| | default runner (`materializeGeometryConfigWithCleanup`) | parity preset (`compactRoadNetworkConfig`) | pt2MATSim (black box) |
+|---|---|---|---|
+| base network nodes | 1,661 | 1,176 | 759 |
+| base network links | 3,569 | 2,465 | 1,407 |
+| mean link length | 55.7 m | 61.4 m | 105.5 m |
+| `lanesToLinkAssignment` | 3,569 | 2,465 | n/a (no lane output) |
+| links covered by a lane | 3,569 | 2,465 | n/a |
+| `<lane>` elements | 4,240 | 3,031 | n/a |
+| mean lanes / assignment | 1.188 | 1.230 | n/a |
+
+**Lane-set shape** (per assignment / per lane):
+
+| metric | default runner | parity preset |
+|---|---|---|
+| lanes per assignment `{n: assignments}` | `{1: 3,077, 2: 333, 3: 139, 4: 20}` | `{1: 2,053, 2: 277, 3: 116, 4: 19}` |
+| `leadsTo/toLink` per lane `{n: lanes}` | `{1: 658, 2: 1,809, 3: 1,219, 4: 551, 5: 3}` | `{1: 486, 2: 1,609, 3: 545, 4: 391}` |
+| `osm:lane.count` per lane | `{0: 3,569, 1: 492, 2: 159, 3: 20}` | `{0: 2,465, 1: 412, 2: 135, 3: 19}` |
+| `osm:lane.capacity.shared` per lane | `{true: 3,582, false: 658}` | `{true: 2,545, false: 486}` |
+| `osm:lane.alignmentProvenance` per lane | `{default: 4,240}` | `{default: 3,031}` |
+
+**Distribution of `osm:lane.confidence`** (per lane; the vocabulary is `LaneConfidence`):
+
+| confidence value | default runner | parity preset | meaning |
+|---|---|---|---|
+| `absent` | 4,047 (95.5%) | 2,860 (94.4%) | no OSM lane evidence → one unrestricted fallback lane |
+| `present` | 182 (4.3%) | 162 (5.3%) | derived from an explicit `turn:lanes` / `lanes` tag |
+| `wiki-default-even-split` | 11 (0.3%) | 9 (0.3%) | even `lanes` total split per-direction (OSM wiki rule) |
+
+The fixture has 96 ways carrying `turn:lanes`, which is the source of the small `present` tail; the
+overwhelming majority of links have no lane tagging at all and therefore get the spec-mandated
+single unrestricted lane.
+
+**Sanity checks (all pass, both scopes).** `LanesXmlReader(true)` validates the emitted file against
+the vendored `laneDefinitions_v2.0` XSD; every `lanesToLinkAssignment.linkIdRef` resolves to a link in
+the same base network (0 dangling refs); every emitted non-dead-end link has exactly one assignment
+(this fixture has 0 dead-end links, so assignments = links); and the writer never emits a lane with an
+empty `leadsTo` (each has ≥1 `toLink`), as the XSD requires.
+
+**Open item (scope, not a lane defect).** The existing Toronto row above records ours at
+1,176 / 2,465, which is the **scope-parity preset**; the default bundle runner keeps
+`highway=service` and therefore emits a larger 1,661 / 3,569 network and 3,569 lane assignments on
+the same fixture. This is the same `service`-scope policy already documented for Luxembourg, not a
+regression — the lane file simply inherits whatever base network the chosen preset produces. The
+Toronto lane run was network-only (no GTFS): the compare workspace holds only the Luxembourg GTFS
+feed, so no mapped-schedule black-box comparison was possible here. Route continuity / turn
+restriction / artificial-link / child-stop correctness for the mapping stage is instead covered by
+our own mapping tests (`MappedRouteContinuityTest`, `TurnRestrictionRoutingTest`, `ArtificialLinkTest`,
+`MappedChildStopsTest`, `DeterministicOutputTest`).
+
 ### Mode model
 
 pt2MATSim tags its roads `bus,car` (55,632 links) or `bus,car,pt` (37,391); our base network tagged
@@ -255,7 +313,43 @@ Observations:
 3. **`OsmFacilityParser` PBF support** (fixed this session) and **non-mutating mapping** (fixed) and
    **CRS-correct artificial links** (fixed) and **GTFS CSV quoted-field parsing** (fixed).
 
+## Full-gate note (lanes + mapping hardening)
+
+`mvn -o -B clean verify` on `feat/lanes-and-mapping` (network-only bundle artifacts added in
+`laneDefinitions.xml`; no production code changed by this docs task):
+
+```
+Tests run: 660, Failures: 0, Errors: 0, Skipped: 0
+You have 0 Checkstyle violations.
+SpotBugs: 0 findings at threshold High.
+BUILD SUCCESS
+```
+
+- **Tests: 660 / 0 failures / 0 errors / 0 skipped** (up from the pre-branch suite; includes the new
+  lane, mapping, GTFS, and GeoJSON tests).
+- **Checkstyle: 0 violations.** 99 *warnings* are still reported (`failsOnViolation=false`, so the
+  build is green); they are pre-existing style nits concentrated in `GtfsFeed.java` (28),
+  `XmlSupport.java` (22), and `GtfsImporter.java` (9), none in the lane/mapping code added here.
+- **SpotBugs: 0 High.** The plugin runs at `threshold=High` with `failOnViolation=false`; no High
+  findings were emitted.
+- Note: the Checkstyle and SpotBugs plugin parameter names log a Maven warning (`failsOnViolation` /
+  `failOnViolation` unknown for these plugin versions) — benign configuration noise, not a finding.
+
 ## Reproduce
 
 Inputs under `target/compare/`: `pbfs/*.osm.pbf` (Geofabrik), `gtfs/{lux,seattle,go,ptv}`,
-`out/ref/*.osm` (clips, shared by both pipelines), `out/ours/*`, `out/ref/*`.
+`out/ref/*.osm` (clips, shared by both pipelines), `out/ours/*`, `out/ref/*`. The lane/mapping runs
+above use the in-repo Toronto fixture and need no GTFS feed:
+
+```bash
+# network-only bundle (base network + laneDefinitions.xml)
+# NB: the network importer transparently handles .gz, but the facility parser (stage 1) does not,
+# so decompress the fixture first for the end-to-end bundle run.
+gunzip -c src/test/resources/osm/cities/toronto.osm.gz > /tmp/toronto.osm
+mvn -o -q -DskipTests compile dependency:build-classpath -Dmdep.outputFile=/tmp/cp_lanes.txt
+java -cp "target/classes:$(cat /tmp/cp_lanes.txt)" \
+  com.citymodeler.matsim.models.bundle.OsmGtfsBundleRunner \
+  /tmp/toronto.osm none /tmp/toronto-lanes
+# -> /tmp/toronto-lanes/{network.xml,laneDefinitions.xml,facilities.xml}
+# parity-preset scope (1,176 / 2,465) via OsmNetworkBuildConfig.compactRoadNetworkConfig().
+```
