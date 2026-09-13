@@ -74,6 +74,27 @@ class OsmRoutingNodeSelectorTest {
         assertTrue(OsmRoutingNodeSelector.select(g, cls, false).contains("B"));
     }
 
+    /** A degree-2 node where turn:lanes changes must be kept so the approach semantics survive. */
+    @Test
+    void laneSemanticChangeNodeIsKept() {
+        Map<String, OsmNodeRecord> nodes = new java.util.TreeMap<>();
+        nodes.put("A", node("A", 0));
+        nodes.put("B", node("B", 100));
+        nodes.put("C", node("C", 200));
+        Map<String, OsmWayRecord> ways = new java.util.TreeMap<>();
+        ways.put("10", way("10", List.of("A", "B"), "highway", "residential", "turn:lanes", "left|through"));
+        ways.put("11", way("11", List.of("B", "C"), "highway", "residential", "turn:lanes", "through|right"));
+
+        OsmNetworkBuildConfig cfg = OsmNetworkBuildConfig.materializeGeometryConfig();
+        OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways), cfg);
+        Map<String, OsmNodeClassification> cls = OsmNodeClassifier.classifyIntrinsic(
+                result(nodes, ways), Set.of("10", "11"), Set.of(), Set.of(), false, 30.0, Set.of(), false, true);
+
+        assertFalse(OsmRoutingNodeSelector.contractible(g, "B"),
+                "a change in turn:lanes must be a contraction boundary");
+        assertTrue(OsmRoutingNodeSelector.select(g, cls, false).contains("B"));
+    }
+
     /** A signal at a degree-2 node is always retained. */
     @Test
     void signalNodeIsKept() {

@@ -16,6 +16,7 @@ public final class SignalReadinessReport {
     private final int preservedSemanticNodes;
     private final int highDegreeNonSignalizedIntersections;
     private final int movementsWithoutLaneInfo;
+    private final int unimplementedViaWayRestrictions;
     private final List<OsmImportIssue> issues;
 
     public SignalReadinessReport(
@@ -26,6 +27,7 @@ public final class SignalReadinessReport {
             int preservedSemanticNodes,
             int highDegreeNonSignalizedIntersections,
             int movementsWithoutLaneInfo,
+            int unimplementedViaWayRestrictions,
             List<OsmImportIssue> issues) {
         this.candidateSignalizedJunctions = candidateSignalizedJunctions;
         this.confirmedSignalizedJunctions = confirmedSignalizedJunctions;
@@ -34,6 +36,7 @@ public final class SignalReadinessReport {
         this.preservedSemanticNodes = preservedSemanticNodes;
         this.highDegreeNonSignalizedIntersections = highDegreeNonSignalizedIntersections;
         this.movementsWithoutLaneInfo = movementsWithoutLaneInfo;
+        this.unimplementedViaWayRestrictions = unimplementedViaWayRestrictions;
         this.issues = List.copyOf(Objects.requireNonNull(issues, "issues"));
     }
 
@@ -65,6 +68,14 @@ public final class SignalReadinessReport {
         return movementsWithoutLaneInfo;
     }
 
+    /**
+     * Count of via-way turn restrictions whose topology was preserved but which are not enforced.
+     * Exposed so a routable-network consumer does not assume turn-restriction support is complete.
+     */
+    public int unimplementedViaWayRestrictions() {
+        return unimplementedViaWayRestrictions;
+    }
+
     public List<OsmImportIssue> issues() {
         return issues;
     }
@@ -84,6 +95,7 @@ public final class SignalReadinessReport {
                 + ",signalNodes=" + preservedSignalNodes
                 + ",collapsed=" + collapsedGeometryNodes
                 + ",preserved=" + preservedSemanticNodes
+                + ",unimplementedViaWayRestrictions=" + unimplementedViaWayRestrictions
                 + ",issues=" + issues.size()
                 + (ok() ? ",ok" : ",NOT_OK") + "]";
     }

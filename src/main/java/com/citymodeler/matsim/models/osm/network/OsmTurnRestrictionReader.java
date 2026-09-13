@@ -48,6 +48,7 @@ public final class OsmTurnRestrictionReader {
         List<OsmImportIssue> issues = new ArrayList<>();
         TurnRestrictionIndex index = new TurnRestrictionIndex();
         Map<String, DisallowedNextLinks> perLink = new HashMap<>();
+        int viaWayRestrictions = 0;
 
         // Build topological indexes: nodeId → outgoing/incoming link IDs
         Map<String, List<String>> nodeOutgoing = new HashMap<>(); // node → links leaving
@@ -85,9 +86,14 @@ public final class OsmTurnRestrictionReader {
             }
 
             if (viaIsWay) {
+                // Via-way restrictions are preserved topologically (every via node is kept) but cannot
+                // be enforced as a single-turn DisallowedNextLinks entry in this phase. Count them so
+                // callers can surface the gap rather than assuming turn restrictions are complete.
+                viaWayRestrictions++;
                 issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING,
                         "restriction-via-way-unsupported",
-                        "Restriction " + rel.id() + " uses a via-way; not supported in Phase 1", null));
+                        "Restriction " + rel.id() + " uses a via-way; topology is preserved but the "
+                                + "restriction is not enforced in Phase 1", null));
                 continue;
             }
             if (fromWayId == null || toWayId == null || viaNodeId == null) {
@@ -166,7 +172,7 @@ public final class OsmTurnRestrictionReader {
             }
         }
 
-        return new Record(index, perLink, issues);
+        return new Record(index, perLink, issues, viaWayRestrictions);
     }
 
     /** Resolve modes from the from-way's rule, applying OSM except=* exemptions. */
@@ -197,18 +203,21 @@ public final class OsmTurnRestrictionReader {
             }
         }
 
-        // Standard OSM: except=bus;bicycle (semicolon-separated mode list)
+        // Standard OSM: except=bus;bicycle (semicolon-separated mode list). Tokens are OSM transport
+        // classes, not internal modes, so map them through the access ontology (psv->bus/pt,
+        // motorcar->car, ...) rather than subtracting raw strings.
         String exceptValue = rel.tags().get("except");
         if (exceptValue != null && !exceptValue.isBlank()) {
             for (String exceptMode : exceptValue.split(";")) {
-                modes.remove(exceptMode.trim());
+                modes.removeAll(OsmModeAccessResolver.internalModesForExclusion(exceptMode.trim()));
             }
         }
         // Also support mode-specific: except:bus=bus, except:taxi=taxi
         for (var entry : rel.tags().asMap().entrySet()) {
             String key = entry.getKey();
             if (key.startsWith("except:") && entry.getValue().equals(key.substring("except:".length()))) {
-                modes.remove(key.substring("except:".length()));
+                modes.removeAll(OsmModeAccessResolver.internalModesForExclusion(
+                        key.substring("except:".length())));
             }
         }
         return modes;
@@ -250,6 +259,7 @@ public final class OsmTurnRestrictionReader {
         return matched;
     }
 
-    public record Record(TurnRestrictionIndex index, Map<String, DisallowedNextLinks> perLink, List<OsmImportIssue> issues) {
+    public record Record(TurnRestrictionIndex index, Map<String, DisallowedNextLinks> perLink,
+                         List<OsmImportIssue> issues, int viaWayRestrictions) {
     }
 }

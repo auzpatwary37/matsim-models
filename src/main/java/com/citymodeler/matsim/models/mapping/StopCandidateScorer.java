@@ -152,10 +152,10 @@ public final class StopCandidateScorer {
         if (value == null) {
             return;
         }
-        for (String part : value.toString().split(",")) {
-            String trimmed = part.trim();
-            if (!trimmed.isEmpty() && !out.contains(trimmed)) {
-                out.add(trimmed);
+        for (String part : com.citymodeler.matsim.models.osm.network.OsmListCodec
+                .decode(value.toString())) {
+            if (!part.isEmpty() && !out.contains(part)) {
+                out.add(part);
             }
         }
     }

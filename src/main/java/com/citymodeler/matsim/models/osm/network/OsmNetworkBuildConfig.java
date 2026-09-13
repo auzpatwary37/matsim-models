@@ -59,6 +59,23 @@ public final class OsmNetworkBuildConfig {
                 0.0, true, true);
     }
 
+    /**
+     * Faithful import preset: no connectivity cleaning, no length cap, no bus expansion, and no
+     * parallel-track collapse. This is the reference for "what the source says"; simulation-oriented
+     * preparation is expressed by the policy presets such as {@link #defaultConfig()} and
+     * {@link #compactRoadNetworkConfig()}.
+     */
+    public static OsmNetworkBuildConfig faithfulImportConfig() {
+        return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
+                true, Set.of(), 35.0, defaultRules(), false, true, false, Set.of(), Set.of(),
+                0.0, false, false);
+    }
+
+    /**
+     * Simulation-oriented policy preset: contracts degree-2 nodes, applies routable-subnetwork
+     * connectivity cleaning (largest-SCC union for {@code car,bus}), admits buses on car roads, and
+     * collapses parallel transit tracks. Use {@link #faithfulImportConfig()} for a literal import.
+     */
     public static OsmNetworkBuildConfig defaultConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
                 true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(),

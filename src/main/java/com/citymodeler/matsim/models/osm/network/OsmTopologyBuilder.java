@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -123,6 +124,7 @@ public final class OsmTopologyBuilder {
         Map<String, OsmCollapsedLink> collapsedLinks = new TreeMap<>();
         Map<String, List<String>> linkIdsByOsmWayId = new TreeMap<>();
         Map<String, OsmPolyline> geometry = new TreeMap<>();
+        Map<String, String> spanSignatures = new HashMap<>();
         boolean rawTagsKept = importResult.provenance().rawTagsKept();
 
         Set<String> visited = new HashSet<>();
@@ -187,7 +189,7 @@ public final class OsmTopologyBuilder {
                 }
                 emitLink(network, start, end, chainForward, firstSeg, sourceSegments, pts, chainNodeIds,
                         config, wayRecords, rawTagsKept, keepAllGeometryNodes,
-                        collapsedLinks, linkIdsByOsmWayId, geometry, issues);
+                        collapsedLinks, linkIdsByOsmWayId, geometry, spanSignatures, issues);
             }
         }
 
@@ -368,10 +370,11 @@ public final class OsmTopologyBuilder {
                                  OsmNetworkBuildConfig config,
                                  Map<String, OsmWayRecord> wayRecords, boolean rawTagsKept,
                                  boolean keepAllGeometryNodes,
-                                 Map<String, OsmCollapsedLink> collapsedLinks,
-                                 Map<String, List<String>> linkIdsByOsmWayId,
-                                 Map<String, OsmPolyline> geometry,
-                                 List<OsmImportIssue> issues) {
+                                  Map<String, OsmCollapsedLink> collapsedLinks,
+                                  Map<String, List<String>> linkIdsByOsmWayId,
+                                  Map<String, OsmPolyline> geometry,
+                                  Map<String, String> spanSignatures,
+                                  List<OsmImportIssue> issues) {
 
         double length = 0.0;
         for (int i = 0; i + 1 < pts.size(); i++) {
@@ -397,25 +400,54 @@ public final class OsmTopologyBuilder {
         // stored in the opposite orientation to the chain is thus inverted automatically.
         double lanes = firstSegment.lanes(traversalForward);
         double capacity = lanes * firstSegment.capacityPerLane();
-        // MATERIALIZE keeps one link per atomic OSM segment (today's behavior); the contracted
-        // modes use a deterministic id derived from the canonical physical span + first source way.
-        String linkId = keepAllGeometryNodes
-                ? OsmGeneratedIds.linkId(firstSegment.wayId(), firstSegment.segmentIndex(), traversalForward)
-                : OsmGeneratedIds.simplifiedLinkId(firstWayId, forward, canonicalFrom, canonicalTo);
-        if (!keepAllGeometryNodes && network.getLinks().containsKey(Id.create(linkId, Link.class))) {
-            // Degenerate repeated-node span: a way that doubles back through a node referenced twice,
-            // forcing that node to be kept. The canonical directed span is already represented, so do
-            // not emit a parallel duplicate; the first occurrence keeps the provenance/geometry.
-            // Record a deterministic WARNING rather than dropping the second physical span silently.
+        // Source ways/names are listed in canonical span order (min endpoint first) so both travel
+        // directions of one physical link report the same lists regardless of emitted direction.
+        List<OsmLinkRef> canonicalSegments = new ArrayList<>(sourceSegments);
+        if (!forward) {
+            Collections.reverse(canonicalSegments);
+        }
+        // MATERIALIZE keeps one link per atomic OSM segment (today's behavior); the contracted modes
+        // use a deterministic id derived from the canonical physical span + first source way. A way
+        // that doubles back can produce two arcs between the same canonical endpoints: an identical
+        // travel-ordered node sequence is the SAME directed span and is collapsed; a distinct sequence
+        // (different intermediate nodes) is a real distinct span and is disambiguated by hash, never
+        // dropped. Travel order is used so the two opposite directions remain distinct.
+        String spanSignature = firstWayId + "|" + startOsm + "->" + endOsm + "|" + chainNodeIds;
+        List<String> canonicalNodes = new ArrayList<>(chainNodeIds);
+        if (!forward) {
+            Collections.reverse(canonicalNodes);
+        }
+        String linkId;
+        if (keepAllGeometryNodes) {
+            linkId = OsmGeneratedIds.linkId(firstSegment.wayId(), firstSegment.segmentIndex(),
+                    traversalForward);
+        } else {
+            String existing = spanSignatures.get(spanSignature);
+            if (existing != null) {
+                issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, "degenerate-span",
+                        "Way " + firstWayId + " re-traverses span " + startOsm + "->" + endOsm
+                                + " already represented by " + existing
+                                + "; skipping duplicate directed link", null));
+                return;
+            }
+            String baseId = OsmGeneratedIds.simplifiedLinkId(firstWayId, forward, canonicalFrom,
+                    canonicalTo);
+            linkId = network.getLinks().containsKey(Id.create(baseId, Link.class))
+                    ? OsmGeneratedIds.uniqueSimplifiedLinkId(baseId, canonicalNodes)
+                    : baseId;
+            spanSignatures.put(spanSignature, linkId);
+        }
+        if (network.getLinks().containsKey(Id.create(linkId, Link.class))) {
+            // Defensive: the disambiguated id must be unique; if not, do not silently overwrite.
             issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, "degenerate-span",
-                    "Way " + firstWayId + " doubles back through a repeated node; dropping duplicate "
-                            + "directed span " + linkId + " (already emitted)", null));
+                    "Way " + firstWayId + " produced an already-emitted link id " + linkId
+                            + "; skipping duplicate directed link", null));
             return;
         }
+        // Bus admissibility is resolved with the segment's modes (see OsmModeAccessResolver
+        // .candidateModes), so explicit OSM access tags have already had final authority. Do NOT
+        // clone car->bus here: a post-hoc clone would override bus=no / psv=no.
         Set<String> linkModes = new TreeSet<>(firstSegment.modes(traversalForward));
-        if (config.addBusToCarRoads() && linkModes.contains("car") && !linkModes.contains("bus")) {
-            linkModes.add("bus");
-        }
         Link link = network.createLink(linkId,
                 OsmGeneratedIds.nodeId(startOsm), OsmGeneratedIds.nodeId(endOsm),
                 length, capacity, firstSegment.speed(traversalForward), lanes,
@@ -434,12 +466,6 @@ public final class OsmTopologyBuilder {
         // directions of one physical link report the same name.
         link.getAttributes().putAttribute("osm:geometry", toWkt(pts));
         link.getAttributes().putAttribute("osm:sourceNodes", String.join(",", chainNodeIds));
-        // Source ways/names are listed in canonical span order (min endpoint first) so both travel
-        // directions of one physical link report the same lists regardless of emitted direction.
-        List<OsmLinkRef> canonicalSegments = new ArrayList<>(sourceSegments);
-        if (!forward) {
-            Collections.reverse(canonicalSegments);
-        }
         List<String> sourceWayIds = distinctWayIds(canonicalSegments);
         link.getAttributes().putAttribute("osm:sourceWays", String.join(",", sourceWayIds));
         List<String> sourceNames = distinctWayNames(sourceWayIds, wayRecords);
@@ -456,7 +482,7 @@ public final class OsmTopologyBuilder {
             link.getAttributes().putAttribute("osm:name", representativeName);
         }
         if (sourceNames.size() > 1) {
-            link.getAttributes().putAttribute("osm:sourceNames", String.join(",", sourceNames));
+            link.getAttributes().putAttribute("osm:sourceNames", OsmListCodec.encode(sourceNames));
         }
 
         // Rule and tags come from the canonical first source way; every segment in a contracted

@@ -17,11 +17,21 @@ import com.citymodeler.matsim.models.osm.OsmImportIssue;
 import com.citymodeler.matsim.models.osm.OsmIssueSeverity;
 
 /**
- * Cleans a contracted network so that each configured routable mode can actually be routed: within
- * the directed subgraph of links permitting that mode, only the largest strongly connected component
- * is retained (every surviving link is reachable from and can return to every other). Links outside
- * the largest SCC for every routable mode are removed and quarantined (never silently deleted);
- * non-routable modes keep their sinks and sources.
+ * Cleans a contracted network so that each configured routable mode can actually be routed.
+ *
+ * <p><b>Invariant (link-level union).</b> For each configured routable mode, compute the largest
+ * strongly connected component of the directed subgraph induced by the links permitting that mode.
+ * Retain the <b>union</b> of those link sets, plus every link required by a non-cleaned mode, and
+ * remove the rest. Connectivity cleaning is therefore a <b>link-level preservation policy</b>: a
+ * shared multi-mode link may survive because another configured or retained mode needs it, so it is
+ * not a guarantee that every surviving per-mode subgraph equals exactly one SCC. The guarantee is
+ * weaker and deliberate: each surviving <i>routable</i> link lies in some routable mode's largest SCC,
+ * and a link is removed only when it is outside the kept component for <b>every</b> routable mode.
+ *
+ * <p>Non-routable modes (transit such as rail/tram) are not connectivity-cleaned and legitimately
+ * keep sinks and sources: a oneway transit line has no directed return path, so strong connectivity
+ * must not be applied to it. {@code bus} is included in the default routable modes because it is
+ * treated as part of the road routable graph, unlike rail/tram.
  *
  * <p>Also drops structurally invalid links (zero/negative length, non-finite metrics, missing
  * endpoints, or empty mode sets), except artificial transit connectors whose id begins with
@@ -40,21 +50,18 @@ public final class OsmNetworkCleaner {
     }
 
     /**
-     * @param routableModes modes for which strongly connected routability must hold; each is cleaned
-     *                      independently to its largest strongly connected component.
+     * @param routableModes modes for which strongly connected routability is computed; each
+     *                      contributes its largest SCC to the retained link-level union.
      */
     public static CleanResult clean(Network network, Set<String> routableModes) {
         return clean(network, routableModes, linkId -> List.of());
     }
 
     /**
-     * Cleans only the configured <b>routable subnetworks</b>: each routable mode (e.g. {@code car},
-     * {@code bus}) is reduced to its largest <b>strongly</b> connected component, so every surviving
-     * link can be reached and returned from. All other modes (rail, tram, and any other transit
-     * subnetwork) are <b>not</b> connectivity-cleaned — they legitimately keep sinks and sources: a
-     * oneway transit line has no directed return path, so strong connectivity must not be applied to
-     * it. A link is removed only if it is outside the kept component for <b>every</b> routable mode
-     * it permits.
+     * Cleans only the configured <b>routable subnetworks</b> using the link-level union invariant
+     * documented on this class: retain the union of each routable mode's largest SCC plus any link a
+     * non-cleaned mode needs; remove a link only when it is outside the kept component for every
+     * routable mode. Transit modes that are not declared routable keep their sinks and sources.
      *
      * @param sourceWayResolver maps a network link id to its source OSM way ids, so quarantined
      *                           components can report the source OSM ids they were built from.

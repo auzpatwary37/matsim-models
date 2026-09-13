@@ -81,6 +81,10 @@ public final class OsmRoutingNodeSelector {
                 && Double.compare(a.lanes(!aForward), b.lanes(!bForward)) == 0
                 && Double.compare(a.capacityPerLane(), b.capacityPerLane()) == 0
                 && a.allowsTravel(aForward) == b.allowsTravel(bForward)
-                && a.allowsTravel(!aForward) == b.allowsTravel(!bForward);
+                && a.allowsTravel(!aForward) == b.allowsTravel(!bForward)
+                // Lane-semantic boundary: a change in turn/lane tags must not be contracted away,
+                // because the merged link's lane tags are taken from only one source way.
+                && a.laneSignature(aForward).equals(b.laneSignature(bForward))
+                && a.laneSignature(!aForward).equals(b.laneSignature(!bForward));
     }
 }

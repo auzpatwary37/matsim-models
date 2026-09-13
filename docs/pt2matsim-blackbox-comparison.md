@@ -133,25 +133,26 @@ guaranteed. Removed components are reported as quarantine issues (never silently
 
 ### Scope parity preset
 
-`OsmNetworkBuildConfig.pt2matsimComparableConfig()` matches pt2MATSim's default OSM-converter scope and
-contraction policy: it excludes `highway=service` (pt2MATSim defines no service default parameters) and
-caps contracted link length at **500 m** (`maxLinkLength`), so a degree-2 node is retained where
-dissolving it would produce a longer link.
+`OsmNetworkBuildConfig.compactRoadNetworkConfig()` matches the external default OSM-converter scope and
+contraction policy: it excludes `highway=service` and caps contracted link length at **500 m**
+(`maxContractedLinkLengthMeters`), so a degree-2 node is retained where dissolving it would produce a
+longer link. It also admits buses on car roads (`addBusToCarRoads`).
 
-| network | ours nodes/links | pt2MATSim nodes/links |
+| network | ours nodes/links | external reference nodes/links |
 |---|---|---|
-| default scope, post-cleaning (service kept) | 73,347 / 161,016 | — (177,968 links when pt2M keeps service) |
-| parity preset (service excluded, 500 m car cap, bus on roads) | **49,834 / 105,270** | **49,549 / 105,125** |
+| default scope, post-cleaning (service kept) | 73,347 / 161,016 | — (177,968 links when the reference keeps service) |
+| parity preset (service excluded, 500 m car cap, bus on roads) | **50,201 / 106,618** | **49,549 / 105,125** |
 
-The parity preset matches the external reference to **+0.6% nodes / +0.1% links**. The car routable
-subgraph is **one strongly connected component (100.0% of its nodes)** in both networks. Direction
-defaults match empirically: rail **2.01** directed/physical (bidirectional) and tram **2.00** before
+The parity preset matches the external reference to **+1.3% nodes / +1.4% links**. The car routable
+subgraph is effectively **one strongly connected component (100.0% of its nodes)** in both networks
+(ours reports a handful of singleton SCCs from a few self-contained fragments). Direction defaults
+match empirically: rail **2.01** directed/physical (bidirectional) and tram **2.00** before
 parallel-track collapse; after collapsing parallel tram tracks (one corridor per physical pair) our
-tram is 1,276 directed links over 638 spans.
+tram is 1,482 directed links over 741 spans.
 
 **Toronto (repo fixture `src/test/resources/osm/cities/toronto.osm.gz`, 4,009 ways):** builds and
-cleans successfully — 1,006 nodes / 2,052 links; car and bus are each one SCC at 100%. No external
-Toronto reference artifact is available, so this is a structural check only.
+cleans successfully — 1,201 nodes / 2,567 links; car and bus each effectively one SCC at 100%. No
+external Toronto reference artifact is available, so this is a structural check only.
 
 Remaining per-class delta is policy, not connectivity: `service` −1,151 (pt2MATSim keeps
 transit-carrying service via `keepWaysWithPublicTransit`, which we exclude entirely), `(rail/other)`

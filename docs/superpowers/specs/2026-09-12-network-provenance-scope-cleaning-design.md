@@ -123,12 +123,24 @@ Derived from OSM semantics and our own spec:
 
 - **Provenance:** multi-way merged link has all source ways/nodes/names; geometry WKT decodes to the
   same vertices and length; single-way link has one way/name and no `osm:sourceNames`; writer→reader
-  preserves merged ids, geometry, source ways/nodes, names.
+  preserves merged ids, geometry, source ways/nodes, names; names containing commas round-trip as
+  distinct values (reversible list codec).
 - **Scope:** default admits service; compact preset excludes it; service way dropped under compact preset.
 - **Cleaning:** a disconnected car-only island is removed and quarantined; a one-way car sink is
   removed; an isolated routable stub is removed; the largest component survives; non-routable modes
   keep sinks/sources; zero-length removed except `pt_`; sidecars reference only surviving ids.
 - **Direction:** rail bidirectional, tram oneway, oneway car roads single directed link.
+- **Access:** `bus=no`/`psv=no` on a car road keeps bus out (explicit tags beat `addBusToCarRoads`);
+  `motor_vehicle=no + bus=yes` keeps a bus-only link; directional `motor_vehicle:forward=no` removes
+  both car and bus; `access=no + bus=designated` keeps bus only.
+- **Turn restrictions:** `except=psv` exempts bus/pt, `except=motorcar` exempts car, semicolon lists
+  exempt all mapped modes; a via-way restriction is counted as unimplemented rather than silently
+  ignored.
+- **Contraction boundary:** a change in `turn:lanes` (or other lane-semantic tags) between adjacent
+  ways keeps the intermediate node.
+- **Link identity:** a way that doubles back re-traverses the same directed span and is collapsed with
+  a warning; distinct chains between the same endpoints are disambiguated by a stable node-sequence
+  hash and both survive.
 - **Invariance:** on a connected fixture, cleaning is a no-op; `oneWayAndSplitWayProduceIdenticalTopology`
   still passes.
 - **Full gate:** `mvn -o -B clean verify` green.
@@ -138,8 +150,17 @@ Derived from OSM semantics and our own spec:
 - Existing small fixtures that are single-island or single-link are cleaned. Tests build
   strongly-connected fixtures or opt out via config.
 - Cleaning on by default is a deliberate output change; the default scope (service included) is NOT changed.
+- Bus admission happens in access resolution, not as a post-hoc `car`→`bus` clone, so explicit OSM
+  access tags always retain final authority.
 - Clean-room: no external source, bytecode, or configuration is read; external outputs are used only
   as black-box measurements in `docs/pt2matsim-blackbox-comparison.md`.
+
+## Faithful import vs policy presets
+
+`faithfulImportConfig()` performs a literal import: no connectivity cleaning, no length cap, no bus
+expansion, and no parallel-track collapse. `defaultConfig()` / `compactRoadNetworkConfig()` are
+simulation-oriented policy presets that contract, clean, admit buses, and collapse parallel tracks.
+Destructive heuristics are therefore opt-in via a named preset, not baked into a literal import.
 
 ## Parallel transit tracks
 

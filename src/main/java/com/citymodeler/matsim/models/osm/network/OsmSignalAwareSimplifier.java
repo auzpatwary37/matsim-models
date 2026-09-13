@@ -115,6 +115,7 @@ public final class OsmSignalAwareSimplifier {
                 signalNodes, collapsedGeometryNodes, preserved,
                 countHighDegreeNonSignalized(network, junctionsByNodeId),
                 countMovementsWithoutLaneInfo(junctions, network, ways),
+                restrictionRecord.viaWayRestrictions(),
                 reportIssues);
 
         return new OsmSimplifiedNetwork(

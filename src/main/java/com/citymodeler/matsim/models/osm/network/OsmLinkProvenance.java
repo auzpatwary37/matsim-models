@@ -46,17 +46,7 @@ public final class OsmLinkProvenance {
     }
 
     private static List<String> splitCsv(String value) {
-        if (value == null || value.isBlank()) {
-            return List.of();
-        }
-        List<String> out = new ArrayList<>();
-        for (String part : value.split(",")) {
-            String trimmed = part.trim();
-            if (!trimmed.isEmpty()) {
-                out.add(trimmed);
-            }
-        }
-        return List.copyOf(out);
+        return OsmListCodec.decode(value);
     }
 
     /** Parses a WKT {@code LINESTRING (x y, x y, ...)} into coordinates; empty when absent/unparseable. */

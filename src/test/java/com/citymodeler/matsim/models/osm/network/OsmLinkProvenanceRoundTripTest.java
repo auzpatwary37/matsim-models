@@ -66,4 +66,29 @@ final class OsmLinkProvenanceRoundTripTest {
                 roundTripped.getAttributes().getAttribute("osm:geometry"));
         assertEquals(original.getLength(), roundTripped.getLength());
     }
+
+    @Test
+    void provenanceNamesWithCommasRoundTrip() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0));
+        ns.put("B", n("B", 100));
+        ns.put("C", n("C", 200));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B"),
+                OsmTagSet.of(Map.of("highway", "residential", "name", "Main St, North"))));
+        ws.put("20", new OsmWayRecord("20", List.of("B", "C"),
+                OsmTagSet.of(Map.of("highway", "residential", "name", "5th Ave, Suite 2"))));
+        OsmImportResult r = new OsmImportResult(ns, ws, new TreeMap<>(), List.of(),
+                OsmProvenance.defaultFor("f.osm", "EPSG:3857"));
+
+        Network network = OsmTopologyBuilder.build(r,
+                OsmNetworkBuildConfig.defaultConfig(), false).network();
+        String xml = new StreamingNetworkWriter().writeToString(network);
+        Network back = new NetworkXmlReader().read(xml);
+
+        OsmLinkProvenance.Decoded decoded = OsmLinkProvenance.of(
+                back.getLinks().get(Id.create("sim_10_f_A_C", Link.class)));
+        assertEquals(List.of("Main St, North", "5th Ave, Suite 2"), decoded.sourceNames(),
+                "names containing commas must round-trip as distinct values");
+    }
 }

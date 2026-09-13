@@ -28,9 +28,9 @@ class OsmTurnRestrictionReaderTest {
         net.createNode("osm_node_2", 100, 0);
         net.createNode("osm_node_3", 200, 0);
         net.createNode("osm_node_4", 100, 100);
-        net.createLink("osm_way_10_0_f", "osm_node_1", "osm_node_2", 100, 1000, 13.9, 1, Set.of("car"));
-        net.createLink("osm_way_20_0_f", "osm_node_2", "osm_node_3", 100, 1000, 13.9, 1, Set.of("car"));
-        net.createLink("osm_way_30_0_f", "osm_node_2", "osm_node_4", 100, 1000, 13.9, 1, Set.of("car"));
+        net.createLink("osm_way_10_0_f", "osm_node_1", "osm_node_2", 100, 1000, 13.9, 1, Set.of("car", "bus"));
+        net.createLink("osm_way_20_0_f", "osm_node_2", "osm_node_3", 100, 1000, 13.9, 1, Set.of("car", "bus"));
+        net.createLink("osm_way_30_0_f", "osm_node_2", "osm_node_4", 100, 1000, 13.9, 1, Set.of("car", "bus"));
         net.postProcess();
         return net;
     }
@@ -133,6 +133,78 @@ class OsmTurnRestrictionReaderTest {
         // car is restricted, bus is exempt
         assertTrue(dnl.isDisallowed("car", List.of("osm_way_30_0_f")));
         assertFalse(dnl.isDisallowed("bus", List.of("osm_way_30_0_f")));
+    }
+
+    /** except=psv is an OSM transport class; it must exempt the internal bus/pt modes. */
+    @Test
+    void exceptPsvExemptsBusMode() {
+        OsmRelationRecord rel = new OsmRelationRecord("r1",
+                List.of(
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "10", "from"),
+                        new OsmRelationMemberRecord(OsmElementType.NODE, "2", "via"),
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "30", "to")),
+                OsmTagSet.of(Map.of("type", "restriction", "restriction", "no_left_turn", "except", "psv")));
+
+        DisallowedNextLinks dnl = OsmTurnRestrictionReader.read(restrictionFixture(rel),
+                buildResult(threeArmJunction())).perLink().get("osm_way_10_0_f");
+        assertNotNull(dnl);
+        assertTrue(dnl.isDisallowed("car", List.of("osm_way_30_0_f")));
+        assertFalse(dnl.isDisallowed("bus", List.of("osm_way_30_0_f")),
+                "except=psv must exempt the internal bus mode");
+    }
+
+    /** except=motorcar must exempt the internal car mode. */
+    @Test
+    void exceptMotorcarExemptsCarMode() {
+        OsmRelationRecord rel = new OsmRelationRecord("r1",
+                List.of(
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "10", "from"),
+                        new OsmRelationMemberRecord(OsmElementType.NODE, "2", "via"),
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "30", "to")),
+                OsmTagSet.of(Map.of("type", "restriction", "restriction", "no_left_turn", "except", "motorcar")));
+
+        DisallowedNextLinks dnl = OsmTurnRestrictionReader.read(restrictionFixture(rel),
+                buildResult(threeArmJunction())).perLink().get("osm_way_10_0_f");
+        assertNotNull(dnl);
+        assertFalse(dnl.isDisallowed("car", List.of("osm_way_30_0_f")),
+                "except=motorcar must exempt the internal car mode");
+        assertTrue(dnl.isDisallowed("bus", List.of("osm_way_30_0_f")));
+    }
+
+    /** Semicolon-separated exception list exempts every mapped mode. */
+    @Test
+    void exceptSemicolonListExemptsAllMappedModes() {
+        OsmRelationRecord rel = new OsmRelationRecord("r1",
+                List.of(
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "10", "from"),
+                        new OsmRelationMemberRecord(OsmElementType.NODE, "2", "via"),
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "30", "to")),
+                OsmTagSet.of(Map.of("type", "restriction", "restriction", "no_left_turn",
+                        "except", "psv;motorcar")));
+
+        Record result = OsmTurnRestrictionReader.read(restrictionFixture(rel),
+                buildResult(threeArmJunction()));
+        // Every mode exempt: no enforceable restriction remains for this relation.
+        assertNull(result.perLink().get("osm_way_10_0_f"));
+    }
+
+    /** A via-way restriction is counted as unimplemented (topology preserved, not enforced). */
+    @Test
+    void viaWayRestrictionIsCounted() {
+        OsmRelationRecord rel = new OsmRelationRecord("r1",
+                List.of(
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "10", "from"),
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "20", "via"),
+                        new OsmRelationMemberRecord(OsmElementType.WAY, "30", "to")),
+                OsmTagSet.of(Map.of("type", "restriction", "restriction", "no_left_turn")));
+
+        Network net = new Network();
+        net.postProcess();
+        OsmNetworkBuildResult br = new OsmNetworkBuildResult(
+                net, List.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of());
+
+        Record result = OsmTurnRestrictionReader.read(restrictionFixture(rel), br);
+        assertEquals(1, result.viaWayRestrictions());
     }
 
     @Test

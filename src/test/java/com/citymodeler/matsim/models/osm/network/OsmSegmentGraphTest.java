@@ -21,6 +21,10 @@ class OsmSegmentGraphTest {
         return new OsmNodeRecord(id, x, 0, new Coord(x, 0), OsmTagSet.empty());
     }
 
+    private static OsmNodeRecord node(String id, double x, double y) {
+        return new OsmNodeRecord(id, x, y, new Coord(x, y), OsmTagSet.empty());
+    }
+
     private static OsmImportResult result(Map<String, OsmNodeRecord> nodes,
                                           Map<String, OsmWayRecord> ways) {
         return new OsmImportResult(nodes, ways, new java.util.TreeMap<>(), List.of(),
@@ -110,5 +114,28 @@ class OsmSegmentGraphTest {
                 OsmNetworkBuildConfig.materializeGeometryConfig());
         assertEquals(2, literal.segments().size(),
                 "materialize config keeps literal OSM semantics (no collapse)");
+    }
+
+    /**
+     * Two tracks that share endpoints but diverge in the middle (different intermediate geometry) are
+     * distinct infrastructure and must both survive: endpoint proximity alone is not equivalence.
+     */
+    @Test
+    void parallelTracksWithDistinctIntermediateGeometryBothSurvive() {
+        Map<String, OsmNodeRecord> nodes = new java.util.TreeMap<>();
+        nodes.put("A", node("A", 0, 0));
+        nodes.put("B", node("B", 100, 0));
+        nodes.put("Mid1", node("Mid1", 50, 10));
+        nodes.put("Mid2", node("Mid2", 50, 90));
+        Map<String, OsmWayRecord> ways = new java.util.TreeMap<>();
+        ways.put("10", new OsmWayRecord("10", List.of("A", "Mid1", "B"),
+                OsmTagSet.of(Map.of("railway", "tram"))));
+        ways.put("20", new OsmWayRecord("20", List.of("A", "Mid2", "B"),
+                OsmTagSet.of(Map.of("railway", "tram"))));
+
+        OsmSegmentGraph g = OsmSegmentGraph.build(result(nodes, ways),
+                OsmNetworkBuildConfig.defaultConfig());
+        assertEquals(4, g.segments().size(),
+                "tracks with distinct intermediate geometry must not be collapsed");
     }
 }
