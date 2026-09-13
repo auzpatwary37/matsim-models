@@ -19,12 +19,27 @@ import com.citymodeler.matsim.models.osm.OsmIssueSeverity;
  * Never fabricates a movement: when evidence is missing or unsupported a lane receives every
  * geometrically-available outgoing link (the schema-mandatory "unrestricted" fallback) and the
  * confidence attribute records why.
+ *
+ * <p>Precondition: {@code outgoingLinkIds} must be non-null and contain at least one non-null
+ * element. A lane cannot exist without a successor link, so a dead-end link (no outgoing links)
+ * must be handled by the caller — this decomposer fails fast rather than emitting a lane with an
+ * empty schema-mandatory {@code leadsTo} list.
  */
 public final class OsmLaneDecomposer {
 
     public LaneDecomposition decompose(String linkId, OsmLaneCount count, List<OsmTurnLaneCell> cells,
                                        List<String> outgoingLinkIds, MovementTurnClassifier classifier,
                                        double capacityPerLane) {
+        if (outgoingLinkIds == null || outgoingLinkIds.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "outgoingLinkIds must not be null or empty: a lane requires at least one successor link");
+        }
+        for (String outgoingLinkId : outgoingLinkIds) {
+            if (outgoingLinkId == null) {
+                throw new IllegalArgumentException("outgoingLinkIds must not contain null elements");
+            }
+        }
+
         List<OsmImportIssue> issues = new ArrayList<>();
         int laneCount = count.lanes();
         List<OsmTurnLaneCell> aligned = cells;
@@ -36,7 +51,6 @@ public final class OsmLaneDecomposer {
             if (LaneConfidence.UNDETERMINED_SPLIT.equals(count.confidence())
                     || LaneConfidence.ABSENT.equals(count.confidence())) {
                 laneCount = cells.size();
-                aligned = cells;
             }
         }
 

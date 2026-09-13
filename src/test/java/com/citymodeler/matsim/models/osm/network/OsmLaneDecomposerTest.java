@@ -2,6 +2,7 @@ package com.citymodeler.matsim.models.osm.network;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -10,8 +11,6 @@ import org.junit.jupiter.api.Test;
 
 import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.lanes.Lane;
-import com.citymodeler.matsim.models.lanes.LanesToLinkAssignment;
-import com.citymodeler.matsim.models.network.Link;
 
 class OsmLaneDecomposerTest {
 
@@ -63,6 +62,39 @@ class OsmLaneDecomposerTest {
 
         assertEquals(3, lane(d, 0).getToLinkIds().size(), "schema requires at least one toLink");
         assertEquals(LaneConfidence.ABSENT, lane(d, 0).getAttributes().getAttribute("osm:lane.confidence"));
+    }
+
+    @Test
+    void emptyMiddleCellEmitsIssueAndFallsBackToAllOutgoingWithAbsentConfidence() {
+        OsmLaneCount count = new OsmLaneCount(3, LaneConfidence.PRESENT, null, List.of());
+        LaneDecomposition d = decomposer.decompose("l_in", count, parser.parse("left||right"),
+                List.of("l_t", "l_l", "l_r"), junction, 900.0);
+
+        assertTrue(d.issues().stream().anyMatch(i -> i.code().equals("empty-turn-cell")));
+        assertEquals(3, lane(d, 1).getToLinkIds().size(), "empty cell -> all outgoing");
+        assertEquals(LaneConfidence.ABSENT, lane(d, 1).getAttributes().getAttribute("osm:lane.confidence"));
+    }
+
+    @Test
+    void unsupportedTokenEmitsIssueAndFallsBackToAllOutgoingWithUnsupportedConfidence() {
+        OsmLaneCount count = new OsmLaneCount(1, LaneConfidence.PRESENT, null, List.of());
+        LaneDecomposition d = decomposer.decompose("l_in", count, parser.parse("left_turn"),
+                List.of("l_t", "l_l", "l_r"), junction, 900.0);
+
+        assertTrue(d.issues().stream().anyMatch(i -> i.code().equals("unsupported-turn-token")));
+        assertEquals(3, lane(d, 0).getToLinkIds().size(), "unsupported token -> all outgoing");
+        assertEquals(LaneConfidence.UNSUPPORTED, lane(d, 0).getAttributes().getAttribute("osm:lane.confidence"));
+    }
+
+    @Test
+    void emptyOutgoingLinksRejected() {
+        OsmLaneCount count = new OsmLaneCount(1, LaneConfidence.PRESENT, null, List.of());
+        assertThrows(IllegalArgumentException.class, () -> decomposer.decompose("l_in", count,
+                parser.parse("through"), List.of(), junction, 900.0));
+        assertThrows(IllegalArgumentException.class, () -> decomposer.decompose("l_in", count,
+                parser.parse("through"), null, junction, 900.0));
+        assertThrows(IllegalArgumentException.class, () -> decomposer.decompose("l_in", count,
+                parser.parse("through"), java.util.Arrays.asList("l_t", null), junction, 900.0));
     }
 
     @Test
