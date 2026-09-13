@@ -141,6 +141,19 @@ Derived from OSM semantics and our own spec:
 - Clean-room: no external source, bytecode, or configuration is read; external outputs are used only
   as black-box measurements in `docs/pt2matsim-blackbox-comparison.md`.
 
+## Parallel transit tracks
+
+Per the OSM convention (`Tag:railway=tram`), a dual-track tramway is preferably mapped as two parallel
+ways, one per direction, while the `oneway` tag on rails is optional and rarely applied. Rendering
+both untagged tracks as two-way therefore double-counts travel direction and inflates transit link
+counts.
+
+`collapseParallelTransitTracks` (default **on**) detects a pair of transit-track ways of the same
+`railway` type whose two endpoints coincide within 30 m and treats them as one physical corridor:
+the lexicographically smaller way id is kept and the parallel duplicate is dropped. A lone untagged
+track remains bidirectional (literal OSM semantics). Set the flag false to keep the literal reading.
+This is derived from the OSM wiki and geometry only.
+
 ## Known limitations (deferred)
 
 - Turn-restriction-aware cleaning (colored-subgraph expansion) is deferred; the cleaner operates on

@@ -141,12 +141,17 @@ dissolving it would produce a longer link.
 | network | ours nodes/links | pt2MATSim nodes/links |
 |---|---|---|
 | default scope, post-cleaning (service kept) | 73,347 / 161,016 | — (177,968 links when pt2M keeps service) |
-| parity preset (service excluded, 500 m car cap, bus on roads) | **49,981 / 105,592** | **49,549 / 105,125** |
+| parity preset (service excluded, 500 m car cap, bus on roads) | **49,834 / 105,270** | **49,549 / 105,125** |
 
-The parity preset now matches pt2MATSim to **+0.9% nodes / +0.4% links** (was −18% before the cap). The
-car routable subgraph is **one strongly connected component (100.0% of its nodes)** in both networks.
-Direction defaults match empirically: rail **2.01** directed/physical (bidirectional) and tram **1.00**
-(oneway), against pt2MATSim's **2.00** and **1.00**.
+The parity preset matches the external reference to **+0.6% nodes / +0.1% links**. The car routable
+subgraph is **one strongly connected component (100.0% of its nodes)** in both networks. Direction
+defaults match empirically: rail **2.01** directed/physical (bidirectional) and tram **2.00** before
+parallel-track collapse; after collapsing parallel tram tracks (one corridor per physical pair) our
+tram is 1,276 directed links over 638 spans.
+
+**Toronto (repo fixture `src/test/resources/osm/cities/toronto.osm.gz`, 4,009 ways):** builds and
+cleans successfully — 1,006 nodes / 2,052 links; car and bus are each one SCC at 100%. No external
+Toronto reference artifact is available, so this is a structural check only.
 
 Remaining per-class delta is policy, not connectivity: `service` −1,151 (pt2MATSim keeps
 transit-carrying service via `keepWaysWithPublicTransit`, which we exclude entirely), `(rail/other)`
