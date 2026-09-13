@@ -82,4 +82,28 @@ class OsmGtfsBundleRunnerLanesTest {
         }
         return deadEnds;
     }
+
+    @Test
+    void laneCountAndCapacityMatchTheNetworkLink(@TempDir Path out) throws Exception {
+        Path osm = Path.of("src/test/resources/osm/minimal-network.osm");
+        OsmGtfsBundleRunner.BundleResult result =
+                new OsmGtfsBundleRunner().run(osm, null, null, out);
+
+        Network network = new NetworkXmlReader().read(result.networkFile());
+        Lanes lanes = new LanesXmlReader().read(result.lanesFile());
+
+        for (Link link : network.getLinks().values()) {
+            if (!lanes.getLanesToLinkAssignments().containsKey(link.getId())) {
+                continue;
+            }
+            var assignment = lanes.getLanesToLinkAssignments().get(link.getId());
+            assertEquals((int) link.getNumberOfLanes(), assignment.getLanes().size(),
+                    "lane object count must equal the network link's permlanes for " + link.getId());
+            double laneCapacitySum = assignment.getLanes().values().stream()
+                    .mapToDouble(com.citymodeler.matsim.models.lanes.Lane::getCapacityVehiclesPerHour)
+                    .sum();
+            assertEquals(link.getCapacity(), laneCapacitySum, 1e-6,
+                    "lane capacities must sum to the link capacity for " + link.getId());
+        }
+    }
 }

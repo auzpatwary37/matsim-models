@@ -2,8 +2,10 @@ package com.citymodeler.matsim.models.osm.network;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -15,7 +17,10 @@ import com.citymodeler.matsim.models.lanes.Lane;
 import com.citymodeler.matsim.models.lanes.LanesToLinkAssignment;
 import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.network.Link;
+import com.citymodeler.matsim.models.osm.OsmImportConfig;
 import com.citymodeler.matsim.models.osm.OsmImportIssue;
+import com.citymodeler.matsim.models.osm.OsmImportResult;
+import com.citymodeler.matsim.models.osm.OsmNetworkImporter;
 import com.citymodeler.matsim.models.osm.OsmTagSet;
 import com.citymodeler.matsim.models.osm.model.OsmWayRecord;
 
@@ -55,6 +60,84 @@ class LaneDefinitionBuilderTest {
         LanesToLinkAssignment assignment =
                 result.lanes().getLanesToLinkAssignments().get(Id.create("l_in", Link.class));
         return assignment.getLanes().values().iterator().next();
+    }
+
+    private static int laneCount(LaneDefinitionResult result) {
+        return result.lanes().getLanesToLinkAssignments().get(Id.create("l_in", Link.class))
+                .getLanes().size();
+    }
+
+    @Test
+    void ruleDefaultOnewayWayIsTreatedOneWayForLanes() {
+        // Spec §1a direction source: a highway=motorway way has no literal oneway tag but the rule
+        // defaults to one-way, so the network emits one link and lanes=* is that direction's count.
+        // The builder must agree, taking lanes directly instead of halving a bidirectional total.
+        Network network = new Network();
+        network.createNode("a", 0, 0);
+        network.createNode("b", 1, 0);
+        network.createNode("c", 2, 0);
+        network.createLink("l_in", "a", "b", 100, 1200, 47.2, 3, Set.of("car"));
+        network.createLink("l_out", "b", "c", 100, 1200, 47.2, 3, Set.of("car"));
+
+        LaneDefinitionResult result = build(network, way(Map.of(
+                "highway", "motorway", "lanes", "3")));
+
+        assertEquals(1, result.lanes().getLanesToLinkAssignments().size());
+        assertEquals(3, laneCount(result), "motorway is one-way by rule: lanes=3 is not halved");
+        assertEquals(3, lane(result).getAttributes().getAttribute("osm:lanes.count"),
+                "the one-way count is the literal lanes total, not a halved bidirectional total");
+    }
+
+    @Test
+    void motorwayLaneDirectionMatchesEmittedNetworkLink() throws Exception {
+        // End-to-end: the built network emits a single directed link for a rule-default one-way
+        // motorway, and the lane builder must treat that (only) link as one-way, so lanes=3 is the
+        // travelled direction's count rather than a halved bidirectional total.
+        OsmImportResult importResult = new OsmNetworkImporter().read(OsmImportConfig.of(
+                Path.of("src/test/resources/osm/motorway-no-oneway-tag.osm"), "EPSG:3857"));
+        OsmNetworkBuildResult built = new OsmMatsimNetworkBuilder().build(importResult, config);
+        Network network = built.cleanedNetwork();
+
+        var motorwayLinks = built.linkIdsByOsmWayId().get("20");
+        assertNotNull(motorwayLinks);
+        assertTrue(motorwayLinks.stream().allMatch(id -> id.endsWith("_f")),
+                "rule-default one-way motorway emits only forward directed links: " + motorwayLinks);
+
+        LaneDefinitionResult result = builder.build(network, built.linkRefsByLinkId(),
+                importResult.ways(), built.geometryStore(), config);
+
+        for (String linkId : motorwayLinks) {
+            LanesToLinkAssignment assignment = result.lanes()
+                    .getLanesToLinkAssignments().get(Id.create(linkId, Link.class));
+            assertNotNull(assignment, "the emitted motorway link must have a lane assignment");
+            assertEquals(3, assignment.getLanes().size(),
+                    "lanes=3 on a one-way motorway is 3 lanes, matching network permlanes");
+            assertEquals(network.getLinks().get(Id.create(linkId, Link.class)).getNumberOfLanes(),
+                    assignment.getLanes().size(), 1e-9,
+                    "laneDefinitions must agree with network.xml permlanes");
+        }
+    }
+
+    @Test
+    void untaggedLinkUsesRuleDefaultLaneCount() {
+        // Spec §1a step 5: no lane tags -> the network's own rule.lanesPerDirection() (2 for primary).
+        Network network = junction();
+        LaneDefinitionResult result = build(network, way(Map.of("highway", "primary")));
+
+        assertEquals(2, laneCount(result), "untagged primary must match network permlanes (2)");
+        assertEquals("absent", lane(result).getAttributes().getAttribute("osm:lane.confidence"));
+    }
+
+    @Test
+    void bothWaysIsCarriedAsProvenanceOnTheLaneAndNotDuplicated() {
+        // Spec §1a step 4: lanes=5, lanes:both_ways=1 -> 2 directed lanes, and each lane records
+        // the both_ways count as provenance; the centre lane is not added to either direction.
+        Network network = junction();
+        LaneDefinitionResult result = build(network, way(Map.of(
+                "highway", "primary", "lanes", "5", "lanes:both_ways", "1")));
+
+        assertEquals(2, laneCount(result), "per-direction count excludes the both_ways lane");
+        assertEquals(1.0, lane(result).getAttributes().getAttribute("osm:lanes.bothWays"));
     }
 
     @Test

@@ -26,6 +26,7 @@ public final class LaneDefinitionBuilder {
     private final OsmDirectionalLaneResolver countResolver = new OsmDirectionalLaneResolver();
     private final OsmTurnLaneParser turnParser = new OsmTurnLaneParser();
     private final OsmLaneDecomposer decomposer = new OsmLaneDecomposer();
+    private final OsmModeAccessResolver accessResolver = new OsmModeAccessResolver();
 
     public LaneDefinitionResult build(Network network, Map<String, OsmLinkRef> refs,
                                       Map<String, OsmWayRecord> ways, OsmGeometryStore geometryStore,
@@ -65,8 +66,9 @@ public final class LaneDefinitionBuilder {
                                 + ") has no matching network rule; no lane assignment", null));
                 continue;
             }
-            boolean oneway = isOneway(way);
-            OsmLaneCount count = countResolver.resolve(way.tags(), ref.forward(), oneway);
+            boolean oneway = isOneway(way, rule, config);
+            OsmLaneCount count = countResolver.resolve(way.tags(), ref.forward(), oneway,
+                    rule.lanesPerDirection());
             String turnLanesTag = turnLanes(way, ref.forward(), oneway, count);
             if (turnLanesTag == null && hasBareTurnLanes(way, ref.forward())) {
                 // A whole-carriageway turn:lanes on a bidirectional way with an unknown split is
@@ -96,12 +98,31 @@ public final class LaneDefinitionBuilder {
         return new LaneDefinitionResult(lanes, issues);
     }
 
-    private static boolean isOneway(OsmWayRecord way) {
-        String oneway = way.tags().get("oneway");
-        // oneway=-1 means the draw direction is reversed but it is still one-way, so lane counts
-        // (which describe the travelled direction) apply to a single direction.
-        return "yes".equals(oneway) || "1".equals(oneway) || "true".equals(oneway)
-                || "-1".equals(oneway);
+    /**
+     * Direction source shared with network construction (spec §1a): resolve access exactly as
+     * {@link OsmSegmentGraph} does and treat a link as one-way unless access grants BOTH forward and
+     * backward travel. This makes the lane direction agree with the emitted {@code network.xml},
+     * including rule-default one-way ways such as {@code motorway} that carry no literal
+     * {@code oneway} tag.
+     */
+    private boolean isOneway(OsmWayRecord way, OsmWayRule rule, OsmNetworkBuildConfig config) {
+        List<OsmModeAccessResolver.DirectionDecision> decisions = accessResolver.resolve(way,
+                OsmModeAccessResolver.candidateModes(rule.allowedModes(), config.addBusToCarRoads()),
+                rule.defaultOneway());
+        boolean forward = false;
+        boolean backward = false;
+        for (OsmModeAccessResolver.DirectionDecision decision : decisions) {
+            if (decision.allowedModes().isEmpty()) {
+                continue;
+            }
+            if (decision.forward()) {
+                forward = true;
+            }
+            if (decision.backward()) {
+                backward = true;
+            }
+        }
+        return !(forward && backward);
     }
 
     /**

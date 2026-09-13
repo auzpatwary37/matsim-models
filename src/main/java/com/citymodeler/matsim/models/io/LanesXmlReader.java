@@ -18,7 +18,7 @@ import com.citymodeler.matsim.models.network.Link;
  * requires no special handling.
  */
 public final class LanesXmlReader {
-    private static final String SCHEMA = "/schemas/lanes.xsd";
+    private static final String SCHEMA = "/schemas/v2/laneDefinitions_v2.0.xsd";
     private final boolean validateSchema;
 
     public LanesXmlReader() {
@@ -73,10 +73,36 @@ public final class LanesXmlReader {
                     lane.setAlignment(alignment.getTextContent());
                 }
                 XmlSupport.readAttributes(laneElement, lane.getAttributes());
+                rehydrateToLaneIds(lane);
                 assignment.addLane(lane);
             }
             lanes.addAssignment(assignment);
         }
         return lanes;
+    }
+
+    /**
+     * Restores the {@code toLane} ids a mixed lane had to drop from {@code <leadsTo>} (the published
+     * {@code xs:choice} cannot carry both branches). The writer joins them into the
+     * {@code osm:lane.toLaneIds} attribute; parsing it back makes a mixed-lane relationship
+     * reversible through a write/read round-trip rather than degrading to metadata (spec Part 2).
+     * Ids already present from an explicit {@code toLane} branch are not duplicated.
+     */
+    private static void rehydrateToLaneIds(Lane lane) {
+        Object raw = lane.getAttributes().getAttribute(LanesXmlWriter.TO_LANE_IDS_ATTRIBUTE);
+        if (raw == null) {
+            return;
+        }
+        java.util.Set<String> existing = new java.util.LinkedHashSet<>();
+        for (Id<Lane> id : lane.getToLaneIds()) {
+            existing.add(id.toString());
+        }
+        for (String token : raw.toString().split(",")) {
+            String trimmed = token.trim();
+            if (trimmed.isEmpty() || !existing.add(trimmed)) {
+                continue;
+            }
+            lane.addToLaneId(Id.create(trimmed, Lane.class));
+        }
     }
 }

@@ -77,6 +77,9 @@ public final class OsmLaneDecomposer {
         if (count.undeterminedTotal() != null) {
             lane.getAttributes().putAttribute("osm:lanes.total", count.undeterminedTotal());
         }
+        if (count.bothWays() != null) {
+            lane.getAttributes().putAttribute("osm:lanes.bothWays", count.bothWays());
+        }
 
         Set<String> toLinks = new LinkedHashSet<>();
         String confidence = count.confidence();

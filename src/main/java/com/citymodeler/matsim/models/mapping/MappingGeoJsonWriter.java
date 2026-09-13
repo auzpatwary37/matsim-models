@@ -95,7 +95,7 @@ public final class MappingGeoJsonWriter {
                 ? new StopCandidateScorer(TransitMappingConfig.defaults(),
                         new LinkSpatialIndex(network, SPATIAL_CELL_SIZE), network)
                 : null;
-        CrsUtils.Projector projector = anyMode ? CrsUtils.forCrs(CrsUtils.networkTargetCrs(network)) : null;
+        CrsUtils.Projector projector = CrsUtils.forCrs(CrsUtils.networkTargetCrs(network));
 
         List<Object> features = new ArrayList<>();
         for (Map.Entry<Id<TransitStopFacility>, TransitStopFacility> entry : sorted.entrySet()) {
@@ -105,9 +105,14 @@ public final class MappingGeoJsonWriter {
                 continue;
             }
 
+            // GeoJSON is WGS84 lon/lat by contract (spec Part 4). Prefer the source GTFS lon/lat when
+            // present; otherwise inverse-project the network-CRS coordinate back to WGS84 so projected
+            // metres are never written into a .geojson as if they were degrees.
+            Coord wgs84 = wgs84(facility, coord, projector);
+
             Map<String, Object> geometry = new LinkedHashMap<>();
             geometry.put("type", "Point");
-            geometry.put("coordinates", List.of(coord.getX(), coord.getY()));
+            geometry.put("coordinates", List.of(wgs84.getX(), wgs84.getY()));
 
             Map<String, Object> properties = new LinkedHashMap<>();
             properties.put("facilityId", entry.getKey().toString());
@@ -165,6 +170,20 @@ public final class MappingGeoJsonWriter {
             }
         }
         return result;
+    }
+
+    /**
+     * Returns the facility coordinate in WGS84 lon/lat: the {@code gtfs:lon}/{@code gtfs:lat}
+     * attributes when present, else the inverse projection of the network-CRS coordinate.
+     */
+    private static Coord wgs84(TransitStopFacility facility, Coord coord,
+                               CrsUtils.Projector projector) {
+        Object lon = facility.getAttributes().getAttribute("gtfs:lon");
+        Object lat = facility.getAttributes().getAttribute("gtfs:lat");
+        if (lon != null && lat != null) {
+            return new Coord(Double.parseDouble(lon.toString()), Double.parseDouble(lat.toString()));
+        }
+        return projector.unproject(coord.getX(), coord.getY());
     }
 
     /**

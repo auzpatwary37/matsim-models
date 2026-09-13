@@ -90,9 +90,48 @@ class MappingGeoJsonWriterTest {
         assertEquals("stop_a", features.get(0).get("properties").get("facilityId").asText());
         assertEquals("stop_b", features.get(1).get("properties").get("facilityId").asText());
         assertEquals("l1", features.get(0).get("properties").get("linkId").asText());
-        assertEquals(25.0, features.get(0).get("geometry").get("coordinates").get(0).asDouble());
-        assertEquals(5.0, features.get(0).get("geometry").get("coordinates").get(1).asDouble());
+        // Geometry is WGS84 lon/lat: the network coord is inverse-projected back to WGS84.
+        Coord expected = CrsUtils.forCrs("EPSG:3857").unproject(25, 5);
+        assertEquals(expected.getX(), features.get(0).get("geometry").get("coordinates").get(0).asDouble(),
+                1e-9);
+        assertEquals(expected.getY(), features.get(0).get("geometry").get("coordinates").get(1).asDouble(),
+                1e-9);
         assertEquals("Alpha \"quoted\"", features.get(0).get("properties").get("name").asText());
+    }
+
+    @Test
+    void geometryIsWgs84LonLatForProjectedMetreCoordinates() throws Exception {
+        // A facility whose coordinate is projected metres must be written as WGS84 degrees.
+        TransitSchedule schedule = new TransitSchedule();
+        TransitStopFacility stop = new TransitStopFacility(
+                Id.create("s", TransitStopFacility.class), new Coord(-8_200_000, 5_700_000), false);
+        stop.setName("projected");
+        schedule.addStopFacility(stop);
+
+        JsonNode coords = new ObjectMapper().readTree(
+                        new MappingGeoJsonWriter().writeToString(schedule, network))
+                .get("features").get(0).get("geometry").get("coordinates");
+        double lon = coords.get(0).asDouble();
+        double lat = coords.get(1).asDouble();
+        assertTrue(lon >= -180.0 && lon <= 180.0, "lon must be a WGS84 degree, got " + lon);
+        assertTrue(lat >= -90.0 && lat <= 90.0, "lat must be a WGS84 degree, got " + lat);
+    }
+
+    @Test
+    void gtfsLonLatAttributesArePreferredForGeometry() throws Exception {
+        TransitSchedule schedule = new TransitSchedule();
+        TransitStopFacility stop = new TransitStopFacility(
+                Id.create("s", TransitStopFacility.class), new Coord(100, 200), false);
+        stop.setName("gtfs");
+        stop.getAttributes().putAttribute("gtfs:lon", -73.56);
+        stop.getAttributes().putAttribute("gtfs:lat", 45.50);
+        schedule.addStopFacility(stop);
+
+        JsonNode coords = new ObjectMapper().readTree(
+                        new MappingGeoJsonWriter().writeToString(schedule, network))
+                .get("features").get(0).get("geometry").get("coordinates");
+        assertEquals(-73.56, coords.get(0).asDouble(), 1e-9);
+        assertEquals(45.50, coords.get(1).asDouble(), 1e-9);
     }
 
     @Test

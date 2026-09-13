@@ -84,7 +84,7 @@ class LanesXmlTest {
     }
 
     @Test
-    void bothPresentEmitsToLinkAndPreservesDroppedToLaneIds() {
+    void bothPresentEmitsToLinkAndRehydratesDroppedToLaneIds() {
         Lanes lanes = new Lanes();
         LanesToLinkAssignment assignment = new LanesToLinkAssignment(Id.create("l1", Link.class));
         Lane lane = new Lane(Id.create("l1_l0", Lane.class));
@@ -102,8 +102,38 @@ class LanesXmlTest {
                 .getLanes().get(Id.create("l1_l0", Lane.class));
         assertEquals(1, reparsedLane.getToLinkIds().size());
         assertEquals("l2", reparsedLane.getToLinkIds().get(0).toString());
-        assertEquals(0, reparsedLane.getToLaneIds().size());
+        // Spec Part 2: the dropped toLane ids are rehydrated from osm:lane.toLaneIds, not degraded
+        // to metadata, so a mixed lane round-trips.
+        assertEquals(2, reparsedLane.getToLaneIds().size());
+        assertEquals("l1_l1", reparsedLane.getToLaneIds().get(0).toString());
+        assertEquals("l1_l2", reparsedLane.getToLaneIds().get(1).toString());
         assertEquals("l1_l1,l1_l2", reparsedLane.getAttributes().getAttribute("osm:lane.toLaneIds"));
+    }
+
+    @Test
+    void rehydratedToLaneIdsAreDeduplicated() {
+        String xml = """
+                <laneDefinitions xmlns="http://www.matsim.org/files/dtd">
+                    <lanesToLinkAssignment linkIdRef="l1">
+                        <lane id="l1_l0">
+                            <leadsTo>
+                                <toLane refId="l1_l1"/>
+                            </leadsTo>
+                            <alignment>0</alignment>
+                            <attributes>
+                                <attribute name="osm:lane.toLaneIds" class="java.lang.String">l1_l1,l1_l2</attribute>
+                            </attributes>
+                        </lane>
+                    </lanesToLinkAssignment>
+                </laneDefinitions>
+                """;
+
+        Lane lane = new LanesXmlReader().read(xml)
+                .getLanesToLinkAssignments().get(Id.create("l1", Link.class))
+                .getLanes().get(Id.create("l1_l0", Lane.class));
+        assertEquals(2, lane.getToLaneIds().size(), "already-present toLane ids are not duplicated");
+        assertEquals("l1_l1", lane.getToLaneIds().get(0).toString());
+        assertEquals("l1_l2", lane.getToLaneIds().get(1).toString());
     }
 
     @Test

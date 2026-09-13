@@ -57,6 +57,7 @@ license — not GPL, CC-BY, Apache, or any other — for these files. Consequent
 | File | Upstream source (matsim.org) | Adaptations made in-repo | Reachable from |
 |------|------------------------------|--------------------------|----------------|
 | `src/main/resources/schemas/v2/matsimCommon.xsd` | `…/files/dtd/matsimCommon.xsd` | Added provenance/attribution header; rewrote relative/absolute includes for offline classpath resolution. Upstream editor credit (Dominik Grether, VSP, Berlin Institute of Technology) restored in header. | Production (opt-in) **and** tests |
+| `src/main/resources/schemas/v2/laneDefinitions_v2.0.xsd` | `…/files/dtd/laneDefinitions_v2.0.xsd` | Added provenance/attribution header; the original already used a relative `xs:include` of `matsimCommon.xsd` (resolved to the sibling main-resources copy). Upstream editor credit (Dominik Grether, VSP, Berlin Institute of Technology) restored. | Production (opt-in) **and** tests |
 | `src/main/resources/schemas/v2/vehicleDefinitionsEnumTypes.xsd` | `…/files/dtd/vehicleDefinitionsEnumTypes.xsd` | Added provenance/attribution header. Upstream editor credit (Dominik Grether, VSP, Berlin Institute of Technology) restored. | Production (opt-in) **and** tests |
 | `src/main/resources/schemas/v2/vehicleDefinitions_v2.0.xsd` | `…/files/dtd/vehicleDefinitions_v2.0.xsd` | Added provenance/attribution header; converted absolute `xs:include` URLs to relative for offline resolution. Upstream editor credit (Kai Martins-Turner, VSP, Berlin Institute of Technology) restored. | Production (opt-in) **and** tests |
 | `src/test/resources/matsim-spec/matsimCommon.xsd` | `…/files/dtd/matsimCommon.xsd` | Same adaptations as the main-resources copy. | Tests only |
@@ -75,9 +76,10 @@ license — not GPL, CC-BY, Apache, or any other — for these files. Consequent
 **Usage / why they are (or are not) packaged:**
 
 - The `src/main/resources/schemas/v2/*` files are **packaged in the distributed JAR**
-  because the optional runtime validation path — `new VehiclesXmlReader(true)` — loads
-  `vehicleDefinitions_v2.0.xsd` (and its `xs:include`d companions) at runtime. This is the
-  only production reader whose opt-in validation uses a published MATSim schema; every other
+  because the optional runtime validation path — `new VehiclesXmlReader(true)` and
+  `new LanesXmlReader(true)` — loads `vehicleDefinitions_v2.0.xsd` /
+  `laneDefinitions_v2.0.xsd` (and their `xs:include`d companions) at runtime. These are the
+  production readers whose opt-in validation uses a published MATSim schema; every other
   production reader uses a permissive repo-authored `xs:anyType` stub.
 - The `src/test/resources/matsim-spec/*` files are **test-scope only** and serve as
   external interoperability oracles (`TransitScheduleSpecValidationTest`,

@@ -35,6 +35,22 @@ class XmlSchemaValidationTest {
         assertThrows(MatsimValidationException.class, () -> new EventsXmlReader(true).readString("<notEvents/>", event -> { }));
     }
 
+    @Test
+    void laneSchemaIsRealAndRejectsStructurallyInvalidDocument() {
+        // The production lane schema is the published v2.0 XSD (not an xs:anyType stub), so a
+        // structurally invalid lane (missing the mandatory alignment) must fail validation, while
+        // the lenient (validation-off) reader still tolerates it.
+        String missingAlignment = """
+                <laneDefinitions xmlns="http://www.matsim.org/files/dtd">
+                    <lanesToLinkAssignment linkIdRef="l1">
+                        <lane id="l1_l0"><leadsTo><toLink refId="l2"/></leadsTo></lane>
+                    </lanesToLinkAssignment>
+                </laneDefinitions>
+                """;
+        assertThrows(MatsimValidationException.class, () -> new LanesXmlReader(true).read(missingAlignment));
+        assertDoesNotThrow(() -> new LanesXmlReader(false).read(missingAlignment));
+    }
+
     private Path fixture(String name) {
         return Path.of("src/test/resources/fixtures", name);
     }
