@@ -231,6 +231,34 @@ class GtfsImporterTest {
         assertEquals("1", GtfsCsvReader.cell(table.rows().get(0), "a"));
     }
 
+    /**
+     * Regression: a CRLF feed where a quoted (even empty) field appears on every row must NOT be
+     * treated as an unterminated quote that swallows the following line. Real feeds (e.g. the
+     * Luxembourg GTFS) quote an empty stop_headsign on every row; the old parity-by-count logic
+     * merged adjacent physical lines and corrupted the next field.
+     */
+    @Test
+    void csvParserDoesNotMergeLinesWithClosedQuotedFields() throws IOException {
+        String csv = "trip_id,stop_id,seq,headsign,arr,dep\r\n"
+                + "T1,S1,0,\"\",5:40:00,5:40:00\r\n"
+                + "T1,S2,1,\"\",5:45:00,5:45:00\r\n";
+        GtfsCsvReader.CsvTable table = GtfsCsvReader.read(new StringReader(csv));
+        assertEquals(2, table.rows().size(), "each physical row is one record");
+        assertEquals("5:40:00", GtfsCsvReader.cell(table.rows().get(0), "arr"));
+        assertEquals("5:45:00", GtfsCsvReader.cell(table.rows().get(1), "arr"));
+        assertEquals("S2", GtfsCsvReader.cell(table.rows().get(1), "stop_id"));
+    }
+
+    /** A genuinely unterminated quoted field still spans lines. */
+    @Test
+    void csvParserStillJoinsGenuinelyUnterminatedQuotedField() throws IOException {
+        String csv = "a,b\n\"line one\nline two\",2\n";
+        GtfsCsvReader.CsvTable table = GtfsCsvReader.read(new StringReader(csv));
+        assertEquals(1, table.rows().size());
+        assertEquals("line one\nline two", GtfsCsvReader.cell(table.rows().get(0), "a"));
+        assertEquals("2", GtfsCsvReader.cell(table.rows().get(0), "b"));
+    }
+
     @Test
     void timeParsingHandlesOver24Hours() {
         assertEquals(90000, GtfsImporter.parseTime("25:00:00"));

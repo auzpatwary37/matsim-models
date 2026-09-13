@@ -27,8 +27,6 @@ import com.citymodeler.matsim.models.osm.OsmImportIssue;
 import com.citymodeler.matsim.models.osm.OsmImportResult;
 import com.citymodeler.matsim.models.osm.OsmIssueSeverity;
 import com.citymodeler.matsim.models.osm.model.OsmNodeRecord;
-import com.citymodeler.matsim.models.osm.model.OsmRelationMemberRecord;
-import com.citymodeler.matsim.models.osm.model.OsmRelationRecord;
 import com.citymodeler.matsim.models.osm.model.OsmWayRecord;
 
 /**
@@ -57,66 +55,26 @@ public final class OsmSignalAwareSimplifier {
 
         Map<String, OsmNodeRecord> nodes = importResult.nodes();
 
-        Set<String> acceptedWayIds = new TreeSet<>();
-        for (OsmWayRecord w : importResult.ways().values()) {
-            if (config.resolveRule(w.tags()) != null && w.nodeRefs().size() >= 2) {
-                acceptedWayIds.add(w.id());
-            }
-        }
-
         Set<String> transitStopNodes = transitStopOsmNodeIds(materialized);
-        Set<String> restrictionViaNodes = restrictionViaNodeIds(importResult);
 
-        Map<String, OsmNodeClassification> classification = OsmNodeClassifier.classify(
-                importResult, acceptedWayIds, transitStopNodes, restrictionViaNodes,
-                options.preserveSharpBends(), options.sharpBendAngleDegrees(),
-                options.explicitPreserveOsmNodeIds());
+        CollapsedTopology collapsed = OsmTopologyBuilder.buildSignalReady(
+                importResult, config, options, transitStopNodes);
 
+        Network network = collapsed.network();
+        Map<String, OsmNodeClassification> classification = collapsed.classification();
+        Map<String, List<String>> linkIdsByOsmWayId = collapsed.linkIdsByOsmWayId();
+        // Seed from the MATERIALIZED result, not collapsed.issues(): OsmMatsimNetworkBuilder.build
+        // constructs materialized.issues() as a copy of its engine's issues and then appends
+        // importer-policy warnings (dynamic-oneway, missing-node) via addWayWarnings. The signal-ready
+        // engine run performed here is separate, so merge in any of its issues that the materialized
+        // result does not already carry (e.g. degenerate-span), deduplicated to avoid double-adding
+        // the shared import-level issues. Deterministic: insertion-ordered list, no map iteration.
         List<OsmImportIssue> issues = new ArrayList<>(materialized.issues());
-
-        Network network = new Network("osm-simplified-network");
-        for (String osmNodeId : new TreeSet<>(classification.keySet())) {
-            if (!classification.get(osmNodeId).keep()) {
-                continue;
-            }
-            OsmNodeRecord rec = nodes.get(osmNodeId);
-            if (rec == null) {
-                continue;
-            }
-            network.createNode(OsmGeneratedIds.nodeId(osmNodeId),
-                    rec.projectedCoord().getX(), rec.projectedCoord().getY());
-        }
-
-        Map<String, OsmCollapsedLink> collapsedLinks = new TreeMap<>();
-        Map<String, List<String>> linkIdsByOsmWayId = new TreeMap<>();
-        Map<String, OsmPolyline> geometry = new TreeMap<>();
-
-        OsmModeAccessResolver access = new OsmModeAccessResolver();
-        boolean rawTagsKept = importResult.provenance().rawTagsKept();
-
-        for (String wayId : new TreeSet<>(acceptedWayIds)) {
-            OsmWayRecord way = importResult.ways().get(wayId);
-            OsmWayRule rule = config.resolveRule(way.tags());
-            for (OsmModeAccessResolver.DirectionDecision decision
-                    : access.resolve(way, rule.allowedModes())) {
-                if (decision.allowedModes().isEmpty()) {
-                    continue;
-                }
-                boolean oneway = !(decision.forward() && decision.backward());
-                if (decision.forward()) {
-                    processChain(network, way, rule, nodes, classification,
-                            new ArrayList<>(way.nodeRefs()), true, decision.allowedModes(), oneway,
-                            rawTagsKept, collapsedLinks, linkIdsByOsmWayId, geometry, issues);
-                }
-                if (decision.backward()) {
-                    processChain(network, way, rule, nodes, classification,
-                            reverse(way.nodeRefs()), false, decision.allowedModes(), oneway,
-                            rawTagsKept, collapsedLinks, linkIdsByOsmWayId, geometry, issues);
-                }
+        for (OsmImportIssue engineIssue : collapsed.issues()) {
+            if (!issues.contains(engineIssue)) {
+                issues.add(engineIssue);
             }
         }
-
-        network.postProcess();
 
         OsmNetworkBuildResult view = new OsmNetworkBuildResult(
                 network, List.of(), Collections.emptyMap(), linkIdsByOsmWayId);
@@ -135,20 +93,15 @@ public final class OsmSignalAwareSimplifier {
             }
         }
 
-        int collapsed = 0;
-        int preserved = 0;
         int signalNodes = 0;
-        for (String osmNodeId : classification.keySet()) {
-            if (classification.get(osmNodeId).keep()) {
-                preserved++;
-                OsmNodeRecord rec = nodes.get(osmNodeId);
-                if (rec != null && OsmNodeClassifier.isSignalized(rec.tags())) {
-                    signalNodes++;
-                }
-            } else {
-                collapsed++;
+        for (OsmNodeClassification c : classification.values()) {
+            if (c.reasons().contains(OsmNodeReason.SIGNALIZED)) {
+                signalNodes++;
             }
         }
+        int preserved = collapsed.routingNodeIds().size();
+        int collapsedGeometryNodes = OsmSegmentGraph.build(importResult, config).nodeIds().size()
+                - preserved;
 
         Map<String, OsmWayRecord> ways = importResult.ways();
         List<OsmImportIssue> reportIssues =
@@ -159,154 +112,17 @@ public final class OsmSignalAwareSimplifier {
         SignalReadinessReport report = new SignalReadinessReport(
                 junctions.size(),
                 (int) junctions.stream().filter(JunctionSignalDescriptor::confirmedSignalized).count(),
-                signalNodes, collapsed, preserved,
+                signalNodes, collapsedGeometryNodes, preserved,
                 countHighDegreeNonSignalized(network, junctionsByNodeId),
                 countMovementsWithoutLaneInfo(junctions, network, ways),
                 reportIssues);
 
         return new OsmSimplifiedNetwork(
-                network, new OsmGeometryStore(geometry), collapsedLinks, linkIdsByOsmWayId,
+                network, new OsmGeometryStore(collapsed.geometry()), collapsed.collapsedLinksByLinkId(),
+                linkIdsByOsmWayId,
                 junctions, junctionsByNodeId,
                 restrictionRecord.index(), restrictionRecord.perLink(),
                 report, allIssues);
-    }
-
-    /** Splits an ordered chain at kept nodes and emits one merged link per kept-to-kept span. */
-    private static void processChain(
-            Network network, OsmWayRecord way, OsmWayRule rule,
-            Map<String, OsmNodeRecord> nodes, Map<String, OsmNodeClassification> classification,
-            List<String> ordered, boolean forward, Set<String> modes, boolean oneway,
-            boolean rawTagsKept,
-            Map<String, OsmCollapsedLink> collapsedLinks,
-            Map<String, List<String>> linkIdsByOsmWayId,
-            Map<String, OsmPolyline> geometry,
-            List<OsmImportIssue> issues) {
-
-        int n = ordered.size();
-        if (n < 2) {
-            return;
-        }
-
-        int m = way.nodeRefs().size();
-
-        List<Integer> kept = new ArrayList<>();
-        for (int i = 0; i < n; i++) {
-            OsmNodeClassification c = classification.get(ordered.get(i));
-            if (c != null && c.keep() && nodes.get(ordered.get(i)) != null) {
-                kept.add(i);
-            }
-        }
-        if (kept.isEmpty()) {
-            return;
-        }
-
-        double dirLanes = new OsmLaneResolver().resolve(way, rule, forward, oneway);
-        double dirSpeed = new OsmSpeedResolver().resolve(way, rule, forward);
-        double capacityPerLane = rule.capacityPerLane();
-
-        for (int k = 0; k + 1 < kept.size(); k++) {
-            int p = kept.get(k);
-            int q = kept.get(k + 1);
-            if (q <= p) {
-                continue;
-            }
-            String fromOsm = ordered.get(p);
-            String toOsm = ordered.get(q);
-
-            List<Coord> pts = new ArrayList<>();
-            boolean allRecorded = true;
-            for (int i = p; i <= q; i++) {
-                OsmNodeRecord rec = nodes.get(ordered.get(i));
-                if (rec == null) {
-                    allRecorded = false;
-                    break;
-                }
-                pts.add(rec.projectedCoord());
-            }
-            if (!allRecorded) {
-                issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, "simplify-missing-node",
-                        "Way " + way.id() + " span " + fromOsm + "->" + toOsm
-                                + " references a missing node; span skipped", null));
-                continue;
-            }
-
-            double length = 0;
-            for (int i = 0; i + 1 < pts.size(); i++) {
-                double dx = pts.get(i).getX() - pts.get(i + 1).getX();
-                double dy = pts.get(i).getY() - pts.get(i + 1).getY();
-                length += Math.sqrt(dx * dx + dy * dy);
-            }
-            if (length <= 0.0) {
-                continue;
-            }
-
-            List<OsmLinkRef> sourceSegments = new ArrayList<>();
-            for (int i = p; i < q; i++) {
-                // Position-based forward index (robust to repeated/closed-node ways).
-                int ia = forward ? i : (m - 1 - i);
-                int ib = forward ? (i + 1) : (m - 2 - i);
-                int seg = Math.min(ia, ib);
-                boolean segFwd = ib > ia;
-                sourceSegments.add(new OsmLinkRef(
-                        OsmGeneratedIds.linkId(way.id(), seg, segFwd), way.id(), seg, segFwd));
-            }
-
-            String linkId = OsmGeneratedIds.simplifiedLinkId(way.id(), forward, fromOsm, toOsm);
-            Link link = network.createLink(linkId,
-                    OsmGeneratedIds.nodeId(fromOsm), OsmGeneratedIds.nodeId(toOsm),
-                    length, dirLanes * capacityPerLane, dirSpeed, dirLanes, modes);
-            link.getAttributes().putAttribute("osm:wayId", way.id());
-            link.getAttributes().putAttribute("osm:key", rule.key());
-            link.getAttributes().putAttribute("osm:value", rule.value());
-            link.getAttributes().putAttribute("osm:simplified", "true");
-            link.getAttributes().putAttribute("osm:segmentCount", String.valueOf(q - p));
-            copyLaneTags(link, way);
-            if (rawTagsKept) {
-                for (Map.Entry<String, String> e : way.tags().asMap().entrySet()) {
-                    link.getAttributes().putAttribute("osm:tag:" + e.getKey(), e.getValue());
-                }
-            }
-
-            collapsedLinks.put(linkId,
-                    new OsmCollapsedLink(linkId, way.id(), forward, fromOsm, toOsm, sourceSegments));
-            geometry.put(linkId, new OsmPolyline(pts));
-            linkIdsByOsmWayId.computeIfAbsent(way.id(), key -> new ArrayList<>()).add(linkId);
-        }
-    }
-
-    /**
-     * Always copy lane-relevant way tags onto the merged link so lane data survives simplification.
-     *
-     * <p>Review: these values are carried through as <em>raw whole-way OSM source data</em>. A single
-     * merged link can span several physical spans and directions, so the original way tags do NOT
-     * describe any particular approach or span of the merged link. We therefore annotate the link
-     * with an explicit scope/applicability marker so downstream signal-IO consumers treat them as
-     * raw provenance, not as resolved per-approach / per-span lane assignments.
-     */
-    private static void copyLaneTags(Link link, OsmWayRecord way) {
-        String[] laneKeys = {"lanes", "lanes:forward", "lanes:backward",
-                "turn:lanes", "turn:lanes:forward", "turn:lanes:backward",
-                "bus:lanes", "psv:lanes", "taxi:lanes", "bicycle:lanes"};
-        boolean any = false;
-        for (String key : laneKeys) {
-            String value = way.tags().get(key);
-            if (value != null) {
-                link.getAttributes().putAttribute("osm:tag:" + key, value);
-                any = true;
-            }
-        }
-        if (any) {
-            link.getAttributes().putAttribute("osm:laneTags.scope", "raw-source");
-            link.getAttributes().putAttribute("osm:laneTags.applicability", "whole-way");
-        }
-    }
-
-    private static List<String> reverse(List<String> in) {
-        List<String> out = new ArrayList<>(in.size());
-        for (int i = in.size() - 1; i >= 0; i--) {
-            out.add(in.get(i));
-        }
-        return out;
     }
 
     private static Set<String> transitStopOsmNodeIds(OsmNetworkBuildResult materialized) {
@@ -314,22 +130,6 @@ public final class OsmSignalAwareSimplifier {
         for (OsmStopHint h : materialized.stopHints()) {
             if (h.elementType() == OsmElementType.NODE) {
                 ids.add(h.osmId());
-            }
-        }
-        return ids;
-    }
-
-    private static Set<String> restrictionViaNodeIds(OsmImportResult importResult) {
-        Set<String> ids = new TreeSet<>();
-        for (OsmRelationRecord rel : importResult.relations().values()) {
-            String type = rel.tags().get("type");
-            if (!("restriction".equals(type) || "keep_right".equals(type) || "keep_left".equals(type))) {
-                continue;
-            }
-            for (OsmRelationMemberRecord m : rel.members()) {
-                if ("via".equals(m.role()) && m.type() == OsmElementType.NODE) {
-                    ids.add(m.ref());
-                }
             }
         }
         return ids;

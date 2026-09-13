@@ -380,6 +380,24 @@ final class SignalReadyFixtures {
         return result(nodes, ways);
     }
 
+    /**
+     * A single residential way whose {@code oneway=alternating} is importer-policy dynamic: the
+     * importer treats it as bidirectional and records a {@code dynamic-oneway} warning on the
+     * materialized build. Used to prove the simplifier preserves importer-policy issues.
+     */
+    static OsmImportResult dynamicOnewayWay() {
+        Map<String, OsmNodeRecord> nodes = new TreeMap<>();
+        nodes.put("D0", node("D0", 0, 0));
+        nodes.put("D1", node("D1", 10, 0));
+        nodes.put("D2", node("D2", 20, 0));
+
+        Map<String, OsmWayRecord> ways = new TreeMap<>();
+        ways.put("60", way("60", List.of("D0", "D1", "D2"),
+                "highway", "residential", "oneway", "alternating"));
+
+        return result(nodes, ways);
+    }
+
     /** Two adjacent collinear streets meeting at a degree-2 boundary node M with DIFFERENT lane data.
      * M must survive (shared by multiple ways) so the two links keep their distinct lane semantics.
      */

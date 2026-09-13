@@ -42,8 +42,8 @@ final class OsmSignalReadinessIntegrationTest {
         // Restricted movement survives simplification.
         JunctionSignalDescriptor j = junction(s, "N").orElseThrow();
         SignalizedMovement m = j.movements().stream()
-                .filter(x -> x.incomingLinkId().equals("sim_10_f_W_N")
-                        && x.outgoingLinkId().equals("sim_20_f_N_E"))
+                .filter(x -> x.incomingLinkId().equals("sim_10_r_N_W")
+                        && x.outgoingLinkId().equals("sim_20_r_E_N"))
                 .findFirst().orElseThrow();
         assertTrue(m.fullyRestricted());
 
@@ -57,7 +57,7 @@ final class OsmSignalReadinessIntegrationTest {
 
         // Lane tags carried onto the merged link for the west arm.
         var link = s.network().getLinks().get(
-                com.citymodeler.matsim.models.api.Id.create("sim_10_f_W_N",
+                com.citymodeler.matsim.models.api.Id.create("sim_10_r_N_W",
                         com.citymodeler.matsim.models.network.Link.class));
         assertEquals("2", link.getAttributes().getAttribute("osm:tag:lanes"));
         assertEquals("through|left", link.getAttributes().getAttribute("osm:tag:turn:lanes"));

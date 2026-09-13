@@ -1,12 +1,12 @@
 package com.citymodeler.matsim.models.osm.network;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
+import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.network.Link;
 import com.citymodeler.matsim.models.network.Network;
 import com.citymodeler.matsim.models.osm.OsmImportResult;
@@ -22,44 +22,61 @@ public final class OsmLaneHintExtractor {
     public static Map<String, OsmLaneHint> extractLaneHints(
             OsmImportResult importResult, OsmNetworkBuildResult buildResult) {
 
-        Map<String, OsmLaneHint> hints = new HashMap<>();
-        OsmNetworkBuildConfig config = OsmNetworkBuildConfig.materializeGeometryConfig();
+        Map<String, OsmLaneHint> hints = new TreeMap<>();
+        OsmNetworkBuildConfig config = OsmNetworkBuildConfig.defaultConfig();
         OsmLaneResolver laneResolver = new OsmLaneResolver();
         OsmModeAccessResolver accessResolver = new OsmModeAccessResolver();
 
-        for (Map.Entry<String, OsmWayRecord> entry : importResult.ways().entrySet()) {
-            OsmWayRecord way = entry.getValue();
-            OsmWayRule rule = config.resolveRule(way.tags());
-            if (rule == null) continue;
+        // Key off the ACTUAL emitted network links (the build result maps every network link id to a
+        // representative source segment), so hints work in every geometry mode: contracted modes
+        // emit sim_* merged links, MATERIALIZE emits per-segment links.
+        for (Map.Entry<String, OsmLinkRef> entry : buildResult.linkRefsByLinkId().entrySet()) {
+            String linkId = entry.getKey();
+            OsmLinkRef ref = entry.getValue();
 
-            List<OsmModeAccessResolver.DirectionDecision> decisions =
-                    accessResolver.resolve(way, rule.allowedModes());
-            for (OsmModeAccessResolver.DirectionDecision decision : decisions) {
-                boolean forward = decision.forward();
-                if (!forward && !decision.backward()) continue;
-
-                // Find the link ID for this direction
-                String dirSuffix = forward ? "_f" : "_r";
-                for (int segIdx = 0; segIdx < way.nodeRefs().size() - 1; segIdx++) {
-                    String linkId = "osm_way_" + way.id() + "_" + segIdx + dirSuffix;
-                    if (!buildResult.cleanedNetwork().getLinks().containsKey(
-                            com.citymodeler.matsim.models.api.Id.create(linkId, Link.class))) {
-                        continue;
-                    }
-
-                    double totalLanes = laneResolver.resolve(way, rule, forward, !decision.backward());
-                    double busLanes = resolveDedicatedLanes(way.tags(), "bus", forward);
-                    double psvLanes = resolveDedicatedLanes(way.tags(), "psv", forward);
-                    String turnLanes = resolveTurnLanes(way.tags(), forward);
-                    boolean dedicated = busLanes > 0 || psvLanes > 0 || hasDesignatedPattern(way.tags(), forward);
-                    Set<String> modes = decision.allowedModes();
-
-                    hints.put(linkId, new OsmLaneHint(
-                            linkId, way.id(), forward,
-                            totalLanes, busLanes, psvLanes,
-                            turnLanes, dedicated, modes));
-                }
+            Link link = buildResult.cleanedNetwork().getLinks().get(Id.create(linkId, Link.class));
+            if (link == null) {
+                continue;
             }
+            OsmWayRecord way = importResult.ways().get(ref.osmWayId());
+            if (way == null) {
+                continue;
+            }
+            OsmWayRule rule = config.resolveRule(way.tags());
+            if (rule == null) {
+                continue;
+            }
+
+            boolean forward = ref.forward();
+
+            // A direction is "oneway" for lane-resolution purposes unless the way has a single
+            // decision granting BOTH directions (matching the resolver call the old extractor made).
+            boolean anyAllowed = false;
+            boolean bidirectional = false;
+            for (OsmModeAccessResolver.DirectionDecision decision
+                    : accessResolver.resolve(way, rule.allowedModes())) {
+                if (decision.allowedModes().isEmpty()) {
+                    continue;
+                }
+                anyAllowed = true;
+                bidirectional |= decision.forward() && decision.backward();
+            }
+            if (!anyAllowed) {
+                continue;
+            }
+            boolean oneway = !bidirectional;
+
+            double totalLanes = laneResolver.resolve(way, rule, forward, oneway);
+            double busLanes = resolveDedicatedLanes(way.tags(), "bus", forward);
+            double psvLanes = resolveDedicatedLanes(way.tags(), "psv", forward);
+            String turnLanes = resolveTurnLanes(way.tags(), forward);
+            boolean dedicated = busLanes > 0 || psvLanes > 0 || hasDesignatedPattern(way.tags(), forward);
+            Set<String> modes = link.getAllowedModes();
+
+            hints.put(linkId, new OsmLaneHint(
+                    linkId, way.id(), forward,
+                    totalLanes, busLanes, psvLanes,
+                    turnLanes, dedicated, modes));
         }
         return hints;
     }
@@ -67,7 +84,7 @@ public final class OsmLaneHintExtractor {
     public static Map<String, OsmIntersectionLaneHint> extractIntersectionLaneHints(
             OsmImportResult importResult, Network network, Map<String, OsmLaneHint> laneHints) {
 
-        Map<String, OsmIntersectionLaneHint> result = new HashMap<>();
+        Map<String, OsmIntersectionLaneHint> result = new TreeMap<>();
 
         for (var entry : network.getNodes().entrySet()) {
             String nodeId = entry.getKey().toString();
@@ -78,8 +95,8 @@ public final class OsmLaneHintExtractor {
 
             List<String> incomingIds = new ArrayList<>();
             List<String> outgoingIds = new ArrayList<>();
-            Map<String, Double> approachLanes = new HashMap<>();
-            Map<String, String> turnLanes = new HashMap<>();
+            Map<String, Double> approachLanes = new TreeMap<>();
+            Map<String, String> turnLanes = new TreeMap<>();
 
             for (Link link : inLinks) {
                 String lid = link.getId().toString();

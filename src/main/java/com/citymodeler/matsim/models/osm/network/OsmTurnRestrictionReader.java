@@ -100,10 +100,6 @@ public final class OsmTurnRestrictionReader {
             // Resolve the via node's MATSim ID
             String matSimViaNodeId = OsmGeneratedIds.nodeId(viaNodeId);
 
-            // Determine affected modes, respecting except=* exceptions
-            Set<String> modes = resolveAffectedModes(rel, importResult, fromWayId, issues);
-            if (modes.isEmpty()) continue;
-
             boolean isOnly = restriction.startsWith("only_");
 
             // Resolve from-link(s): incoming to via node, belonging to fromWay
@@ -125,6 +121,12 @@ public final class OsmTurnRestrictionReader {
                         "Could not resolve to-link for restriction " + rel.id(), null));
                 continue;
             }
+
+            // Determine affected modes from the ACTUAL from-link modes (so a car+bus road restricts
+            // both), respecting except=* exceptions. A restriction applies to every mode the from-link
+            // permits unless explicitly excepted.
+            Set<String> modes = resolveAffectedModes(rel, buildResult, fromLinks, importResult, fromWayId);
+            if (modes.isEmpty()) continue;
 
             // Apply semantics
             for (String fromLinkId : fromLinks) {
@@ -168,15 +170,31 @@ public final class OsmTurnRestrictionReader {
     }
 
     /** Resolve modes from the from-way's rule, applying OSM except=* exemptions. */
-    private static Set<String> resolveAffectedModes(OsmRelationRecord rel, OsmImportResult importResult,
-                                                     String fromWayId, List<OsmImportIssue> issues) {
-        OsmWayRecord fromWay = importResult.ways().get(fromWayId);
-        Set<String> modes;
-        if (fromWay != null) {
-            var rule = OsmNetworkBuildConfig.defaultConfig().resolveRule(fromWay.tags());
-            modes = rule != null ? new HashSet<>(rule.allowedModes()) : new HashSet<>(Set.of("car"));
-        } else {
-            modes = new HashSet<>(Set.of("car"));
+    /**
+     * Modes a turn restriction affects: every mode permitted by the originating link(s) — so a road
+     * that carries {@code car,bus} restricts both — minus any {@code except=} exceptions. Falls back
+     * to the source way's rule modes when the link modes cannot be read.
+     */
+    private static Set<String> resolveAffectedModes(OsmRelationRecord rel,
+                                                     OsmNetworkBuildResult buildResult,
+                                                     List<String> fromLinks,
+                                                     OsmImportResult importResult,
+                                                     String fromWayId) {
+        Set<String> modes = new HashSet<>();
+        for (String linkId : fromLinks) {
+            Link link = buildResult.cleanedNetwork().getLinks().get(Id.create(linkId, Link.class));
+            if (link != null && !link.getAllowedModes().isEmpty()) {
+                modes.addAll(link.getAllowedModes());
+            }
+        }
+        if (modes.isEmpty()) {
+            OsmWayRecord fromWay = importResult.ways().get(fromWayId);
+            if (fromWay != null) {
+                var rule = OsmNetworkBuildConfig.defaultConfig().resolveRule(fromWay.tags());
+                modes = rule != null ? new HashSet<>(rule.allowedModes()) : new HashSet<>(Set.of("car"));
+            } else {
+                modes = new HashSet<>(Set.of("car"));
+            }
         }
 
         // Standard OSM: except=bus;bicycle (semicolon-separated mode list)

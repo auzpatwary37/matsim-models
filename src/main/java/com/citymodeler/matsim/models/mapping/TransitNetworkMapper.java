@@ -43,6 +43,12 @@ public final class TransitNetworkMapper {
     }
 
     public TransitMappingResult map(TransitSchedule schedule, Network network) {
+        // Build-new contract: mapping never mutates its inputs. Work on deep copies and return them.
+        TransitSchedule mappedSchedule = MappingCopy.copySchedule(schedule);
+        Network mappedNetwork = MappingCopy.copyNetwork(network);
+        schedule = mappedSchedule;
+        network = mappedNetwork;
+
         List<String> warnings = new ArrayList<>();
         List<MappingReport> reports = new ArrayList<>();
         StopCandidateScorer scorer = new StopCandidateScorer(config, spatialIndex, network);
@@ -77,15 +83,20 @@ public final class TransitNetworkMapper {
 
         // Step 1: Assign best candidate link to each stop
         Map<Id<TransitStopFacility>, Id<Link>> stopLinks = new LinkedHashMap<>();
+        Map<Id<TransitStopFacility>, TransitStopFacility> projectedFacilities = new LinkedHashMap<>();
         for (TransitRouteStop stop : stops) {
             TransitStopFacility facility = schedule.getFacilities().get(stop.getStopFacilityId());
             if (facility == null) continue;
 
-            List<StopCandidate> candidates = scorer.score(projectedStop(facility, projector), mode);
+            TransitStopFacility projected = projectedStop(facility, projector);
+            projectedFacilities.put(stop.getStopFacilityId(), projected);
+            List<StopCandidate> candidates = scorer.score(projected, mode);
             if (candidates.isEmpty()) {
-                // No candidate: create artificial loop
+                // No candidate: create artificial loop at the stop's PROJECTED coordinate (the
+                // network CRS), never the raw WGS84 coordinate — otherwise the loop node lands in a
+                // different coordinate frame from the network it is added to.
                 String ctx = facility.getId().toString() + "_" + route.getId().toString();
-                Link loop = factory.createLoop(facility.getCoord(), mode, ctx);
+                Link loop = factory.createLoop(projected.getCoord(), mode, ctx);
                 facility.setLinkId(loop.getId());
                 stopLinks.put(stop.getStopFacilityId(), loop.getId());
                 createdArtificialIds.add(loop.getId().toString());
@@ -181,7 +192,9 @@ public final class TransitNetworkMapper {
             Id<TransitStopFacility> childId = Id.create(childIdStr, TransitStopFacility.class);
 
             if (!schedule.getFacilities().containsKey(childId)) {
-                TransitStopFacility child = ChildStopCreator.createChild(facility, linkId, facility.getCoord());
+                TransitStopFacility projected = projectedFacilities.get(stop.getStopFacilityId());
+                Coord childCoord = projected != null ? projected.getCoord() : facility.getCoord();
+                TransitStopFacility child = ChildStopCreator.createChild(facility, linkId, childCoord);
                 schedule.addStopFacility(child);
             }
 

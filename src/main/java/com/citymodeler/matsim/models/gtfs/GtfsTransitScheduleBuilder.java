@@ -4,13 +4,15 @@ import com.citymodeler.matsim.models.api.Coord;
 import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.gtfs.GtfsDepartureBuilder.DepartureProfile;
 import com.citymodeler.matsim.models.gtfs.GtfsTransitBuildResult.SelectedDate;
-import com.citymodeler.matsim.models.gtfs.GtfsTransitBuildResult.VehicleDef;
 import com.citymodeler.matsim.models.transit.Departure;
 import com.citymodeler.matsim.models.transit.TransitLine;
 import com.citymodeler.matsim.models.transit.TransitRoute;
 import com.citymodeler.matsim.models.transit.TransitRouteStop;
 import com.citymodeler.matsim.models.transit.TransitSchedule;
 import com.citymodeler.matsim.models.transit.TransitStopFacility;
+import com.citymodeler.matsim.models.vehicles.Vehicle;
+import com.citymodeler.matsim.models.vehicles.VehicleDefinitions;
+import com.citymodeler.matsim.models.vehicles.VehicleType;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -107,7 +109,8 @@ public final class GtfsTransitScheduleBuilder {
         }
 
         // Build lines and routes
-        List<VehicleDef> vehicles = new ArrayList<>();
+        VehicleDefinitions vehicleDefs = new VehicleDefinitions();
+        Map<String, VehicleType> vehicleTypeByMode = new LinkedHashMap<>();
         int routeCounter = 0;
         Map<Id<TransitLine>, TransitLine> lineCache = new LinkedHashMap<>();
 
@@ -188,7 +191,18 @@ public final class GtfsTransitScheduleBuilder {
                         Departure dep = new Departure(Id.create(depId, Departure.class), profile.departureTime());
                         dep.setVehicleId(depId);
                         transitRoute.addDeparture(dep);
-                        vehicles.add(new VehicleDef(depId, mode, 45, 30));
+                        // One vehicle per departure, id derived from the departure id (spec §Vehicles).
+                        // The vehicle references a VehicleType keyed by the route's transit mode.
+                        VehicleType type = vehicleTypeByMode.computeIfAbsent(mode, m -> {
+                            VehicleType vt = new VehicleType(Id.create(m, VehicleType.class));
+                            vt.setSeatingCapacity(SEATS_BY_MODE.getOrDefault(m, DEFAULT_SEATS));
+                            vt.setStandingCapacity(STANDING_BY_MODE.getOrDefault(m, DEFAULT_STANDING));
+                            return vt;
+                        });
+                        if (!vehicleDefs.getVehicleTypes().containsKey(type.getId())) {
+                            vehicleDefs.addVehicleType(type);
+                        }
+                        vehicleDefs.addVehicle(new Vehicle(Id.create(depId, Vehicle.class), type.getId().toString()));
                     }
                 }
             }
@@ -197,8 +211,19 @@ public final class GtfsTransitScheduleBuilder {
         }
 
         schedule.postProcess();
-        return new GtfsTransitBuildResult(schedule, vehicles, selectedDatesByFeed, warnings);
+        return new GtfsTransitBuildResult(schedule, vehicleDefs, selectedDatesByFeed, warnings);
     }
+
+    // Conservative default capacities per transit mode (spec §Vehicles: configurable defaults; one
+    // vehicle type per resulting transit mode). Values are our own engineering defaults.
+    private static final int DEFAULT_SEATS = 30;
+    private static final int DEFAULT_STANDING = 45;
+    private static final Map<String, Integer> SEATS_BY_MODE = Map.of(
+            "bus", 30, "tram", 60, "light_rail", 60, "subway", 60, "rail", 300,
+            "ferry", 200, "trolleybus", 30, "funicular", 40, "monorail", 60);
+    private static final Map<String, Integer> STANDING_BY_MODE = Map.of(
+            "bus", 45, "tram", 90, "light_rail", 90, "subway", 90, "rail", 120,
+            "ferry", 100, "trolleybus", 45, "funicular", 40, "monorail", 60);
 
     private record GroupEntry(GtfsFeed feed, GtfsTrip trip, GtfsRoute route, String mode,
                                List<GtfsStopTime> stopTimes,

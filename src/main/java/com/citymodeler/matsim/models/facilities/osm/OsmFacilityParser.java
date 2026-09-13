@@ -18,6 +18,12 @@ import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
+import com.citymodeler.matsim.models.osm.OsmImportConfig;
+import com.citymodeler.matsim.models.osm.OsmImportResult;
+import com.citymodeler.matsim.models.osm.OsmNetworkImporter;
+import com.citymodeler.matsim.models.osm.model.OsmNodeRecord;
+import com.citymodeler.matsim.models.osm.model.OsmWayRecord;
+
 /**
  * Two-pass StAX parser that reads an OSM {@code .osm} XML file and produces
  * {@link OsmFacility} records for businesses (use-tagged POIs and ways, plus
@@ -51,6 +57,9 @@ public final class OsmFacilityParser {
     }
 
     public List<OsmFacility> parse(Path osmFile) {
+        if (isPbf(osmFile)) {
+            return parsePbf(osmFile);
+        }
         List<OsmFacility> result = new ArrayList<>();
         try {
             Set<String> neededNodeIds = new HashSet<>();
@@ -58,6 +67,69 @@ public final class OsmFacilityParser {
             passTwo(osmFile, result, neededNodeIds);
         } catch (XMLStreamException | IOException e) {
             throw new RuntimeException("Failed to parse OSM file: " + osmFile, e);
+        }
+        return result;
+    }
+
+    private static boolean isPbf(Path path) {
+        String name = path.getFileName().toString().toLowerCase();
+        return name.endsWith(".pbf");
+    }
+
+    /**
+     * PBF path: reuse the network importer's binary reader (it already decodes nodes, ways, and
+     * tags), then apply the SAME facility qualification/centroid logic used for OSM XML. Facility
+     * coordinates stay WGS84 lon/lat; the converter projects them into the target CRS.
+     */
+    private List<OsmFacility> parsePbf(Path pbfFile) {
+        OsmImportResult imported = new OsmNetworkImporter()
+                .read(OsmImportConfig.of(pbfFile, config.targetCrs()));
+        List<OsmFacility> result = new ArrayList<>();
+
+        // Nodes: same qualification as the XML pass-1 node branch.
+        for (OsmNodeRecord node : imported.nodes().values()) {
+            Map<String, String> tags = node.tags().asMap();
+            if (qualifies(tags)) {
+                OsmFacility facility = toFacility(
+                        "n" + node.id(), node.lon(), node.lat(), tags, 0.0, 0);
+                if (facility != null) {
+                    result.add(facility);
+                }
+            }
+        }
+
+        // Ways: same qualification + centroid logic as the XML pass-2 way branch.
+        for (OsmWayRecord way : imported.ways().values()) {
+            Map<String, String> tags = way.tags().asMap();
+            if (!qualifies(tags)) {
+                continue;
+            }
+            List<double[]> ring = new ArrayList<>();
+            List<String> refs = way.nodeRefs();
+            if (refs.size() >= 2 && refs.get(0).equals(refs.get(refs.size() - 1))) {
+                refs = refs.subList(0, refs.size() - 1);
+            }
+            for (String ref : refs) {
+                OsmNodeRecord n = imported.nodes().get(ref);
+                if (n != null) {
+                    ring.add(new double[]{n.lon(), n.lat()});
+                }
+            }
+            if (ring.isEmpty()) {
+                continue;
+            }
+            double[] centroid = polygonCentroid(ring);
+            double area = 0.0;
+            int levels = 0;
+            if (config.isResidentialBuilding(tags.get("building"))) {
+                area = polygonAreaM2(ring);
+                levels = parseInt(tags.get("building:levels"));
+            }
+            OsmFacility facility = toFacility(
+                    "w" + way.id(), centroid[0], centroid[1], tags, area, levels);
+            if (facility != null) {
+                result.add(facility);
+            }
         }
         return result;
     }
