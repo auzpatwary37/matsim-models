@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java 17, Maven, JUnit 5, proj4j (existing). No MATSim / pt2MATSim code or bytecode; clean-room only (own spec + public formats + black-box output files).
 
-**Spec:** `docs/superpowers/specs/2026-09-08-gtfs-transit-mapping-clean-room-design.md` (§"Geometry Preservation: Shape Nodes Vs Routing Nodes", §"Phase 1E"), `docs/superpowers/specs/2026-09-10-signal-ready-network-clean-room-spec.md`, and `docs/external-reference-comparison.md` (measured motivation).
+**Spec:** `docs/superpowers/specs/2026-09-08-gtfs-transit-mapping-clean-room-design.md` (§"Geometry Preservation: Shape Nodes Vs Routing Nodes", §"Phase 1E"), `docs/superpowers/specs/2026-09-10-signal-ready-network-clean-room-spec.md`, and `docs/pt2matsim-blackbox-comparison.md` (measured motivation).
 
 ## Global Constraints
 
@@ -1210,7 +1210,7 @@ git commit -m "feat(osm): optional isolated non-transit component cleanup"
 ### Task 8: Full gate + re-measure by road class
 
 **Files:**
-- Modify: `docs/external-reference-comparison.md` (add post-fix measurements)
+- Modify: `docs/pt2matsim-blackbox-comparison.md` (add post-fix measurements)
 - No production code (measurement only)
 
 - [ ] **Step 1: Full suite**
@@ -1224,12 +1224,12 @@ Using the persistent workspace `/home/ashraf/git/matsim-compare` (outside the re
 
 - [ ] **Step 3: Record findings**
 
-Append a "Post-contraction" section to `docs/external-reference-comparison.md` with the new counts and the per-class breakdown, and state the remaining differences as policy choices (not defects).
+Append a "Post-contraction" section to `docs/pt2matsim-blackbox-comparison.md` with the new counts and the per-class breakdown, and state the remaining differences as policy choices (not defects).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/external-reference-comparison.md
+git add docs/pt2matsim-blackbox-comparison.md
 git commit -m "docs: post-contraction network-size comparison"
 ```
 

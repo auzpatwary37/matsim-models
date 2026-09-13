@@ -1,13 +1,21 @@
-# External reference converter vs matsim-models: black-box comparison
+# pt2MATSim vs matsim-models: black-box comparison
 
-Clean-room method: an external MATSim-format converter is run only as an **out-of-process black box**
-on the same input files. Its **output XML** is read with **our** readers. No external source or
-bytecode is inspected. Both pipelines use the same OSM extract and the same GTFS feed per city.
+This document compares `matsim-models` output against **pt2MATSim** (GPL), used strictly as an
+external black-box oracle.
 
-The reference converter is referred to below only as "the reference" or "REF"; no external tool name,
-class name, or configuration is used.
+Clean-room model, stated precisely:
 
-## IO compatibility (our readers ingest reference output)
+- The production implementation was **not** derived from any external source or bytecode; behavior
+  comes from this repo's specs, OSM semantics, and public format documentation.
+- pt2MATSim is **only invoked out of process** as a black box on the same input files; only its
+  **output XML** is read, with **our** readers.
+- The oracle harness (`tools/oracle/`) contains only independently authored **invocation** and a few
+  **overrides**; pt2MATSim **generates its own default configuration at run time**. No external
+  config example, source, or jar is vendored into this repository or the build.
+
+"the reference" / "REF" below is shorthand for pt2MATSim's black-box output.
+
+## IO compatibility (our readers ingest pt2MATSim output)
 
 | artifact | read by our reader |
 |---|---|
@@ -17,7 +25,7 @@ class name, or configuration is used.
 
 ## Base network (OSM -> network; same OSM input)
 
-| city | OURS nodes/links | ours meanLen | REF nodes/links | ref meanLen |
+| city | OURS nodes/links | ours meanLen | pt2MATSim nodes/links | pt2M meanLen |
 |---|---|---|---|---|
 | luxembourg (full region) | 96,665 / 201,037 | 132.5 m | 49,549 / 105,125 | 205.4 m |
 | toronto (city clip) | 53,041 / 115,224 | 59.4 m | 13,513 / 30,724 | 138.2 m |
@@ -25,7 +33,7 @@ class name, or configuration is used.
 | melbourne (city clip) | 63,364 / 118,947 | 54.8 m | 26,287 / 51,083 | 86.6 m |
 
 Ours keeps more nodes/links (we preserve geometry-only nodes by default and split links at more
-points); the reference collapses more aggressively (fewer, longer links). Both are valid MATSim
+points); pt2MATSim collapses more aggressively (fewer, longer links). Both are valid MATSim
 networks.
 
 ## Post-contraction (Task 8)
@@ -34,22 +42,22 @@ The topology-contraction engine (Tasks 1–7) is now wired into `OsmSignalAwareS
 so the bundle runner's base network is the **post-contraction** network. Re-running the black-box
 comparison on the **same** `lux.osm` input (network only, no GTFS) gives:
 
-| | OURS pre (adfb47a) | OURS post (6c70ea5) | reference (black box) |
+| | OURS pre (adfb47a) | OURS post (6c70ea5) | pt2MATSim (black box) |
 |---|---|---|---|
 | nodes | 96,665 | 75,483 (−21.9%) | 49,549 |
 | links | 201,037 | 164,063 (−18.4%) | 105,125 |
 | mean link length | 132.5 m | 161.7 m | 205.4 m |
 
-Contraction moved our network materially toward the reference: the same physical road is no longer
+Contraction moved our network materially toward pt2MATSim: the same physical road is no longer
 re-split at every way boundary, so mean link length rose 22% while link count fell 18%.
 
 ### Per-road-class link counts
 
-Parsed from the `osm:tag:highway` attribute in our network and `osm:way:highway` in the reference
+Parsed from the `osm:tag:highway` attribute in our network and `osm:way:highway` in the pt2MATSim
 network (streaming, link-scoped). `(rail/other)` = links with no `highway` class attribute (rail).
-The last column is the reference run with `highway=service` kept, for a like-for-like scope.
+The last column is pt2MATSim run with `highway=service` kept, for a like-for-like scope.
 
-| class | OURS pre | OURS post | REF default | REF service-kept |
+| class | OURS pre | OURS post | pt2M default | pt2M service-kept |
 |---|---|---|---|---|
 | motorway | 903 | 482 | 1,321 | 1,332 |
 | motorway_link | 871 | 680 | 777 | 816 |
@@ -86,7 +94,7 @@ The last column is the reference run with `highway=service` kept, for a like-for
    link-count difference**. Contracted routing-graph compactness is comparable on the shared scope;
    the headline totals differ mainly because of (1).
 3. **Motorway node retention.** Ours has fewer, much longer motorway links (482 @ 975.0 m) than
-   the reference (1,321 @ 356.7 m). Our contract rule dissolves every degree-2 node with no intrinsic
+   pt2MATSim (1,321 @ 356.7 m). Our contract rule dissolves every degree-2 node with no intrinsic
    reason; motorway carriageway/continuation nodes carry none. The reference retains more motorway
    nodes (e.g. structure/interchange points). Policy choice, not a defect.
 4. **Accepted way classes.** The reference additionally materializes `path`, `pedestrian`, `platform`,
@@ -94,7 +102,7 @@ The last column is the reference run with `highway=service` kept, for a like-for
    network; our missing class is rail (9,833 vs 10,193). Policy choice on which way classes feed the
    network. The `(rail/other)` bucket also contains a couple of ferry links (from `route=ferry`),
    which is why it is labelled rail/other rather than rail alone.
-5. **Mean length.** Ours 161.7 m vs the reference 205.4 m is partly the short service aisles in our
+5. **Mean length.** Ours 161.7 m vs pt2MATSim 205.4 m is partly the short service aisles in our
    network and partly the extra rail; on the shared non-service scope the means differ by <4%
    (191.4 m vs 199.1 m).
 
@@ -137,17 +145,17 @@ guaranteed. Removed components are reported as quarantine issues (never silently
 
 ### Scope parity preset
 
-`OsmNetworkBuildConfig.compactRoadNetworkConfig()` matches the external reference's default
+`OsmNetworkBuildConfig.compactRoadNetworkConfig()` matches pt2MATSim's default
 OSM-converter scope and contraction policy: it excludes `highway=service` and caps contracted link
 length at **500 m** (`maxContractedLinkLengthMeters`), so a degree-2 node is retained where dissolving
 it would produce a longer link. It also admits buses on car roads (`addBusToCarRoads`).
 
-| network | ours nodes/links | external reference nodes/links |
+| network | ours nodes/links | pt2MATSim nodes/links |
 |---|---|---|
-| default scope, post-cleaning (service kept) | 73,347 / 161,016 | — (177,968 links when the reference keeps service) |
+| default scope, post-cleaning (service kept) | 73,347 / 161,016 | — (177,968 links when pt2MATSim keeps service) |
 | parity preset (service excluded, 500 m car cap, bus on roads) | **50,113 / 106,084** | **49,549 / 105,125** |
 
-The parity preset matches the external reference to **+1.1% nodes / +0.9% links**. The car routable
+The parity preset matches pt2MATSim to **+1.1% nodes / +0.9% links**. The car routable
 subgraph is effectively **one strongly connected component (100.0% of its nodes)** in both networks
 (ours reports a handful of singleton SCCs from a few self-contained fragments). Direction defaults
 match empirically: rail **2.01** directed/physical (bidirectional) and tram **2.00** before
@@ -155,47 +163,47 @@ parallel-track collapse; after collapsing parallel tram tracks (one corridor per
 tram is 1,228 directed links over 614 spans.
 
 **Toronto (repo fixture `src/test/resources/osm/cities/toronto.osm.gz`, 4,009 ways):** a real
-reference **was** generated by running the external converter as a black box on the same `toronto.osm`
+reference **was** generated by running pt2MATSim as a black box on the same `toronto.osm`
 (same default scope/params as the Luxembourg run):
 
-| | ours | external reference |
+| | ours | pt2MATSim (black box) |
 |---|---|---|
 | nodes | 1,176 | 759 |
 | links | 2,465 | 1,407 |
 | mean link length | 61.6 m | 105.5 m |
 
-The reference is produced on demand; it is not checked in. The remaining gap is the same policy set as
+The reference (pt2MATSim output) is produced on demand; it is not checked in. The remaining gap is the same policy set as
 Luxembourg (we keep more geometry-only detail and admit more railway), plus a genuine **tram direction
-divergence**: the reference emits `railway=tram` **oneway** (386 directed / 386 physical = 1.00) while
+divergence**: pt2MATSim emits `railway=tram` **oneway** (386 directed / 386 physical = 1.00) while
 we emit it **bidirectional** (780 directed / 390 physical = 2.00; both endpoints untagged in OSM).
 `railway=rail` agrees at 2.00 in both. Our tram policy follows OSM semantics (untagged = two-way); the
-reference applies a oneway default to tram. This is a policy choice to reconcile, not a defect.
+pt2MATSim applies a oneway default to tram. This is a policy choice to reconcile, not a defect.
 
-Remaining per-class delta is policy, not connectivity: `service` −1,151 (the reference keeps
+Remaining per-class delta is policy, not connectivity: `service` −1,151 (pt2MATSim keeps
 transit-carrying service via a keep-with-public-transit option, which we exclude entirely),
-`(rail/other)` −1,162 (the reference keeps `platform`/`narrow_gauge`/`abandoned` links we drop), and a
+`(rail/other)` −1,162 (pt2MATSim keeps `platform`/`narrow_gauge`/`abandoned` links we drop), and a
 few hundred cap-boundary links in `residential`/`secondary`/`tertiary`.
 
 **How the gap was diagnosed.** A spatial difference map (links rasterized to 50 m cells, proximity
 join) showed the earlier deficit was *not* a missing region — it was scattered short fragments — and an
 independent SCC audit showed both cleaned car graphs were already 100% strongly connected (so our
-connectivity was not broken). The cause was contraction policy: the reference stops thinning at 500 m
+connectivity was not broken). The cause was contraction policy: pt2MATSim stops thinning at 500 m
 (its longest link 3,628 m), while we had no cap (our longest 10,007 m). On the 37,770 shared OSM ways
-our link density already matched the reference (ratio 0.99); the deficit was long merged links, not
-missing roads. Adding the same 500 m cap reproduces the reference's counts.
+our link density already matched pt2MATSim (ratio 0.99); the deficit was long merged links, not
+missing roads. Adding the same 500 m cap reproduces pt2MATSim's counts.
 
 ### Mode model
 
-The reference tags its roads `bus,car` (55,632 links) or `bus,car,pt` (37,391); our base network tagged
+pt2MATSim tags its roads `bus,car` (55,632 links) or `bus,car,pt` (37,391); our base network tagged
 roads `car` only, so a raw mode-count comparison showed far fewer "transit" links for us. That was a
 labelling difference, not missing links: our pipeline materializes the transit mode during mapping
 (one output mode per route, `car` as fallback eligibility; spec §Mode assignment). The parity preset
 now adds `bus` to every car road (`addBusToCarRoads`) so the bus routable subnetwork exists in the base
-network too, matching the reference.
+network too, matching pt2MATSim.
 
-The 500 m length cap applies to **car roads only**, never to rail/tram (the reference does not
+The 500 m length cap applies to **car roads only**, never to rail/tram (pt2MATSim does not
 length-cap rail; applying the car cap to rail over-segments it). Direction defaults are matched
-empirically from the reference's output: **rail is bidirectional** (9,356 directed / 4,667 physical
+empirically from pt2MATSim's output: **rail is bidirectional** (9,356 directed / 4,667 physical
 spans = 2.00) and **tram is oneway** (640 / 640 = 1.00) in that converter. Turn restrictions cover
 every mode the originating link permits (so `car,bus` roads restrict both) minus `except=`
 exceptions.
@@ -217,7 +225,7 @@ where a 269-segment, ~9.7 km merged link was attributed to a single 172 m source
 
 ## Unmapped schedule + vehicles (GTFS -> schedule; same feed, same sample day)
 
-| city | OURS facilities / lines / routes / departures / vehTypes / vehicles | REF facilities / lines / routes / departures / vehTypes / vehicles |
+| city | OURS facilities / lines / routes / departures / vehTypes / vehicles | pt2M facilities / lines / routes / departures / vehTypes / vehicles |
 |---|---|---|
 | luxembourg | 2,706 / 717 / 3,120 / 15,889 / 3 / 16,099 | 2,786 / 722 / 2,308 / 16,099 / 8 / 16,099 |
 | toronto (GO) | 30 / 13 / 506 / 729 / 2 / 1,872 | 885 / 45 / 968 / 1,872 / 2 / 1,872 |
@@ -225,7 +233,7 @@ where a 269-segment, ~9.7 km merged link was attributed to a single 172 m source
 | melbourne (PTV) | 15 / 6 / 27 / 15 / 1 / 413 | (feed rejected upstream: unknown agency id) |
 
 Observations:
-- **Vehicles**: both produce exactly **one vehicle per departure**; totals match the reference exactly
+- **Vehicles**: both produce exactly **one vehicle per departure**; totals match pt2MATSim exactly
   for the sample day (16,099 / 1,872 / 13,036). This independently confirms the spec's
   "one vehicle per departure" model. Ours reports fewer *used* departures after clipping out-of-extent
   stops (e.g. Luxembourg 15,889 vs 16,099) while the vehicle file still lists all built departures —

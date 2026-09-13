@@ -2,9 +2,11 @@
 
 **Status:** approved in brainstorming (2026-09-12). Independently derived from this repo's specs
 (`2026-09-08-gtfs-transit-mapping-clean-room-design.md`,
-`2026-09-10-signal-ready-network-clean-room-spec.md`) and OSM semantics. External networks are used
-only as black-box output for measurement (see `docs/external-reference-comparison.md`); no external
-source, bytecode, or configuration is used to derive behavior.
+`2026-09-10-signal-ready-network-clean-room-spec.md`) and OSM semantics. The production
+implementation is not derived from any external source, bytecode, or configuration. pt2MATSim is
+used only as an out-of-process black-box oracle for measurement (see
+`docs/pt2matsim-blackbox-comparison.md`); its generated config is never vendored, and the harness
+contains only independently authored invocation/overrides.
 
 ## Problem
 
@@ -152,8 +154,9 @@ Derived from OSM semantics and our own spec:
 - Cleaning on by default is a deliberate output change; the default scope (service included) is NOT changed.
 - Bus admission happens in access resolution, not as a post-hoc `car`→`bus` clone, so explicit OSM
   access tags always retain final authority.
-- Clean-room: no external source, bytecode, or configuration is read; external outputs are used only
-  as black-box measurements in `docs/external-reference-comparison.md`.
+- Clean-room: the production implementation is not derived from external source or bytecode; pt2MATSim
+  is invoked out of process only, and its output is used solely as black-box measurement in
+  `docs/pt2matsim-blackbox-comparison.md`. No external jar, source, or config example is vendored.
 
 ## Faithful import vs policy presets
 

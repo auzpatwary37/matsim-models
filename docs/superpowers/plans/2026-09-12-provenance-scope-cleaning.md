@@ -6,7 +6,7 @@
 ## Global constraints
 - Clean-room: derive behavior only from this repo's specs and independent knowledge (OSM semantics);
   no external project's source, bytecode, or configuration. External network outputs are permitted
-  only as black-box measurements in `docs/external-reference-comparison.md`.
+  only as black-box measurements in `docs/pt2matsim-blackbox-comparison.md`.
 - Determinism: sorted/insertion-ordered collections; identical input ⇒ byte-identical output.
 - Apache-2.0 original code; no new runtime dependencies.
 - Default way-class scope unchanged (service included); default geometry mode unchanged.
