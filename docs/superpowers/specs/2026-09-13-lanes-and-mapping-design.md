@@ -62,29 +62,41 @@ rule.defaultOneway())`, with `oneway = !(forwardAllowed && backwardAllowed)` —
 hand-written `oneway=*` parser. This guarantees a way emitted one-way in `network.xml` (including
 rule-default one-way such as `motorway`) is treated one-way when generating `laneDefinitions.xml`.
 
-1. **`lanes:forward` / `lanes:backward` present** → authoritative for that direction. Use directly.
-2. **`oneway=yes`** → `lanes=*` is the travelled direction's count (the wiki's one-way assumption);
-   use `lanes` directly for the single directed link. `lanes:both_ways` is recorded as provenance
-   only (see step 4); it is not added to the count.
-3. **Bidirectional, `lanes` present, no directional tags**:
+1. **Validate the whole tag set first** (only when `lanes=*` is present). The set is **inconsistent**
+   when any of:
+   - both directional tags present and `lanes:forward + lanes:backward + lanes:both_ways != lanes`;
+   - a directional tag exceeds the total: `lanes:forward + lanes:both_ways > lanes`, or
+     `lanes:backward + lanes:both_ways > lanes`;
+   - a single directional tag present and the missing direction derives to `< 1`:
+     `lanes - known - lanes:both_ways < 1`.
+
+   On inconsistency: record `inconsistent-lane-tags`; preserve the raw values as provenance; **do
+   not** use the contradictory directional values as physical counts; fall back to the total-derived
+   split (step 3). "Directional tags are authoritative" means authoritative **within an internally
+   consistent tag set** — never permission to exceed the declared `lanes`.
+2. **`oneway=yes`** → a single travelled direction: use the directional tag if present, else `lanes`
+   (the wiki's one-way assumption), else the rule default. There is no split, so no cross-direction
+   consistency check applies. `lanes:both_ways` is recorded as provenance only (see step 5).
+3. **Consistent set with `lanes:forward` / `lanes:backward`** → authoritative for their directions:
+   - both present → use each directly;
+   - a lone tag → use it for its direction and derive the other as
+     `lanes - known - lanes:both_ways` (confidence `present`).
+4. **Bidirectional, `lanes` present, no directional tags**:
    - subtract `lanes:both_ways` (default 0) to get the directional-total `T = lanes - both_ways`;
    - **`T` even** → apply the documented OSM even-split assumption: each direction gets `T/2`
-     (confidence `wiki-default-even-split`). This is the only split we apply automatically.
+     (confidence `wiki-default-even-split`). This is the only split we apply automatically;
    - **`T` odd** (or `T < 1`) → the split is **not determinable**. Do **not** invent a direction
      count: emit `round(T / 2)` physical lane objects (minimum 1) with confidence
-     `undetermined-split`, preserve `T` as `osm:lanes.total`, and record a structured issue.
-   - **Single directional tag with `lanes` present** (e.g. `lanes=4`, `lanes:forward=3`): derive the
-     missing direction as `other = total - known - both_ways`. If `other >= 1` use it (confidence
-     `present`); otherwise the tags are internally inconsistent — record an `inconsistent-lane-tags`
-     issue and fall back to step 3's total-split/undetermined handling for that direction.
-4. **`lanes:both_ways=N`** → those lanes are usable in both directions (centre/passing turn lanes).
+     `undetermined-split`, preserve `T` as `osm:lanes.total`, and record a structured issue. See §1e
+     for the capacity caveat of an undetermined split.
+5. **`lanes:both_ways=N`** → those lanes are usable in both directions (centre/passing turn lanes).
    A genuine shared/reversible centre-lane model does not exist yet, so they are **preserved as
    provenance/diagnostic only** (`osm:lanes.bothWays=N` on the lane) and are **not** duplicated into
-   each direction: the per-direction count is derived from `lanes - lanes:both_ways` (step 3) or the
+   each direction: the per-direction count is derived from `lanes - lanes:both_ways` (step 4) or the
    explicit directional tag. This keeps the sum of directed lane objects equal to the declared
    physical total. Their `turn:lanes:both_ways` tokens are recorded where present but not applied as
    per-direction movements until a shared-lane model exists.
-5. **No lane tags at all** → the base network's per-direction count, `rule.lanesPerDirection()`
+6. **No lane tags at all** → the base network's per-direction count, `rule.lanesPerDirection()`
    (e.g. 2 for `primary`, 3 for `motorway`), as that many physical lane objects with confidence
    `absent`; this guarantees `laneDefinitions.xml` agrees with `network.xml` `permlanes`. Not
    fabricated beyond the network's own default.
@@ -171,6 +183,13 @@ rather than assume observed eligibility.
 - Tests assert: exclusive lane contributes fully; a shared `left;through` lane yields per-movement
   values marked `shared` whose sum is not presented as an additive capacity, and the dedicated
   (exclusive) sum over the lane never exceeds the lane's physical capacity.
+- **Undetermined split capacity caveat.** For an odd bidirectional total (`lanes=3`), each direction
+  emits `round(T/2)=2` lane objects so that 1 + 1 ≤ 3: the pair `round(T/2) + round(T/2)` may be
+  `T + 1`, i.e. one lane object more than the physical total. This is a deliberate **directional
+  conservative representation**, flagged `undetermined-split`, **not** a strict physical-capacity
+  decomposition. Consumers that sum lane capacity across both directions in this case must respect
+  the confidence flag rather than treat the total as physical. Tightening this (e.g. `floor` for one
+  side) is a follow-up, not part of this branch.
 
 ### 1f. Model and IDs
 - Populate the existing `Lanes` / `LanesToLinkAssignment` / `Lane` model.
@@ -266,18 +285,23 @@ follow-up after lanes + mapping hardening. This branch does not change via-way b
 
 Test-first for each unit. New/changed tests:
 - **Directional lane count:** `lanes=2` (even → 1+1), `lanes=3` (odd → undetermined split, issue, no
-  invented count), `lanes=4` (even → 2+2), explicit `lanes:forward`/`:backward` (authoritative),
-  `lanes:both_ways` (provenance only; not duplicated, per-direction count excludes it), a single
-  directional tag + total (missing direction = `total - known - both_ways`, inconsistency flagged),
-  oneway with `lanes`, rule-default oneway (motorway), absent tags (network's `lanesPerDirection`),
-  malformed counts (`0`, `-1`, `1.5`).
+  invented count), `lanes=4` (even → 2+2), explicit `lanes:forward`/`:backward` (authoritative
+  **within a consistent set**), `lanes:both_ways` (provenance only; not duplicated, per-direction
+  count excludes it), oneway with `lanes`, rule-default oneway (motorway), absent tags (network's
+  `lanesPerDirection`), malformed counts (`0`, `-1`, `1.5`).
+- **Tag-set consistency matrix** (`inconsistent-lane-tags` when the declared `lanes` is exceeded):
+  `lanes=4,forward=3,backward=1` consistent; `lanes=5,both_ways=1,forward=2,backward=2` consistent;
+  `lanes=2,forward=3,backward=1` inconsistent; `lanes=3,both_ways=1,forward=3` inconsistent;
+  `lanes=4,both_ways=1,backward=4` inconsistent; `lanes=4,forward=3` → other=1;
+  `lanes=4,backward=1` → other=3. A bundle-level assertion checks a contradictory declared total is
+  never silently exceeded without a diagnostic.
 - **`turn:lanes` tokens:** every token in the table above; `left;through` shared lane →
   two `leadsTo` links; empty cell; unknown token preserved with `unsupported` confidence; `none`.
 - **Reconciliation:** token count vs lane count mismatch — undetermined/absent → adopt token count;
   otherwise keep lane count and align; both source values preserved; structured issue emitted.
 - **Capacity:** exclusive lane contributes fully; shared `left;through` lane does **not** yield two
   movement capacities each equal to the full lane capacity (sum ≤ lane capacity); link capacity
-  unchanged.
+  unchanged; the undetermined-split `round(T/2)` inflation is documented, not treated as physical.
 - `laneDefinitions`: round-trip; XSD-valid; omitted-when-unknown fields.
 - Bundle: `laneDefinitions.xml` present in output and `BundleResult`.
 - Mapping: the seven plan tests above + GeoJSON + numeric assertion.
