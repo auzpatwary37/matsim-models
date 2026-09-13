@@ -56,21 +56,38 @@ bytecode, or config is copied or vendored.
 directed links as 4+4 is forbidden. Resolution for a directed link (its travel direction = forward
 when the link follows the way's node order, else backward):
 
+**Direction source is shared with the network.** Whether a link is one-way is determined from the
+same resolved source as network construction — `OsmModeAccessResolver.resolve(way, candidateModes,
+rule.defaultOneway())`, with `oneway = !(forwardAllowed && backwardAllowed)` — not a second
+hand-written `oneway=*` parser. This guarantees a way emitted one-way in `network.xml` (including
+rule-default one-way such as `motorway`) is treated one-way when generating `laneDefinitions.xml`.
+
 1. **`lanes:forward` / `lanes:backward` present** → authoritative for that direction. Use directly.
 2. **`oneway=yes`** → `lanes=*` is the travelled direction's count (the wiki's one-way assumption);
-   use `lanes` directly for the single directed link. If `lanes:both_ways>0`, subtract it first
-   (the shared/centre lane is not a through lane; see step 4).
+   use `lanes` directly for the single directed link. `lanes:both_ways` is recorded as provenance
+   only (see step 4); it is not added to the count.
 3. **Bidirectional, `lanes` present, no directional tags**:
    - subtract `lanes:both_ways` (default 0) to get the directional-total `T = lanes - both_ways`;
    - **`T` even** → apply the documented OSM even-split assumption: each direction gets `T/2`
      (confidence `wiki-default-even-split`). This is the only split we apply automatically.
-   - **`T` odd** (or `T < 1`) → the split is **not determinable**. Do **not** invent a number.
-     Preserve total `T` as `osm:lanes.total` with confidence `undetermined-split`, keep a single
-     undivided-lane model (see 1d), and record a structured issue. A later phase may refine it.
-4. **`lanes:both_ways=N`** → those lanes are usable in both directions (centre/passing turn lanes);
-   they are modelled as lanes on **both** directed links and are never counted as through lanes for
-   the even-split. Their `turn:lanes:both_ways` tokens apply where present.
-5. **No lane tags at all** → one lane, confidence `absent` (see 1d). Not fabricated.
+   - **`T` odd** (or `T < 1`) → the split is **not determinable**. Do **not** invent a direction
+     count: emit `round(T / 2)` physical lane objects (minimum 1) with confidence
+     `undetermined-split`, preserve `T` as `osm:lanes.total`, and record a structured issue.
+   - **Single directional tag with `lanes` present** (e.g. `lanes=4`, `lanes:forward=3`): derive the
+     missing direction as `other = total - known - both_ways`. If `other >= 1` use it (confidence
+     `present`); otherwise the tags are internally inconsistent — record an `inconsistent-lane-tags`
+     issue and fall back to step 3's total-split/undetermined handling for that direction.
+4. **`lanes:both_ways=N`** → those lanes are usable in both directions (centre/passing turn lanes).
+   A genuine shared/reversible centre-lane model does not exist yet, so they are **preserved as
+   provenance/diagnostic only** (`osm:lanes.bothWays=N` on the lane) and are **not** duplicated into
+   each direction: the per-direction count is derived from `lanes - lanes:both_ways` (step 3) or the
+   explicit directional tag. This keeps the sum of directed lane objects equal to the declared
+   physical total. Their `turn:lanes:both_ways` tokens are recorded where present but not applied as
+   per-direction movements until a shared-lane model exists.
+5. **No lane tags at all** → the base network's per-direction count, `rule.lanesPerDirection()`
+   (e.g. 2 for `primary`, 3 for `motorway`), as that many physical lane objects with confidence
+   `absent`; this guarantees `laneDefinitions.xml` agrees with `network.xml` `permlanes`. Not
+   fabricated beyond the network's own default.
 
 Malformed lane counts (`lanes=0`, `-1`, `1.5`, `none`, blank) are ignored with an issue; never
 coerced into a positive integer.
@@ -183,7 +200,9 @@ Replace the simplified writer/reader output with the published `laneDefinitions_
 - `leadsTo` is an `xs:choice`: it contains **either** `toLink` **or** `toLane`, never both. Emit the
   `toLink` branch when the lane has any `toLink` ids, else the `toLane` branch. If a lane carries
   both (model permits it), emit `toLink` and preserve the dropped `toLane` ids in the lane attribute
-  `osm:lane.toLaneIds` so nothing is silently lost.
+  `osm:lane.toLaneIds` **and rehydrate that attribute back into the `toLaneIds` model list on read**,
+  so the mixed-lane relationship is reversible through a write/read round-trip rather than silently
+  degraded to metadata.
 - `leadsTo` is **mandatory** in the published XSD: emit all geometrically-available outgoing links
   (conventionally the "unrestricted" lane) with a provenance attribute recording the evidence
   (`observed`, `none-observed`, `absent`, `unsupported`). A lane with neither `toLink` nor `toLane`
@@ -197,14 +216,21 @@ Replace the simplified writer/reader output with the published `laneDefinitions_
   otherwise omitted (schema defaults), so absence is explicit rather than fabricated.
 - Child element order must follow the XSD: `leadsTo, representedLanes, capacity, startsAt,
   alignment, attributes`.
+- The **production** schema resource used by `LanesXmlReader(true)` is the published v2.0 schema
+  (vendored under `src/main/resources/schemas/v2/` with the same third-party attribution as
+  `vehicleDefinitions_v2.0.xsd`), not an `xs:anyType` stub, so `validateSchema=true` genuinely means
+  laneDefinitions v2.0 validation. The historic `<lanes>` dialect is read leniently only when
+  validation is off.
 - Keep `LanesXmlReader` able to read the old simplified fixture for backward compatibility, or
   migrate that fixture — decide during implementation based on test impact.
 
 ## Part 3 — Bundle output
 
 `OsmGtfsBundleRunner` additionally writes `laneDefinitions.xml` (constant `LANE_DEFINITIONS_FILE`)
-and exposes its path in `BundleResult`. Emitted **always** so downstream always has the file; when OSM
-has no lane data the file still contains one unrestricted lane per link.
+and exposes its path in `BundleResult`. Emitted **always**. Every **eligible (non-terminal) link**
+gets a lane assignment; a terminal/dead-end link (no outgoing links, which would require an invalid
+empty `leadsTo`) is skipped with a `lane-no-outgoing` diagnostic. When OSM has no lane data the file
+still contains one lane per eligible link at the network's own per-direction lane count.
 
 ## Part 4 — Mapping hardening
 
@@ -219,7 +245,10 @@ Add the phase-2 plan's missing verification tests and fix what they surface:
 
 Physical verification (stop → link):
 - **GeoJSON export** of mapped stops, their chosen links, and candidate links (no new dependency;
-  plain GeoJSON text), for opening in GIS.
+  plain GeoJSON text), for opening in GIS. GeoJSON coordinates are **WGS84 lon/lat** by contract:
+  where the facility still carries `gtfs:lon`/`gtfs:lat` use those; otherwise inverse-project the
+  network-CRS coordinate back to WGS84. Never write projected metres into a `.geojson` as if they
+  were degrees.
 - **Numeric assertions**: where GTFS provides a stop name and our link carries `osm:name` /
   `osm:sourceNames`, assert the chosen link's road name relates to the stop name; assert chosen
   distance is under the configured threshold.
@@ -238,8 +267,10 @@ follow-up after lanes + mapping hardening. This branch does not change via-way b
 Test-first for each unit. New/changed tests:
 - **Directional lane count:** `lanes=2` (even → 1+1), `lanes=3` (odd → undetermined split, issue, no
   invented count), `lanes=4` (even → 2+2), explicit `lanes:forward`/`:backward` (authoritative),
-  `lanes:both_ways` (shared lane counted for both directions, excluded from the split), oneway with
-  `lanes`, malformed counts (`0`, `-1`, `1.5`).
+  `lanes:both_ways` (provenance only; not duplicated, per-direction count excludes it), a single
+  directional tag + total (missing direction = `total - known - both_ways`, inconsistency flagged),
+  oneway with `lanes`, rule-default oneway (motorway), absent tags (network's `lanesPerDirection`),
+  malformed counts (`0`, `-1`, `1.5`).
 - **`turn:lanes` tokens:** every token in the table above; `left;through` shared lane →
   two `leadsTo` links; empty cell; unknown token preserved with `unsupported` confidence; `none`.
 - **Reconciliation:** token count vs lane count mismatch — undetermined/absent → adopt token count;
