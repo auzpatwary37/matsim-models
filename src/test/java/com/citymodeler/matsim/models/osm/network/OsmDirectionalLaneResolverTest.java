@@ -63,15 +63,40 @@ class OsmDirectionalLaneResolverTest {
     }
 
     @Test
+    void loneDirectionalTagIsHonoredForItsDirection() {
+        OsmTagSet fwdOnly = tags(Map.of("lanes", "4", "lanes:forward", "3"));
+        assertEquals(3, resolver.resolve(fwdOnly, true, false).lanes());
+        assertEquals(LaneConfidence.PRESENT, resolver.resolve(fwdOnly, true, false).confidence());
+        assertEquals(2, resolver.resolve(fwdOnly, false, false).lanes(),
+                "opposite direction falls back to the total split");
+        assertEquals(LaneConfidence.EVEN_SPLIT, resolver.resolve(fwdOnly, false, false).confidence());
+
+        OsmTagSet bwdOnly = tags(Map.of("lanes", "4", "lanes:backward", "1"));
+        assertEquals(1, resolver.resolve(bwdOnly, false, false).lanes());
+        assertEquals(LaneConfidence.PRESENT, resolver.resolve(bwdOnly, false, false).confidence());
+        assertEquals(2, resolver.resolve(bwdOnly, true, false).lanes(),
+                "opposite direction falls back to the total split");
+    }
+
+    @Test
     void malformedCountsAreIgnoredWithIssue() {
-        for (String bad : List.of("0", "-1", "1.5", "none", " ")) {
+        for (String bad : List.of("0", "-1", "1.5", "none", " ", "", "NaN", "Infinity", "-Infinity")) {
             OsmLaneCount c = resolver.resolve(tags(Map.of("lanes", bad)), true, false);
-            assertEquals(LaneConfidence.ABSENT, c.confidence());
-            assertEquals(1, c.lanes());
+            assertEquals(LaneConfidence.ABSENT, c.confidence(), "bad value: '" + bad + "'");
+            assertEquals(1, c.lanes(), "bad value: '" + bad + "'");
+            assertTrue(c.issueCodes().contains("malformed-lane-count"), "bad value: '" + bad + "'");
+            assertNull(c.undeterminedTotal(), "bad value: '" + bad + "'");
         }
-        OsmLaneCount c = resolver.resolve(tags(Map.of("lanes", "0")), true, false);
-        assertTrue(c.issueCodes().contains("malformed-lane-count"));
-        assertNull(c.undeterminedTotal());
+    }
+
+    @Test
+    void malformedDirectionalTagReportsSingleIssue() {
+        OsmLaneCount c = resolver.resolve(tags(Map.of("lanes:forward", "none")), true, false);
+        assertEquals(1, c.lanes());
+        assertEquals(LaneConfidence.ABSENT, c.confidence());
+        assertEquals(1, c.issueCodes().stream()
+                .filter("malformed-lane-count"::equals).count(),
+                "a malformed tag must be reported exactly once");
     }
 
     @Test

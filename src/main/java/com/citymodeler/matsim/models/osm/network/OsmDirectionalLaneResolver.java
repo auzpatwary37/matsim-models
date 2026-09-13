@@ -16,56 +16,64 @@ public final class OsmDirectionalLaneResolver {
 
     public OsmLaneCount resolve(OsmTagSet tags, boolean forward, boolean oneway) {
         List<String> issues = new ArrayList<>();
-        String directionalKey = forward ? "lanes:forward" : "lanes:backward";
-        Double directional = parse(tags.get(directionalKey), directionalKey, issues);
-        Double total = parse(tags.get("lanes"), "lanes", issues);
-        Double bothWays = parse(tags.get("lanes:both_ways"), "lanes:both_ways", issues);
+        // Parse each distinct tag exactly once so a malformed tag yields a single issue.
+        Double total = parse(tags.get("lanes"), issues);
+        Double forwardCount = parse(tags.get("lanes:forward"), issues);
+        Double backwardCount = parse(tags.get("lanes:backward"), issues);
+        Double bothWays = parse(tags.get("lanes:both_ways"), issues);
         double both = bothWays != null ? bothWays : 0.0;
+
+        Double directional = forward ? forwardCount : backwardCount;
 
         if (oneway) {
             if (directional != null) {
-                return new OsmLaneCount((int) Math.round(directional + both), LaneConfidence.PRESENT,
-                        null, issues);
+                return laneCount(Math.round(directional + both), LaneConfidence.PRESENT, null, issues);
             }
             if (total != null) {
-                double lanes = total + both;
-                return new OsmLaneCount((int) Math.round(lanes), LaneConfidence.PRESENT, null, issues);
+                return laneCount(Math.round(total + both), LaneConfidence.PRESENT, null, issues);
             }
-            return new OsmLaneCount(1, LaneConfidence.ABSENT, null, issues);
+            return laneCount(1, LaneConfidence.ABSENT, null, issues);
         }
 
-        Double fwd = parse(tags.get("lanes:forward"), "lanes:forward", issues);
-        Double bwd = parse(tags.get("lanes:backward"), "lanes:backward", issues);
-        if (fwd != null && bwd != null) {
-            double lanes = (forward ? fwd : bwd) + both;
-            return new OsmLaneCount((int) Math.round(lanes), LaneConfidence.PRESENT, null, issues);
+        // A single explicit directional tag is authoritative for its own direction.
+        if (directional != null) {
+            return laneCount(Math.round(directional + both), LaneConfidence.PRESENT, null, issues);
         }
 
+        // No explicit tag for the requested direction: derive it from the total.
         if (total != null) {
             double directionalTotal = total - both;
             if (directionalTotal < 1.0) {
                 issues.add("undetermined-lane-split");
-                return new OsmLaneCount(1, LaneConfidence.UNDETERMINED_SPLIT, total, issues);
+                return laneCount(1, LaneConfidence.UNDETERMINED_SPLIT, directionalTotal, issues);
             }
             double perDirection = directionalTotal / 2.0;
             if (Math.abs(perDirection - Math.rint(perDirection)) > 1e-9) {
                 issues.add("undetermined-lane-split");
-                return new OsmLaneCount(1, LaneConfidence.UNDETERMINED_SPLIT, directionalTotal, issues);
+                return laneCount(1, LaneConfidence.UNDETERMINED_SPLIT, directionalTotal, issues);
             }
-            int lanes = (int) Math.round(perDirection + both);
-            return new OsmLaneCount(lanes, LaneConfidence.EVEN_SPLIT, null, issues);
+            return laneCount(Math.round(perDirection + both), LaneConfidence.EVEN_SPLIT, null, issues);
         }
 
-        return new OsmLaneCount(1, LaneConfidence.ABSENT, null, issues);
+        return laneCount(1, LaneConfidence.ABSENT, null, issues);
     }
 
-    private static Double parse(String value, String key, List<String> issues) {
-        if (value == null || value.isBlank()) {
+    private static OsmLaneCount laneCount(long lanes, String confidence, Double undeterminedTotal,
+            List<String> issues) {
+        return new OsmLaneCount((int) lanes, confidence, undeterminedTotal, issues);
+    }
+
+    private static Double parse(String value, List<String> issues) {
+        if (value == null) {
+            return null;
+        }
+        if (value.isBlank()) {
+            issues.add("malformed-lane-count");
             return null;
         }
         try {
             double d = Double.parseDouble(value.trim());
-            if (d < 1.0 || Math.abs(d - Math.rint(d)) > 1e-9) {
+            if (!Double.isFinite(d) || d < 1.0 || Math.abs(d - Math.rint(d)) > 1e-9) {
                 issues.add("malformed-lane-count");
                 return null;
             }
