@@ -741,7 +741,7 @@ public final class OsmLaneDecomposer {
                 confidence = LaneConfidence.TURN_LANES_AUTHORITATIVE;
             }
             for (LaneTurnClass indication : cell.indications()) {
-                toLinks.addAll(resolve(indication, outgoingLinkIds, classifier));
+                toLinks.addAll(resolve(linkId, indication, outgoingLinkIds, classifier));
             }
             if (toLinks.isEmpty()) {
                 confidence = LaneConfidence.PARTIAL;
@@ -772,11 +772,11 @@ public final class OsmLaneDecomposer {
         return lane;
     }
 
-    private static List<String> resolve(LaneTurnClass indication, List<String> outgoing,
+    private static List<String> resolve(String inLinkId, LaneTurnClass indication, List<String> outgoing,
                                         MovementTurnClassifier classifier) {
         Map<LaneTurnClass, List<String>> byClass = new LinkedHashMap<>();
         for (String out : outgoing) {
-            byClass.computeIfAbsent(classifier.classify("", out), k -> new ArrayList<>()).add(out);
+            byClass.computeIfAbsent(classifier.classify(inLinkId, out), k -> new ArrayList<>()).add(out);
         }
         List<String> direct = byClass.getOrDefault(indication, List.of());
         if (!direct.isEmpty()) {
@@ -857,7 +857,6 @@ import javax.xml.transform.stream.StreamSource;
 import javax.xml.validation.SchemaFactory;
 
 import org.junit.jupiter.api.Test;
-import org.xml.sax.InputSource;
 
 import com.citymodeler.matsim.models.api.Id;
 import com.citymodeler.matsim.models.lanes.Lane;
@@ -882,8 +881,10 @@ class MatsimLaneSpecValidationTest {
 
         String xml = new LanesXmlWriter().writeToString(lanes);
         var factory = SchemaFactory.newInstance(javax.xml.XMLConstants.W3C_XML_SCHEMA_NS_URI);
-        var schema = factory.newSchema(new StreamSource(getClass().getClassLoader()
-                .getResourceAsStream("matsim-spec/laneDefinitions_v2.0.xsd")));
+        // systemId must be the resource URL so the XSD's <xs:include schemaLocation="matsimCommon.xsd"/>
+        // resolves relative to it (matsimCommon.xsd is already vendored under matsim-spec/).
+        var schemaUrl = getClass().getClassLoader().getResource("matsim-spec/laneDefinitions_v2.0.xsd");
+        var schema = factory.newSchema(schemaUrl);
         assertDoesNotThrow(() -> schema.newValidator()
                 .validate(new StreamSource(new StringReader(xml))));
     }
@@ -1308,6 +1309,15 @@ public final class LaneDefinitionBuilder {
             List<OsmTurnLaneCell> cells = turnParser.parse(turnLanes(way, ref.forward(), oneway));
             List<String> outgoing = outgoingByNode.getOrDefault(
                     link.getToNodeId().toString(), List.of());
+            if (outgoing.isEmpty()) {
+                // A lane must carry at least one leadsTo (XSD-mandatory); a link whose to-node has no
+                // outgoing links (dead end / isolated) cannot produce a valid assignment. Skip it with
+                // a visible issue rather than fabricating a movement or emitting an invalid lane.
+                issues.add(new OsmImportIssue(OsmIssueSeverity.WARNING, "lane-no-outgoing",
+                        "Link " + linkId + " has no outgoing links at its to-node; no lane assignment",
+                        null));
+                continue;
+            }
 
             LaneDecomposition decomposition = decomposer.decompose(linkId, count, cells, outgoing,
                     classifier, rule.capacityPerLane());
