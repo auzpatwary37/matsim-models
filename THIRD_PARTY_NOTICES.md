@@ -62,6 +62,7 @@ license — not GPL, CC-BY, Apache, or any other — for these files. Consequent
 | `src/test/resources/matsim-spec/matsimCommon.xsd` | `…/files/dtd/matsimCommon.xsd` | Same adaptations as the main-resources copy. | Tests only |
 | `src/test/resources/matsim-spec/vehicleDefinitionsEnumTypes.xsd` | `…/files/dtd/vehicleDefinitionsEnumTypes.xsd` | Same adaptations as the main-resources copy. | Tests only |
 | `src/test/resources/matsim-spec/vehicleDefinitions_v2.0.xsd` | `…/files/dtd/vehicleDefinitions_v2.0.xsd` | Provenance/attribution header; retains absolute `xs:include` URLs (resolved to the local `matsim-spec/` files by the test's resource resolver). | Tests only |
+| `src/test/resources/matsim-spec/laneDefinitions_v2.0.xsd` | `…/files/dtd/laneDefinitions_v2.0.xsd` | Provenance/attribution header; relative `xs:include` of `matsimCommon.xsd` (resolved on the classpath relative to the schema). Upstream editor credit (Dominik Grether, VSP, Berlin Institute of Technology) preserved. | Tests only |
 | `src/test/resources/matsim-spec/transitSchedule_v2.dtd` | `…/files/dtd/transitSchedule_v2.dtd` | Added provenance/attribution header; removed the leading `<?xml …?>` declaration. Attributed to the MATSim contributors. | Tests only |
 
 **Hand-authored interoperability fixtures** (original to this repository, **not** MATSim code):
@@ -80,7 +81,7 @@ license — not GPL, CC-BY, Apache, or any other — for these files. Consequent
   production reader uses a permissive repo-authored `xs:anyType` stub.
 - The `src/test/resources/matsim-spec/*` files are **test-scope only** and serve as
   external interoperability oracles (`TransitScheduleSpecValidationTest`,
-  `MatsimVehicleSpecValidationTest`).
+  `MatsimVehicleSpecValidationTest`, `MatsimLaneSpecValidationTest`).
 
 > **Flagged for upstream verification:** The precise license of the individual MATSim DTD/XSD
 > specification files (as opposed to MATSim's Java program code) is not stated in the files

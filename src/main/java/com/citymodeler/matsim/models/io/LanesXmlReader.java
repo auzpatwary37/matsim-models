@@ -38,43 +38,39 @@ public final class LanesXmlReader {
     private Lanes read(Element root) {
         Lanes lanes = new Lanes();
         XmlSupport.readAttributes(root, lanes.getAttributes());
-        for (Element assignmentElement : XmlSupport.children(root, "assignment")) {
+        for (Element assignmentElement : XmlSupport.children(root, "lanesToLinkAssignment")) {
             LanesToLinkAssignment assignment = new LanesToLinkAssignment(
-                    Id.create(XmlSupport.attr(assignmentElement, "linkId"), Link.class));
+                    Id.create(XmlSupport.attr(assignmentElement, "linkIdRef"), Link.class));
             for (Element laneElement : XmlSupport.children(assignmentElement, "lane")) {
                 Lane lane = new Lane(Id.create(XmlSupport.attr(laneElement, "id"), Lane.class));
-                addLinkIds(lane, XmlSupport.attr(laneElement, "toLinkIds"));
-                addLaneIds(lane, XmlSupport.attr(laneElement, "toLaneIds"));
-                lane.setCapacityVehiclesPerHour(XmlSupport.optionalDouble(laneElement, "capacityVehiclesPerHour", 0.0));
-                lane.setStartsAtMeterFromLinkEnd(XmlSupport.optionalDouble(laneElement, "startsAtMeterFromLinkEnd", 0.0));
-                lane.setAlignment(XmlSupport.attr(laneElement, "alignment"));
+                Element leadsTo = XmlSupport.child(laneElement, "leadsTo");
+                if (leadsTo != null) {
+                    for (Element toLink : XmlSupport.children(leadsTo, "toLink")) {
+                        lane.addToLinkId(Id.create(XmlSupport.attr(toLink, "refId"), Link.class));
+                    }
+                    for (Element toLane : XmlSupport.children(leadsTo, "toLane")) {
+                        lane.addToLaneId(Id.create(XmlSupport.attr(toLane, "refId"), Lane.class));
+                    }
+                }
+                Element capacity = XmlSupport.child(laneElement, "capacity");
+                if (capacity != null) {
+                    lane.setCapacityVehiclesPerHour(
+                            XmlSupport.optionalDouble(capacity, "vehiclesPerHour", 0.0));
+                }
+                Element startsAt = XmlSupport.child(laneElement, "startsAt");
+                if (startsAt != null) {
+                    lane.setStartsAtMeterFromLinkEnd(
+                            XmlSupport.optionalDouble(startsAt, "meterFromLinkEnd", 0.0));
+                }
+                Element alignment = XmlSupport.child(laneElement, "alignment");
+                if (alignment != null) {
+                    lane.setAlignment(alignment.getTextContent());
+                }
                 XmlSupport.readAttributes(laneElement, lane.getAttributes());
                 assignment.addLane(lane);
             }
             lanes.addAssignment(assignment);
         }
         return lanes;
-    }
-
-    private static void addLinkIds(Lane lane, String value) {
-        if (value == null || value.isBlank()) {
-            return;
-        }
-        for (String id : value.split(",")) {
-            if (!id.isBlank()) {
-                lane.addToLinkId(Id.create(id.trim(), Link.class));
-            }
-        }
-    }
-
-    private static void addLaneIds(Lane lane, String value) {
-        if (value == null || value.isBlank()) {
-            return;
-        }
-        for (String id : value.split(",")) {
-            if (!id.isBlank()) {
-                lane.addToLaneId(Id.create(id.trim(), Lane.class));
-            }
-        }
     }
 }

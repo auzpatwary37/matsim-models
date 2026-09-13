@@ -18,15 +18,23 @@ class LanesXmlTest {
     @Test
     void readsWritesAndReadsLanesXml() {
         String xml = """
-                <lanes>
-                    <assignment linkId=\"l1\">
-                        <lane id=\"lane-1\" toLinkIds=\"l2,l3\" toLaneIds=\"lane-2\" capacityVehiclesPerHour=\"700.0\" startsAtMeterFromLinkEnd=\"45.0\" alignment=\"center\">
+                <laneDefinitions xmlns="http://www.matsim.org/files/dtd">
+                    <lanesToLinkAssignment linkIdRef="l1">
+                        <lane id="lane-1">
+                            <leadsTo>
+                                <toLink refId="l2"/>
+                                <toLink refId="l3"/>
+                                <toLane refId="lane-2"/>
+                            </leadsTo>
+                            <capacity vehiclesPerHour="700.0"/>
+                            <startsAt meterFromLinkEnd="45.0"/>
+                            <alignment>1</alignment>
                             <attributes>
-                                <attribute name=\"lane-kind\" class=\"java.lang.String\">bus</attribute>
+                                <attribute name="lane-kind" class="java.lang.String">bus</attribute>
                             </attributes>
                         </lane>
-                    </assignment>
-                </lanes>
+                    </lanesToLinkAssignment>
+                </laneDefinitions>
                 """;
 
         Lanes lanes = new LanesXmlReader().read(xml);
@@ -43,7 +51,7 @@ class LanesXmlTest {
         assertEquals("lane-2", lane.getToLaneIds().get(0).toString());
         assertEquals(700.0, lane.getCapacityVehiclesPerHour());
         assertEquals(45.0, lane.getStartsAtMeterFromLinkEnd());
-        assertEquals("center", lane.getAlignment());
+        assertEquals("1", lane.getAlignment());
         assertEquals("bus", lane.getAttributes().getAttribute("lane-kind"));
     }
 
@@ -58,8 +66,21 @@ class LanesXmlTest {
 
         LanesToLinkAssignment l1Assignment = lanes.getLanesToLinkAssignments().get(Id.create("l1", Link.class));
         assertEquals(2, l1Assignment.getLanes().size());
-        Lane lane1 = l1Assignment.getLanes().get(Id.create("lane-1", Lane.class));
-        assertEquals("bus", lane1.getAttributes().getAttribute("lane-kind"));
+
+        Lane lane0 = l1Assignment.getLanes().get(Id.create("l1_l0", Lane.class));
+        assertEquals("l2", lane0.getToLinkIds().get(0).toString());
+        assertEquals(1800.0, lane0.getCapacityVehiclesPerHour());
+        assertEquals("present", lane0.getAttributes().getAttribute("osm:lane.confidence"));
+
+        Lane lane1 = l1Assignment.getLanes().get(Id.create("l1_l1", Lane.class));
+        assertEquals("l2_l0", lane1.getToLaneIds().get(0).toString());
+        assertEquals(45.0, lane1.getStartsAtMeterFromLinkEnd());
+        assertEquals("1", lane1.getAlignment());
+
+        LanesToLinkAssignment l2Assignment = lanes.getLanesToLinkAssignments().get(Id.create("l2", Link.class));
+        Lane lane2 = l2Assignment.getLanes().get(Id.create("l2_l0", Lane.class));
+        assertEquals("l3", lane2.getToLinkIds().get(0).toString());
+        assertEquals(900.0, lane2.getCapacityVehiclesPerHour());
     }
 
     @Test

@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-    <xs:element name="lanes" type="xs:anyType" />
+<!-- Repo-local permissive stub; real conformance is verified in test scope against the
+     vendored published schema (src/test/resources/matsim-spec/laneDefinitions_v2.0.xsd). -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://www.matsim.org/files/dtd"
+           xmlns="http://www.matsim.org/files/dtd"
+           elementFormDefault="qualified">
+    <xs:element name="laneDefinitions" type="xs:anyType" />
 </xs:schema>
