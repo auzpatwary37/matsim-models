@@ -19,6 +19,7 @@ public final class OsmNetworkBuildConfig {
     private final Set<String> routableModes;
     private final double maxContractedLinkLengthMeters;
     private final boolean addBusToCarRoads;
+    private final boolean collapseParallelTransitTracks;
 
     private OsmNetworkBuildConfig(OsmGeometryMode geometryMode, boolean preserveTransitStopNodes,
                                    Set<String> explicitOsmNodeIdsToKeep, double sharpBendAngleDegrees,
@@ -26,7 +27,7 @@ public final class OsmNetworkBuildConfig {
                                    boolean preserveCrossingNodes, boolean preserveBarrierNodes,
                                    boolean cleanupIsolatedComponents, Set<String> excludedHighwayClasses,
                                    Set<String> routableModes, double maxContractedLinkLengthMeters,
-                                   boolean addBusToCarRoads) {
+                                   boolean addBusToCarRoads, boolean collapseParallelTransitTracks) {
         if (maxContractedLinkLengthMeters < 0) {
             throw new IllegalArgumentException("maxContractedLinkLengthMeters must be >= 0");
         }
@@ -42,32 +43,33 @@ public final class OsmNetworkBuildConfig {
         this.routableModes = Set.copyOf(routableModes);
         this.maxContractedLinkLengthMeters = maxContractedLinkLengthMeters;
         this.addBusToCarRoads = addBusToCarRoads;
+        this.collapseParallelTransitTracks = collapseParallelTransitTracks;
     }
 
     public static OsmNetworkBuildConfig materializeGeometryConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
                 true, Set.of(), 35.0, defaultRules(), false, true, false, Set.of(), defaultRoutableModes(),
-                0.0, true);
+                0.0, true, false);
     }
 
     /** Materialize-geometry config that additionally enforces routable cleaning (bundle pipeline). */
     public static OsmNetworkBuildConfig materializeGeometryConfigWithCleanup() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.MATERIALIZE_GEOMETRY_NODES,
                 true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(),
-                0.0, true);
+                0.0, true, true);
     }
 
     public static OsmNetworkBuildConfig defaultConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
                 true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(),
-                0.0, true);
+                0.0, true, true);
     }
 
     /** Default contraction config that additionally removes isolated non-transit components. */
     public static OsmNetworkBuildConfig defaultConfigWithCleanup() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
                 true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(), defaultRoutableModes(),
-                0.0, true);
+                0.0, true, true);
     }
 
     /**
@@ -80,7 +82,18 @@ public final class OsmNetworkBuildConfig {
     public static OsmNetworkBuildConfig compactRoadNetworkConfig() {
         return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
                 true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of("service"),
-                defaultRoutableModes(), 500.0, true);
+                defaultRoutableModes(), 500.0, true, true);
+    }
+
+    /**
+     * Config that treats a pair of physically parallel transit-track ways (both endpoints coincident)
+     * as a single bidirectional corridor rather than two bidirectional tracks, avoiding a
+     * double-count of direction. This is on by default; this factory exists for explicit use.
+     */
+    public static OsmNetworkBuildConfig collapsingParallelTransitTracksConfig() {
+        return new OsmNetworkBuildConfig(OsmGeometryMode.PRESERVE_AS_LINK_GEOMETRY,
+                true, Set.of(), 35.0, defaultRules(), false, true, true, Set.of(),
+                defaultRoutableModes(), 0.0, true, true);
     }
 
     private static Set<String> defaultRoutableModes() {
@@ -140,6 +153,15 @@ public final class OsmNetworkBuildConfig {
      */
     public boolean addBusToCarRoads() {
         return addBusToCarRoads;
+    }
+
+    /**
+     * When true, a pair of physically parallel transit-track ways (both endpoints coincident within a
+     * small tolerance) is treated as one bidirectional corridor rather than two bidirectional tracks,
+     * so travel direction is not double-counted. Default on.
+     */
+    public boolean collapseParallelTransitTracks() {
+        return collapseParallelTransitTracks;
     }
 
     public OsmWayRule resolveRule(OsmTagSet tags) {

@@ -84,4 +84,31 @@ class OsmSegmentGraphTest {
         assertEquals(2, g.segments().size());
         assertEquals(2, g.segmentsFrom("B").size());
     }
+
+    /**
+     * Two parallel tram ways with coincident endpoints are one physical corridor; with the default
+     * config the duplicate is dropped so direction is not double-counted. With collapse disabled both
+     * survive (literal OSM semantics).
+     */
+    @Test
+    void parallelTransitTracksAreCollapsedByDefault() {
+        Map<String, OsmNodeRecord> nodes = new java.util.TreeMap<>();
+        nodes.put("A", node("A", 0));
+        nodes.put("B", node("B", 100));
+        Map<String, OsmWayRecord> ways = new java.util.TreeMap<>();
+        ways.put("10", new OsmWayRecord("10", List.of("A", "B"),
+                OsmTagSet.of(Map.of("railway", "tram"))));
+        ways.put("20", new OsmWayRecord("20", List.of("A", "B"),
+                OsmTagSet.of(Map.of("railway", "tram"))));
+
+        OsmSegmentGraph collapsed = OsmSegmentGraph.build(result(nodes, ways),
+                OsmNetworkBuildConfig.defaultConfig());
+        assertEquals(1, collapsed.segments().size(),
+                "parallel tram tracks collapse to one segment by default");
+
+        OsmSegmentGraph literal = OsmSegmentGraph.build(result(nodes, ways),
+                OsmNetworkBuildConfig.materializeGeometryConfig());
+        assertEquals(2, literal.segments().size(),
+                "materialize config keeps literal OSM semantics (no collapse)");
+    }
 }

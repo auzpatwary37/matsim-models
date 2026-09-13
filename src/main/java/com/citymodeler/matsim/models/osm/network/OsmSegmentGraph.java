@@ -71,9 +71,13 @@ public final class OsmSegmentGraph {
         OsmSpeedResolver speed = new OsmSpeedResolver();
         OsmLaneResolver lanes = new OsmLaneResolver();
 
+        Set<String> duplicateTracks = config.collapseParallelTransitTracks()
+                ? parallelTransitDuplicates(importResult, config)
+                : Set.of();
+
         for (OsmWayRecord way : importResult.ways().values()) {
             OsmWayRule rule = config.resolveRule(way.tags());
-            if (rule == null) {
+            if (rule == null || duplicateTracks.contains(way.id())) {
                 continue;
             }
             List<String> refs = way.nodeRefs();
@@ -124,6 +128,68 @@ public final class OsmSegmentGraph {
 
     public List<Segment> segments() {
         return segments;
+    }
+
+    /**
+     * Identifies transit-track ways that duplicate a parallel sibling and should be dropped. Two
+     * {@code railway}-tagged ways are treated as one physical corridor when both endpoints coincide
+     * within {@code PARALLEL_TRACK_TOLERANCE_METERS}; the lexicographically smaller way id is kept and
+     * the other returned as a duplicate. This reflects the OSM convention of mapping a dual-track
+     * railway as two parallel ways (one per direction); rendering both as two-way would double-count
+     * direction. Deterministic: comparison is over sorted way ids.
+     */
+    private static Set<String> parallelTransitDuplicates(OsmImportResult importResult,
+                                                         OsmNetworkBuildConfig config) {
+        final double tolerance = 30.0;
+        Map<String, double[]> endpoint = new TreeMap<>();
+        Map<String, String> railType = new TreeMap<>();
+        for (OsmWayRecord way : importResult.ways().values()) {
+            String railway = way.tags().get("railway");
+            if (railway == null || config.resolveRule(way.tags()) == null) {
+                continue;
+            }
+            List<String> refs = way.nodeRefs();
+            if (refs.size() < 2) {
+                continue;
+            }
+            OsmNodeRecord a = importResult.nodes().get(refs.get(0));
+            OsmNodeRecord b = importResult.nodes().get(refs.get(refs.size() - 1));
+            if (a == null || b == null) {
+                continue;
+            }
+            endpoint.put(way.id(), new double[] {
+                    a.projectedCoord().getX(), a.projectedCoord().getY(),
+                    b.projectedCoord().getX(), b.projectedCoord().getY()});
+            railType.put(way.id(), railway);
+        }
+
+        Set<String> duplicates = new TreeSet<>();
+        List<String> ids = new ArrayList<>(endpoint.keySet());
+        for (int i = 0; i < ids.size(); i++) {
+            String first = ids.get(i);
+            if (duplicates.contains(first)) {
+                continue;
+            }
+            for (int j = i + 1; j < ids.size(); j++) {
+                String second = ids.get(j);
+                if (duplicates.contains(second) || !railType.get(first).equals(railType.get(second))) {
+                    continue;
+                }
+                if (parallel(endpoint.get(first), endpoint.get(second), tolerance)) {
+                    // Keep the lexicographically smaller id; drop the other.
+                    duplicates.add(first.compareTo(second) < 0 ? second : first);
+                }
+            }
+        }
+        return duplicates;
+    }
+
+    private static boolean parallel(double[] a, double[] b, double tolerance) {
+        double straight = Math.hypot(a[0] - b[0], a[1] - b[1])
+                + Math.hypot(a[2] - b[2], a[3] - b[3]);
+        double crossed = Math.hypot(a[0] - b[2], a[1] - b[3])
+                + Math.hypot(a[2] - b[0], a[3] - b[1]);
+        return Math.min(straight, crossed) <= tolerance;
     }
 
     public Set<String> nodeIds() {
