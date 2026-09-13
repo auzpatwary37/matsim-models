@@ -94,8 +94,8 @@ Deterministic handling per token (a lane cell may contain several indications jo
 | `slight_right` | slight right | outgoing `slight_right` |
 | `sharp_right` | sharp right | outgoing `sharp_right` (fallback to `right` if only one right exists, flagged) |
 | `reverse` | U-turn | outgoing `reverse` if one exists, else unresolved (flag) |
-| `merge_to_left` | merge left | lane ends; **no** `leadsTo` link; attribute `osm:lane.merge=left` |
-| `merge_to_right` | merge right | lane ends; no `leadsTo`; attribute `osm:lane.merge=right` |
+| `merge_to_left` | merge left | lane ends; attribute `osm:lane.merge=left`; schema-mandatory `leadsTo` = all geometrically-available outgoing links, confidence `merge` |
+| `merge_to_right` | merge right | lane ends; `osm:lane.merge=right`; `leadsTo` = all outgoing, confidence `merge` |
 | `none` | no marked indication | lane unrestricted by turn marking → all geometrically-available outgoing links, confidence `none-observed` |
 | empty cell | missing indication | eligibility unknown (not observed): all geometrically-available outgoing links, confidence `absent`, issue |
 | multiple via `;` | e.g. `left;through` | union of each token's resolution; shared lane (see 1c) |
@@ -122,6 +122,8 @@ Never silently “trust `turn:lanes`”. When token count ≠ resolved lane coun
    - otherwise keep the directional lane count, and align tokens by position; if tokens are fewer,
      the trailing lanes get no turn indication (`absent`); if more, drop the extra tokens (with an
      issue). **Never** fabricate lane count from a malformed tag.
+
+The 0-based left→right lane position is a separate attribute `osm:lane.index` (not a count).
 
 ### 1d. Absent `turn:lanes`
 
@@ -158,7 +160,7 @@ rather than assume observed eligibility.
 - `Lane.id = <linkId>_l<index>`, index left→right in direction of travel (deterministic).
 - Lane attributes record provenance: source tag key+value, raw token, and confidence
   (`present`, `wiki-default-even-split`, `undetermined-split`, `turn-lanes-authoritative`,
-  `absent`, `none-observed`, `unsupported`, `partial`), plus `osm:lane.merge` for merge cells.
+  `absent`, `none-observed`, `unsupported`, `partial`, `merge`), plus `osm:lane.merge` for merge cells.
 
 ## Part 2 — `laneDefinitions` IO
 
