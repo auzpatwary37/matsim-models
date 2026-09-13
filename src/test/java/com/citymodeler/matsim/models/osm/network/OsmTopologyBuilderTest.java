@@ -469,4 +469,55 @@ class OsmTopologyBuilderTest {
         assertTrue(t.issues().stream().anyMatch(i -> "isolated-routing-node".equals(i.code())),
                 "a deterministic isolated-routing-node WARNING must be emitted");
     }
+
+    /** A multi-way merged link preserves every source way, node, name and its full WKT geometry. */
+    @Test
+    void crossWayMergedLinkCarriesFullProvenance() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0)); ns.put("B", n("B", 100));
+        ns.put("C", n("C", 200)); ns.put("D", n("D", 300));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B"),
+                OsmTagSet.of(Map.of("highway", "residential", "name", "First St"))));
+        ws.put("20", new OsmWayRecord("20", List.of("B", "C"),
+                OsmTagSet.of(Map.of("highway", "residential", "name", "Second Ave"))));
+        ws.put("30", new OsmWayRecord("30", List.of("C", "D"),
+                OsmTagSet.of(Map.of("highway", "residential", "name", "Second Ave"))));
+
+        CollapsedTopology t = OsmTopologyBuilder.build(res(ns, ws),
+                OsmNetworkBuildConfig.defaultConfig(), false);
+
+        Link fwd = t.network().getLinks().get(Id.create("sim_10_f_A_D", Link.class));
+        assertNotNull(fwd);
+        assertEquals("10,20,30", fwd.getAttributes().getAttribute("osm:sourceWays"));
+        assertEquals("A,B,C,D", fwd.getAttributes().getAttribute("osm:sourceNodes"));
+        assertEquals("First St", fwd.getAttributes().getAttribute("osm:name"));
+        assertEquals("First St,Second Ave", fwd.getAttributes().getAttribute("osm:sourceNames"));
+        assertEquals("LINESTRING (0.0 0.0, 100.0 0.0, 200.0 0.0, 300.0 0.0)",
+                fwd.getAttributes().getAttribute("osm:geometry"));
+
+        // Both travel directions of one physical link agree on name and source ways.
+        Link rev = t.network().getLinks().get(Id.create("sim_10_r_A_D", Link.class));
+        assertEquals("First St", rev.getAttributes().getAttribute("osm:name"));
+        assertEquals("10,20,30", rev.getAttributes().getAttribute("osm:sourceWays"));
+        assertEquals("D,C,B,A", rev.getAttributes().getAttribute("osm:sourceNodes"));
+    }
+
+    /** A single-way link reports one way/name and omits the multi-name attribute. */
+    @Test
+    void singleWayLinkOmitsMultiNameAttribute() {
+        Map<String, OsmNodeRecord> ns = new TreeMap<>();
+        ns.put("A", n("A", 0)); ns.put("B", n("B", 100)); ns.put("C", n("C", 200));
+        Map<String, OsmWayRecord> ws = new TreeMap<>();
+        ws.put("10", new OsmWayRecord("10", List.of("A", "B", "C"),
+                OsmTagSet.of(Map.of("highway", "residential", "name", "Solo Road"))));
+
+        CollapsedTopology t = OsmTopologyBuilder.build(res(ns, ws),
+                OsmNetworkBuildConfig.defaultConfig(), false);
+
+        Link fwd = t.network().getLinks().get(Id.create("sim_10_f_A_C", Link.class));
+        assertEquals("10", fwd.getAttributes().getAttribute("osm:sourceWays"));
+        assertEquals("Solo Road", fwd.getAttributes().getAttribute("osm:name"));
+        assertNull(fwd.getAttributes().getAttribute("osm:sourceNames"));
+    }
 }

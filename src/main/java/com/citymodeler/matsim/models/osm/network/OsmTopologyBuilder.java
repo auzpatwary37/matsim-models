@@ -141,11 +141,13 @@ public final class OsmTopologyBuilder {
 
                 List<OsmLinkRef> sourceSegments = new ArrayList<>();
                 List<Coord> pts = new ArrayList<>();
+                List<String> chainNodeIds = new ArrayList<>();
                 OsmNodeRecord startRec = nodeRecords.get(start);
                 if (startRec == null) {
                     continue;
                 }
                 pts.add(startRec.projectedCoord());
+                chainNodeIds.add(start);
 
                 String end = start;
                 String cur = start;
@@ -167,6 +169,7 @@ public final class OsmTopologyBuilder {
                         break;
                     }
                     pts.add(nextRec.projectedCoord());
+                    chainNodeIds.add(next);
                     end = next;
                     if (routing.contains(next)) {
                         break;
@@ -182,7 +185,7 @@ public final class OsmTopologyBuilder {
                 if (sourceSegments.isEmpty() || pts.size() < 2) {
                     continue;
                 }
-                emitLink(network, start, end, chainForward, firstSeg, sourceSegments, pts,
+                emitLink(network, start, end, chainForward, firstSeg, sourceSegments, pts, chainNodeIds,
                         config, wayRecords, rawTagsKept, keepAllGeometryNodes,
                         collapsedLinks, linkIdsByOsmWayId, geometry, issues);
             }
@@ -282,6 +285,7 @@ public final class OsmTopologyBuilder {
     private static void emitLink(Network network, String startOsm, String endOsm,
                                  boolean traversalForward, OsmSegmentGraph.Segment firstSegment,
                                  List<OsmLinkRef> sourceSegments, List<Coord> pts,
+                                 List<String> chainNodeIds,
                                  OsmNetworkBuildConfig config,
                                  Map<String, OsmWayRecord> wayRecords, boolean rawTagsKept,
                                  boolean keepAllGeometryNodes,
@@ -340,6 +344,38 @@ public final class OsmTopologyBuilder {
         }
         link.getAttributes().putAttribute("osm:segmentCount", String.valueOf(sourceSegments.size()));
 
+        // Full provenance: the merged link keeps its complete polyline and every source OSM way/node
+        // so the contraction is reversible for inspection, GIS, and debugging. Geometry and node ids
+        // are listed in the directed link's travel order (from -> to); source way ids follow the same
+        // travel order. The representative name is derived from the CANONICAL first way so both travel
+        // directions of one physical link report the same name.
+        link.getAttributes().putAttribute("osm:geometry", toWkt(pts));
+        link.getAttributes().putAttribute("osm:sourceNodes", String.join(",", chainNodeIds));
+        // Source ways/names are listed in canonical span order (min endpoint first) so both travel
+        // directions of one physical link report the same lists regardless of emitted direction.
+        List<OsmLinkRef> canonicalSegments = new ArrayList<>(sourceSegments);
+        if (!forward) {
+            Collections.reverse(canonicalSegments);
+        }
+        List<String> sourceWayIds = distinctWayIds(canonicalSegments);
+        link.getAttributes().putAttribute("osm:sourceWays", String.join(",", sourceWayIds));
+        List<String> sourceNames = distinctWayNames(sourceWayIds, wayRecords);
+        OsmWayRecord canonicalFirstWay = wayRecords.get(firstWayId);
+        String representativeName = canonicalFirstWay == null ? null
+                : canonicalFirstWay.tags().get("name");
+        if (representativeName != null && representativeName.isBlank()) {
+            representativeName = null;
+        }
+        if (representativeName == null && !sourceNames.isEmpty()) {
+            representativeName = sourceNames.get(0);
+        }
+        if (representativeName != null) {
+            link.getAttributes().putAttribute("osm:name", representativeName);
+        }
+        if (sourceNames.size() > 1) {
+            link.getAttributes().putAttribute("osm:sourceNames", String.join(",", sourceNames));
+        }
+
         // Rule and tags come from the canonical first source way; every segment in a contracted
         // chain shares routing attributes by construction of the selector, so it is representative.
         OsmWayRecord firstWay = wayRecords.get(firstWayId);
@@ -371,6 +407,45 @@ public final class OsmTopologyBuilder {
 
     private static String segmentKey(OsmSegmentGraph.Segment seg, boolean forward) {
         return seg.wayId() + "|" + seg.segmentIndex() + "|" + (forward ? "f" : "r");
+    }
+
+    /** WKT LINESTRING of the projected polyline; a single vertex degenerates to a POINT. */
+    private static String toWkt(List<Coord> pts) {
+        StringBuilder sb = new StringBuilder("LINESTRING (");
+        for (int i = 0; i < pts.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(pts.get(i).getX()).append(' ').append(pts.get(i).getY());
+        }
+        return sb.append(')').toString();
+    }
+
+    /** Distinct source OSM way ids in travel order. */
+    private static List<String> distinctWayIds(List<OsmLinkRef> sourceSegments) {
+        List<String> ids = new ArrayList<>();
+        for (OsmLinkRef r : sourceSegments) {
+            if (!ids.contains(r.osmWayId())) {
+                ids.add(r.osmWayId());
+            }
+        }
+        return ids;
+    }
+
+    /** Distinct non-blank way names in travel order (empty when no source way is named). */
+    private static List<String> distinctWayNames(List<String> wayIds, Map<String, OsmWayRecord> wayRecords) {
+        List<String> names = new ArrayList<>();
+        for (String wayId : wayIds) {
+            OsmWayRecord way = wayRecords.get(wayId);
+            if (way == null) {
+                continue;
+            }
+            String name = way.tags().get("name");
+            if (name != null && !name.isBlank() && !names.contains(name)) {
+                names.add(name);
+            }
+        }
+        return names;
     }
 
     /** The unique other incident segment at a non-routing degree-2 pass-through node. */
