@@ -3,7 +3,9 @@ package com.citymodeler.matsim.models.osm.network;
 import java.util.*;
 
 import com.citymodeler.matsim.models.api.Coord;
+import com.citymodeler.matsim.models.osm.OsmImportIssue;
 import com.citymodeler.matsim.models.osm.OsmImportResult;
+import com.citymodeler.matsim.models.osm.OsmIssueSeverity;
 import com.citymodeler.matsim.models.osm.model.OsmNodeRecord;
 import com.citymodeler.matsim.models.osm.model.OsmWayRecord;
 
@@ -68,9 +70,11 @@ public final class OsmSegmentGraph {
 
     private final List<Segment> segments;
     private final Map<String, List<Segment>> byNode;
+    private final List<OsmImportIssue> laneIssues;
 
-    private OsmSegmentGraph(List<Segment> segments) {
+    private OsmSegmentGraph(List<Segment> segments, List<OsmImportIssue> laneIssues) {
         this.segments = List.copyOf(segments);
+        this.laneIssues = List.copyOf(laneIssues);
         Map<String, List<Segment>> map = new TreeMap<>();
         for (Segment s : segments) {
             map.computeIfAbsent(s.nodeA(), k -> new ArrayList<>()).add(s);
@@ -79,6 +83,11 @@ public final class OsmSegmentGraph {
             }
         }
         this.byNode = map;
+    }
+
+    /** Lane-tag diagnostics surfaced while resolving base-network lane counts (deduplicated per way). */
+    public List<OsmImportIssue> laneIssues() {
+        return laneIssues;
     }
 
     public static OsmSegmentGraph build(OsmImportResult importResult, OsmNetworkBuildConfig config) {
@@ -91,6 +100,7 @@ public final class OsmSegmentGraph {
                 ? parallelTransitDuplicates(importResult, config)
                 : Set.of();
 
+        List<OsmImportIssue> laneIssues = new ArrayList<>();
         for (OsmWayRecord way : importResult.ways().values()) {
             OsmWayRule rule = config.resolveRule(way.tags());
             if (rule == null || duplicateTracks.contains(way.id())) {
@@ -103,6 +113,28 @@ public final class OsmSegmentGraph {
             List<OsmModeAccessResolver.DirectionDecision> decisions =
                     access.resolve(way, OsmModeAccessResolver.candidateModes(rule.allowedModes(),
                             config.addBusToCarRoads()), rule.defaultOneway());
+            // Direction and lane counts are per-way (independent of the individual segment), so resolve
+            // them once and surface any lane-tag diagnostics once per way rather than once per segment.
+            boolean oneway = true;
+            boolean anyAllowed = false;
+            boolean grantForward = false;
+            boolean grantBackward = false;
+            for (OsmModeAccessResolver.DirectionDecision d : decisions) {
+                if (d.allowedModes().isEmpty()) {
+                    continue;
+                }
+                anyAllowed = true;
+                if (d.forward()) { grantForward = true; }
+                if (d.backward()) { grantBackward = true; }
+            }
+            if (!anyAllowed) {
+                continue;
+            }
+            oneway = !(grantForward && grantBackward);
+            OsmLaneCount forwardCount = lanes.resolveCount(way, rule, true, oneway);
+            OsmLaneCount backwardCount = lanes.resolveCount(way, rule, false, oneway);
+            addLaneIssues(laneIssues, way, forwardCount, backwardCount);
+
             for (int i = 0; i + 1 < refs.size(); i++) {
                 String a = refs.get(i);
                 String b = refs.get(i + 1);
@@ -123,11 +155,8 @@ public final class OsmSegmentGraph {
                 if (forwardModes.isEmpty() && backwardModes.isEmpty()) {
                     continue;
                 }
-                boolean oneway = !(fwd && bwd);
                 double forwardSpeed = speed.resolve(way, rule, true);
                 double backwardSpeed = speed.resolve(way, rule, false);
-                double forwardLanes = lanes.resolve(way, rule, true, oneway);
-                double backwardLanes = lanes.resolve(way, rule, false, oneway);
                 OsmNodeRecord ra = importResult.nodes().get(a);
                 OsmNodeRecord rb = importResult.nodes().get(b);
                 double length = Math.hypot(
@@ -135,13 +164,30 @@ public final class OsmSegmentGraph {
                         ra.projectedCoord().getY() - rb.projectedCoord().getY());
                 out.add(new Segment(way.id(), i, a, b,
                         forwardModes, backwardModes, forwardSpeed, backwardSpeed,
-                        forwardLanes, backwardLanes, rule.capacityPerLane(), fwd, bwd, length,
-                        laneSignature(way, true), laneSignature(way, false)));
+                        forwardCount.lanes(), backwardCount.lanes(), rule.capacityPerLane(), fwd, bwd,
+                        length, laneSignature(way, true), laneSignature(way, false)));
             }
         }
         out.sort(Comparator.comparing((Segment s) -> s.wayId())
                 .thenComparingInt(Segment::segmentIndex));
-        return new OsmSegmentGraph(out);
+        return new OsmSegmentGraph(out, laneIssues);
+    }
+
+    /**
+     * Surfaces the base-network lane-tag diagnostics (e.g. {@code inconsistent-lane-tags},
+     * {@code undetermined-lane-split}) so {@code network.xml} reports the same lane issues as
+     * {@code laneDefinitions.xml}. Deduplicated by code so a forward/backward pair reporting the same
+     * problem yields one warning per way.
+     */
+    private static void addLaneIssues(List<OsmImportIssue> out, OsmWayRecord way,
+                                      OsmLaneCount forward, OsmLaneCount backward) {
+        java.util.Set<String> seen = new java.util.TreeSet<>();
+        seen.addAll(forward.issueCodes());
+        seen.addAll(backward.issueCodes());
+        for (String code : seen) {
+            out.add(new OsmImportIssue(OsmIssueSeverity.WARNING, code,
+                    "Way " + way.id() + " lane count: " + code, null));
+        }
     }
 
     public List<Segment> segments() {

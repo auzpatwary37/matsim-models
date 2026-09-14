@@ -86,6 +86,9 @@ public final class OsmTopologyBuilder {
         }
 
         OsmSegmentGraph graph = OsmSegmentGraph.build(importResult, config);
+        // Surface base-network lane-tag diagnostics (inconsistent-lane-tags, undetermined-lane-split)
+        // so network.xml reports the same lane issues as laneDefinitions.xml.
+        issues.addAll(graph.laneIssues());
 
         Set<String> stopNodes = signalReady
                 ? (transitStopNodeIds != null ? transitStopNodeIds : stopNodes(importResult))
