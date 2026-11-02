@@ -67,8 +67,9 @@ import com.citymodeler.matsim.models.vehicles.VehicleType;
  * </ul>
  *
  * <p>This class only orchestrates this project's own components and writers; it contains no
- * third-party transit/network conversion logic. Because mapping mutates its inputs in place, the
- * stage-1/2 artifacts are written to disk <em>before</em> mapping runs.
+ * third-party transit/network conversion logic. Mapping follows the build-new contract (it never
+ * mutates its inputs but returns mapped copies), so the stage-1/2 artifacts are written to disk
+ * <em>before</em> mapping runs to make the unmapped inputs explicit in the artifact sequence.
  */
 public final class OsmGtfsBundleRunner {
 
@@ -224,7 +225,8 @@ public final class OsmGtfsBundleRunner {
 
             transitScheduleFile = outputDirectory.resolve(TRANSIT_SCHEDULE_FILE);
             vehiclesFile = outputDirectory.resolve(VEHICLES_FILE);
-            // Write stage-2 artifacts BEFORE mapping, since mapping mutates the schedule in place.
+            // Write stage-2 artifacts BEFORE mapping so the unmapped schedule is captured as its
+            // own artifact; mapping itself is build-new and leaves `unmapped` untouched.
             new TransitScheduleXmlWriter().write(unmapped, transitScheduleFile);
             new VehiclesXmlWriter().write(vehicleDefinitions, vehiclesFile);
 
