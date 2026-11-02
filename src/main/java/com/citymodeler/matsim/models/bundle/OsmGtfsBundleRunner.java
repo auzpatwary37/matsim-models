@@ -183,7 +183,8 @@ public final class OsmGtfsBundleRunner {
 
         Path networkFile = outputDirectory.resolve(NETWORK_FILE);
         Path facilitiesFile = outputDirectory.resolve(FACILITIES_FILE);
-        // Stage-1 artifacts written before any mutating mapping step.
+        // Write stage-1 artifacts before mapping to capture the base network and facilities as
+        // their own artifacts; mapping is build-new and does not modify them.
         new NetworkXmlWriter().write(baseNetwork, networkFile);
         new FacilitiesXmlWriter().write(facilities, facilitiesFile);
 
