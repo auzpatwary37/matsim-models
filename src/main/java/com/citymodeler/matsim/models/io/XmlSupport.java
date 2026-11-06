@@ -78,8 +78,34 @@ final class XmlSupport {
     }
 
     static Document parse(InputStream inputStream) {
+        byte[] bytes;
+        try {
+            bytes = inputStream.readAllBytes();
+        } catch (IOException exception) {
+            throw new MatsimParseException("Could not read XML", exception);
+        }
+        try {
+            return parse(new ByteArrayInputStream(bytes), true);
+        } catch (IOException parseFailure) {
+            throw new MatsimParseException("Could not parse XML", parseFailure);
+        } catch (MatsimParseException exception) {
+            if (exception.getCause() instanceof SAXException sax
+                    && sax.getMessage() != null && sax.getMessage().contains("is not bound")) {
+                try {
+                    return parse(new ByteArrayInputStream(bytes), false);
+                } catch (IOException | MatsimParseException retryFailure) {
+                    throw exception;
+                }
+            }
+            throw exception;
+        }
+    }
+
+    private static Document parse(InputStream inputStream, boolean namespaceAware)
+            throws IOException {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(namespaceAware);
             factory.setXIncludeAware(false);
             requireFeature(factory, XMLConstants.FEATURE_SECURE_PROCESSING, true);
             requireFeature(factory, "http://apache.org/xml/features/disallow-doctype-decl", true);
@@ -269,16 +295,42 @@ final class XmlSupport {
         return null;
     }
 
+    /**
+     * Local-name of an element, namespace-aware: {@code getLocalName()} when a
+     * namespace context exists, otherwise the tag name with any prefix
+     * stripped. Matching on local names makes prefixed (namespaced) documents
+     * readable without changing behavior for unprefixed documents.
+     */
+    static String localName(Element element) {
+        String local = element.getLocalName();
+        if (local != null) {
+            return local;
+        }
+        String tag = element.getTagName();
+        int colon = tag.indexOf(':');
+        return colon < 0 ? tag : tag.substring(colon + 1);
+    }
+
     static List<Element> children(Element parent, String name) {
+        String wanted = stripPrefix(name);
         List<Element> children = new ArrayList<>();
         NodeList nodes = parent.getChildNodes();
         for (int i = 0; i < nodes.getLength(); i++) {
             Node node = nodes.item(i);
-            if (node instanceof Element element && (name == null || name.equals(element.getTagName()))) {
+            if (node instanceof Element element
+                    && (wanted == null || wanted.equals(localName(element)))) {
                 children.add(element);
             }
         }
         return children;
+    }
+
+    private static String stripPrefix(String name) {
+        if (name == null) {
+            return null;
+        }
+        int colon = name.indexOf(':');
+        return colon < 0 ? name : name.substring(colon + 1);
     }
 
     static String attr(Element element, String name) {

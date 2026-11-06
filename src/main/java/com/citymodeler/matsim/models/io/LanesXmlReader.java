@@ -42,43 +42,32 @@ public final class LanesXmlReader {
     }
 
     private Lanes read(Element root) {
-        Lanes lanes = new Lanes();
-        XmlSupport.readAttributes(root, lanes.getAttributes());
-        for (Element assignmentElement : XmlSupport.children(root, "lanesToLinkAssignment")) {
-            LanesToLinkAssignment assignment = new LanesToLinkAssignment(
-                    Id.create(XmlSupport.attr(assignmentElement, "linkIdRef"), Link.class));
-            for (Element laneElement : XmlSupport.children(assignmentElement, "lane")) {
-                Lane lane = new Lane(Id.create(XmlSupport.attr(laneElement, "id"), Lane.class));
-                Element leadsTo = XmlSupport.child(laneElement, "leadsTo");
-                if (leadsTo != null) {
-                    for (Element toLink : XmlSupport.children(leadsTo, "toLink")) {
-                        lane.addToLinkId(Id.create(XmlSupport.attr(toLink, "refId"), Link.class));
-                    }
-                    for (Element toLane : XmlSupport.children(leadsTo, "toLane")) {
-                        lane.addToLaneId(Id.create(XmlSupport.attr(toLane, "refId"), Lane.class));
-                    }
-                }
-                Element capacity = XmlSupport.child(laneElement, "capacity");
-                if (capacity != null) {
-                    lane.setCapacityVehiclesPerHour(
-                            XmlSupport.optionalDouble(capacity, "vehiclesPerHour", 0.0));
-                }
-                Element startsAt = XmlSupport.child(laneElement, "startsAt");
-                if (startsAt != null) {
-                    lane.setStartsAtMeterFromLinkEnd(
-                            XmlSupport.optionalDouble(startsAt, "meterFromLinkEnd", 0.0));
-                }
-                Element alignment = XmlSupport.child(laneElement, "alignment");
-                if (alignment != null) {
-                    lane.setAlignment(alignment.getTextContent());
-                }
-                XmlSupport.readAttributes(laneElement, lane.getAttributes());
-                rehydrateToLaneIds(lane);
-                assignment.addLane(lane);
-            }
-            lanes.addAssignment(assignment);
+        LaneReadResult result = LaneEnvelopeReader.readDocument(root, null, null);
+        return result.lanes().orElseGet(Lanes::new);
+    }
+
+    /**
+     * Reads an explicit lane definitions file and validates its references
+     * against {@code network}. Additive 1.0.4 API: unlike {@link #read}, this
+     * reports structured outcomes (dialect, state, issues) instead of an
+     * empty-model-on-mismatch, and recognizes the canonical v2.0/v1.1
+     * envelopes as well as the historic assignment format.
+     */
+    public LaneReadResult readResult(Path path, com.citymodeler.matsim.models.network.Network network) {
+        org.w3c.dom.Document document;
+        try {
+            document = validateSchema
+                    ? XmlSupport.parse(path, SCHEMA)
+                    : XmlSupport.parse(path);
+        } catch (MatsimParseException exception) {
+            throw new BundleReadException("Could not read lanes from " + path, exception,
+                    java.util.List.of(new com.citymodeler.matsim.models.validation.ValidationIssue(
+                            com.citymodeler.matsim.models.validation.ValidationSeverity.ERROR,
+                            "io", "io.read_failed", exception.getMessage(), null, null,
+                            com.citymodeler.matsim.models.validation.SourceLocation.of(path, "/"),
+                            null, null)));
         }
-        return lanes;
+        return LaneEnvelopeReader.readDocument(document.getDocumentElement(), path, network);
     }
 
     /**
@@ -88,7 +77,7 @@ public final class LanesXmlReader {
      * reversible through a write/read round-trip rather than degrading to metadata (spec Part 2).
      * Ids already present from an explicit {@code toLane} branch are not duplicated.
      */
-    private static void rehydrateToLaneIds(Lane lane) {
+    static void rehydrateToLaneIds(Lane lane) {
         Object raw = lane.getAttributes().getAttribute(LanesXmlWriter.TO_LANE_IDS_ATTRIBUTE);
         if (raw == null) {
             return;
