@@ -190,11 +190,11 @@ public final class SignalsValidator {
         checkAmberIntervals(amberTimes.getGlobalDefaults(), "globalDefaults", report);
         for (SystemAmberTimes system : amberTimes.getSystems().values()) {
             Id<SignalSystem> systemId = system.getId();
+            checkAmberIntervals(system.getSystemDefaults(), systemId.toString(), report);
             if (systems == null || !systems.containsKey(systemId)) {
                 unknownSystem(systems, systemId, "amberTimes", report);
                 continue;
             }
-            checkAmberIntervals(system.getSystemDefaults(), systemId.toString(), report);
             SignalSystem target = systems.get(systemId);
             for (Id<Signal> signalId : system.getSignalOverrides().keySet()) {
                 if (!target.getSignals().containsKey(signalId)) {
