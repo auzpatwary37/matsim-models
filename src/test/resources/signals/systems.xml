@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<signalSystems>
+    <signalSystem id="rax">
+        <attributes>
+            <attribute name="network" class="java.lang.String">berlin</attribute>
+            <attribute name="timezone" class="java.lang.String">Europe/Berlin</attribute>
+        </attributes>
+        <signals>
+            <signal id="rax_1" linkIdRef="l1">
+                <lane idRef="l1_1"/>
+                <lane idRef="l1_2"/>
+                <turningMoveRestrictions>
+                    <toLink idRef="l2"/>
+                    <toLink idRef="l3"/>
+                </turningMoveRestrictions>
+                <attributes>
+                    <attribute name="kind" class="java.lang.String">trafficLight</attribute>
+                </attributes>
+            </signal>
+            <signal id="rax_2" linkIdRef="l4">
+                <lane idRef="l4_1"/>
+            </signal>
+        </signals>
+    </signalSystem>
+    <signalSystem id="rbx">
+        <signals>
+            <signal id="rbx_1" linkIdRef="l9">
+                <turningMoveRestrictions>
+                    <toLink idRef="l10"/>
+                </turningMoveRestrictions>
+            </signal>
+        </signals>
+        <attributes>
+            <attribute name="vendor" class="java.lang.String">siemens</attribute>
+        </attributes>
+    </signalSystem>
+</signalSystems>

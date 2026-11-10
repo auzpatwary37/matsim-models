@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<signalControl>
+    <signalSystem refId="rax">
+        <signalSystemController>
+            <controllerIdentifier>DefaultActuatedController</controllerIdentifier>
+            <signalPlan id="am">
+                <start daytime="06:00:00"/>
+                <stop daytime="10:00:00"/>
+                <cycleTime sec="90"/>
+                <offset sec="5"/>
+                <signalGroupSettings refId="g1">
+                    <onset sec="0"/>
+                    <dropping sec="40"/>
+                    <attributes>
+                        <attribute name="note" class="java.lang.String">am-phase</attribute>
+                    </attributes>
+                </signalGroupSettings>
+            </signalPlan>
+            <signalPlan>
+                <cycleTime sec="60"/>
+                <signalGroupSettings refId="g2">
+                    <onset sec="0"/>
+                    <dropping sec="60"/>
+                </signalGroupSettings>
+            </signalPlan>
+        </signalSystemController>
+    </signalSystem>
+    <signalSystem refId="rbx"/>
+</signalControl>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<intergreenTimes>
+    <signalSystem refId="rax">
+        <endingSignalGroup refId="g1">
+            <beginningSignalGroup refId="g2" timeSeconds="3"/>
+        </endingSignalGroup>
+        <endingSignalGroup refId="g2">
+            <beginningSignalGroup refId="g1" timeSeconds="7"/>
+        </endingSignalGroup>
+    </signalSystem>
+</intergreenTimes>

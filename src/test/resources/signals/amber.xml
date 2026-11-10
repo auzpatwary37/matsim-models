@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<amberTimes>
+    <globalDefaults>
+        <redAmber seconds="1"/>
+        <amber seconds="3"/>
+    </globalDefaults>
+    <signalSystem refId="rax">
+        <systemDefaults>
+            <amber seconds="4"/>
+        </systemDefaults>
+        <signal refId="rax_1">
+            <redAmber seconds="2"/>
+            <amber seconds="5"/>
+            <attributes>
+                <attribute name="policy" class="java.lang.String">nema</attribute>
+            </attributes>
+        </signal>
+    </signalSystem>
+    <signalSystem refId="rbx">
+        <systemDefaults>
+            <redAmber seconds="0"/>
+        </systemDefaults>
+    </signalSystem>
+</amberTimes>
