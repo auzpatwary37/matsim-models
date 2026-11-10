@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<signalGroups>
+    <signalSystem refId="rax">
+        <signalGroup id="g1">
+            <signal refId="rax_1"/>
+            <attributes>
+                <attribute name="protected-left" class="java.lang.Boolean">true</attribute>
+            </attributes>
+        </signalGroup>
+        <signalGroup id="g2">
+            <signal refId="rax_1"/>
+            <signal refId="rax_2"/>
+        </signalGroup>
+    </signalSystem>
+    <signalSystem refId="rbx">
+        <signalGroup id="g9">
+            <signal refId="rbx_1"/>
+        </signalGroup>
+    </signalSystem>
+</signalGroups>

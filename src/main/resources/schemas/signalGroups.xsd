@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Repo-local permissive stub; the published signalGroups_v2.0 schema is
+     intentionally not vendored. Element names are transcribed from its wire shape. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://www.matsim.org/files/dtd"
+           xmlns="http://www.matsim.org/files/dtd"
+           elementFormDefault="qualified">
+    <xs:element name="signalGroups" type="xs:anyType" />
+</xs:schema>
