@@ -38,7 +38,7 @@ public final class NetworkXmlReader {
         return read((validateSchema ? XmlSupport.parse(xml, SCHEMA) : XmlSupport.parse(xml)).getDocumentElement());
     }
 
-    private Network read(Element root) {
+    Network read(Element root) {
         Network network = new Network(XmlSupport.attr(root, "name"));
         XmlSupport.readAttributes(root, network.getAttributes());
 

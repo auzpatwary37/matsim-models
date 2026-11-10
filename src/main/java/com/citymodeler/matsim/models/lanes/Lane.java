@@ -16,6 +16,8 @@ public final class Lane {
     private double capacityVehiclesPerHour;
     private double startsAtMeterFromLinkEnd;
     private String alignment;
+    private Double representedLanesNumber;
+    private Double lengthMeter;
     private final Attributes attributes = new Attributes();
 
     public Lane(Id<Lane> id) {
@@ -64,6 +66,34 @@ public final class Lane {
 
     public void setAlignment(String alignment) {
         this.alignment = alignment;
+    }
+
+    /**
+     * Canonical {@code representedLanes/@number}: how many physical lanes this
+     * definition represents. {@code null} means absent (schema default 1).
+     */
+    public Double getRepresentedLanesNumber() {
+        return representedLanesNumber;
+    }
+
+    public void setRepresentedLanesNumber(Double representedLanesNumber) {
+        this.representedLanesNumber = representedLanesNumber;
+    }
+
+    /**
+     * Lane geometry length in meters as carried by the laneDefinitions_v1.1
+     * {@code length/@meter} element. The v2.0 schema has no lane length element
+     * (v2 positions lanes with {@code startsAt}), so a v1.1-sourced model keeps
+     * the value here and the v2 writer round-trips it through the
+     * {@code osm:lane.lengthMeter} provenance attribute. {@code null} means
+     * absent (v1.1 schema default 45.0).
+     */
+    public Double getLengthMeter() {
+        return lengthMeter;
+    }
+
+    public void setLengthMeter(Double lengthMeter) {
+        this.lengthMeter = lengthMeter;
     }
 
     public Attributes getAttributes() {

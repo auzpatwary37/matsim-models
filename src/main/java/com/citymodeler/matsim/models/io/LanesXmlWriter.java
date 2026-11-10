@@ -58,6 +58,7 @@ public final class LanesXmlWriter {
     static final String ALIGNMENT_PROVENANCE_ATTRIBUTE = "osm:lane.alignmentProvenance";
     static final String ALIGNMENT_RAW_ATTRIBUTE = "osm:lane.alignmentRaw";
     static final String TO_LANE_IDS_ATTRIBUTE = "osm:lane.toLaneIds";
+    static final String LENGTH_METER_ATTRIBUTE = "osm:lane.lengthMeter";
 
     public void write(Lanes lanes, Path path) {
         XmlSupport.write(document(lanes), path);
@@ -91,6 +92,18 @@ public final class LanesXmlWriter {
                 }
 
                 laneElement.appendChild(leadsToElement(document, lane, emittedAttributes));
+
+                if (lane.getRepresentedLanesNumber() != null) {
+                    Element representedLanes =
+                            document.createElementNS(MATSIM_NAMESPACE, "representedLanes");
+                    representedLanes.setAttribute("number",
+                            Double.toString(lane.getRepresentedLanesNumber()));
+                    laneElement.appendChild(representedLanes);
+                }
+                if (lane.getLengthMeter() != null) {
+                    emittedAttributes.putAttribute(LENGTH_METER_ATTRIBUTE,
+                            Double.toString(lane.getLengthMeter()));
+                }
 
                 if (lane.getCapacityVehiclesPerHour() > 0.0) {
                     Element capacity = document.createElementNS(MATSIM_NAMESPACE, "capacity");
