@@ -73,6 +73,7 @@ public final class IntergreenTimesXmlReader {
                 Id<SignalGroup> ending =
                         Id.create(XmlSupport.attr(endingElement, "refId"), SignalGroup.class);
                 for (Element beginningElement : XmlSupport.children(endingElement, "beginningSignalGroup")) {
+                    recordUnknown(beginningElement, "beginningSignalGroup", List.of());
                     Id<SignalGroup> beginning =
                             Id.create(XmlSupport.attr(beginningElement, "refId"), SignalGroup.class);
                     int sec = Integer.parseInt(XmlSupport.attr(beginningElement, "timeSeconds"));

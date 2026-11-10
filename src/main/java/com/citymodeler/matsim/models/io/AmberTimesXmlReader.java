@@ -79,7 +79,6 @@ public final class AmberTimesXmlReader {
                 system.setSystemDefaults(readIntervals(systemDefaults, "systemDefaults"));
             }
             for (Element signalElement : XmlSupport.children(systemElement, "signal")) {
-                recordUnknown(signalElement, "signal", List.of("attributes", "redAmber", "amber"));
                 AmberIntervals override = readIntervals(signalElement, "signal");
                 system.addSignalOverride(
                         Id.create(XmlSupport.attr(signalElement, "refId"), Signal.class), override);

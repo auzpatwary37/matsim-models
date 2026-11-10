@@ -33,4 +33,23 @@ class IntergreenTimesXmlTest {
         assertEquals(5, rax.getEndingToBeginningSec().get(Id.create("g1", SignalGroup.class)).get(Id.create("g3", SignalGroup.class)));
         assertEquals(4, rax.getEndingToBeginningSec().get(Id.create("g2", SignalGroup.class)).get(Id.create("g1", SignalGroup.class)));
     }
+
+    @Test
+    void unknownChildrenAreRecordedAtEveryLevel() {
+        String xml = """
+                <intergreenTimes>
+                    <signalSystem refId="rax">
+                        <endingSignalGroup refId="g1">
+                            <beginningSignalGroup refId="g2" timeSeconds="3">
+                                <mystery/>
+                            </beginningSignalGroup>
+                        </endingSignalGroup>
+                    </signalSystem>
+                </intergreenTimes>
+                """;
+        IntergreenTimesXmlReader reader = new IntergreenTimesXmlReader();
+        reader.read(xml);
+        assertEquals(java.util.List.of("intergreenTimes:beginningSignalGroup:mystery"),
+            reader.getUnknownElements());
+    }
 }

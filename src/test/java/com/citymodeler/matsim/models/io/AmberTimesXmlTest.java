@@ -42,4 +42,20 @@ class AmberTimesXmlTest {
         assertEquals(2, rax.getSignalOverrides().get(Id.create("rax_1", Signal.class)).getRedAmberSec());
         assertEquals("nema", rax.getSignalOverrides().get(Id.create("rax_1", Signal.class)).getAttributes().getAttribute("policy"));
     }
+
+    @Test
+    void unknownChildUnderSignalOverrideIsRecordedOnce() {
+        String xml = """
+                <amberTimes>
+                    <signalSystem refId="rax">
+                        <signal refId="rax_1">
+                            <mystery/>
+                        </signal>
+                    </signalSystem>
+                </amberTimes>
+                """;
+        AmberTimesXmlReader reader = new AmberTimesXmlReader();
+        reader.read(xml);
+        assertEquals(java.util.List.of("amberTimes:signal:mystery"), reader.getUnknownElements());
+    }
 }
