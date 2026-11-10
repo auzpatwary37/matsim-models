@@ -59,7 +59,8 @@ public final class SignalControlXmlWriter {
             systemElement.setAttribute("refId", system.getId().toString());
             XmlSupport.appendAttributes(document, systemElement, system.getAttributes(), MATSIM_NAMESPACE);
             root.appendChild(systemElement);
-            if (system.getControllerIdentifier() != null || !system.getPlans().isEmpty()) {
+            if (system.isControllerPresent() || system.getControllerIdentifier() != null
+                    || !system.getPlans().isEmpty()) {
                 Element controller = document.createElementNS(MATSIM_NAMESPACE, "signalSystemController");
                 if (system.getControllerIdentifier() != null) {
                     Element identifier = document.createElementNS(MATSIM_NAMESPACE, "controllerIdentifier");

@@ -23,6 +23,7 @@ public final class ControlledSignalSystem {
     private final List<SignalPlan> plans = new ArrayList<>();
     private final Attributes attributes = new Attributes();
     private String controllerIdentifier;
+    private boolean controllerPresent;
 
     public ControlledSignalSystem(Id<SignalSystem> id) {
         this.id = Objects.requireNonNull(id, "id");
@@ -38,6 +39,21 @@ public final class ControlledSignalSystem {
 
     public void setControllerIdentifier(String controllerIdentifier) {
         this.controllerIdentifier = controllerIdentifier;
+    }
+
+    /**
+     * Whether the wire carried a {@code signalSystemController} element at
+     * all. Distinct from {@link #getControllerIdentifier()}: an empty
+     * controller container is legal XML and must survive the round-trip, and
+     * validation reports {@code MISSING_CONTROLLER_IDENTIFIER} when a
+     * controller is present without an identifier.
+     */
+    public boolean isControllerPresent() {
+        return controllerPresent;
+    }
+
+    public void setControllerPresent(boolean controllerPresent) {
+        this.controllerPresent = controllerPresent;
     }
 
     public List<SignalPlan> getPlans() {

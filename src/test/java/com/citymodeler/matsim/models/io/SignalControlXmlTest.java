@@ -69,4 +69,21 @@ class SignalControlXmlTest {
             () -> new com.citymodeler.matsim.models.signals.control.SignalGroupSettings(
                 Id.create("g1", SignalGroup.class), -1, 5));
     }
+
+    @Test
+    void emptyControllerSurvivesRoundTrip() {
+        String xml = """
+                <signalControl>
+                    <signalSystem refId="rax">
+                        <signalSystemController/>
+                    </signalSystem>
+                </signalControl>
+                """;
+        Map<Id<SignalSystem>, ControlledSignalSystem> control = new SignalControlXmlReader().read(xml);
+        Map<Id<SignalSystem>, ControlledSignalSystem> again =
+            new SignalControlXmlReader().read(new SignalControlXmlWriter().writeToString(control));
+        ControlledSignalSystem rax = again.get(Id.create("rax", SignalSystem.class));
+        org.junit.jupiter.api.Assertions.assertTrue(rax.isControllerPresent());
+        org.junit.jupiter.api.Assertions.assertNull(rax.getControllerIdentifier());
+    }
 }

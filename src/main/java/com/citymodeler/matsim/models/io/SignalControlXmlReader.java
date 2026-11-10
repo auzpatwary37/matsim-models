@@ -75,6 +75,7 @@ public final class SignalControlXmlReader {
             XmlSupport.readAttributes(systemElement, system.getAttributes());
             Element controller = XmlSupport.child(systemElement, "signalSystemController");
             if (controller != null) {
+                system.setControllerPresent(true);
                 recordUnknown(controller, "signalSystemController",
                         List.of("controllerIdentifier", "signalPlan"));
                 Element identifier = XmlSupport.child(controller, "controllerIdentifier");
