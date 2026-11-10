@@ -64,21 +64,19 @@ public final class NetworkDocumentReader {
 
     /** Reads an embedded lane block from an already-parsed document root. */
     static LaneReadResult readEmbedded(Element networkRoot, Path source, Network network) {
-        Element directEnvelope = XmlSupport.child(networkRoot, "laneDefinitions");
-        Element lanesWrapper = XmlSupport.child(networkRoot, "lanes");
-        Element wrappedEnvelope = lanesWrapper == null
-                ? null : XmlSupport.child(lanesWrapper, "laneDefinitions");
+        List<Element> directEnvelopes = XmlSupport.children(networkRoot, "laneDefinitions");
+        List<Element> wrappedBlocks = new ArrayList<>();
+        for (Element lanesWrapper : XmlSupport.children(networkRoot, "lanes")) {
+            List<Element> envelopes = XmlSupport.children(lanesWrapper, "laneDefinitions");
+            if (envelopes.isEmpty() && !XmlSupport.children(lanesWrapper, "assignment").isEmpty()) {
+                wrappedBlocks.add(lanesWrapper);
+            } else {
+                wrappedBlocks.addAll(envelopes);
+            }
+        }
 
-        List<Element> laneBlocks = new ArrayList<>();
-        if (directEnvelope != null) {
-            laneBlocks.add(directEnvelope);
-        }
-        if (wrappedEnvelope != null) {
-            laneBlocks.add(wrappedEnvelope);
-        } else if (lanesWrapper != null
-                && !XmlSupport.children(lanesWrapper, "assignment").isEmpty()) {
-            laneBlocks.add(lanesWrapper);
-        }
+        List<Element> laneBlocks = new ArrayList<>(directEnvelopes);
+        laneBlocks.addAll(wrappedBlocks);
 
         if (laneBlocks.isEmpty()) {
             return LaneReadResult.absent();
@@ -98,12 +96,10 @@ public final class NetworkDocumentReader {
         Element block = laneBlocks.get(0);
         String blockName = XmlSupport.localName(block);
         if ("laneDefinitions".equals(blockName)) {
-
-            Element parentBlock = block.getParentNode() == lanesWrapper
-                    ? lanesWrapper : networkRoot;
+            Element parentBlock = (Element) block.getParentNode();
             String parentPath = parentBlock == networkRoot
                     ? rootPath
-                    : rootPath + "/lanes[" + occurrenceIndex(lanesWrapper, networkRoot) + "]";
+                    : rootPath + "/lanes[" + occurrenceIndex(parentBlock, networkRoot) + "]";
             return LaneEnvelopeReader.readEnvelope(block, source, network,
                     parentPath + "/laneDefinitions[" + occurrenceIndex(block, parentBlock) + "]");
         }

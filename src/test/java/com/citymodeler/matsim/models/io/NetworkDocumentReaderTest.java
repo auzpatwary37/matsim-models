@@ -161,6 +161,44 @@ class NetworkDocumentReaderTest {
     }
 
     @Test
+    void duplicateDirectLaneDefinitionsAreCompetingBlocks() throws IOException {
+        String lanes = """
+                  <laneDefinitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                      xsi:noNamespaceSchemaLocation="http://www.matsim.org/files/dtd/laneDefinitions_v2.0.xsd">
+                    <lanesToLinkAssignment linkIdRef="l1">
+                      <lane id="a"><leadsTo><toLink refId="l2"/></leadsTo></lane>
+                    </lanesToLinkAssignment>
+                  </laneDefinitions>
+                  <laneDefinitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                      xsi:noNamespaceSchemaLocation="http://www.matsim.org/files/dtd/laneDefinitions_v2.0.xsd">
+                    <lanesToLinkAssignment linkIdRef="l2">
+                      <lane id="b"><leadsTo><toLink refId="l1"/></leadsTo></lane>
+                    </lanesToLinkAssignment>
+                  </laneDefinitions>
+                """;
+        Path file = write("dupdirect.xml", withTail(lanes));
+        LaneReadResult result = new NetworkDocumentReader().readBundle(file).embeddedLanes();
+        assertEquals(LaneReadState.INVALID, result.state());
+        assertTrue(hasCode(result, "lanes.competing_blocks"));
+    }
+
+    @Test
+    void duplicateWrappedLaneDefinitionsAreCompetingBlocks() throws IOException {
+        String lanes = """
+                  <lanes>
+                    <laneDefinitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                        xsi:noNamespaceSchemaLocation="http://www.matsim.org/files/dtd/laneDefinitions_v2.0.xsd"/>
+                    <laneDefinitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                        xsi:noNamespaceSchemaLocation="http://www.matsim.org/files/dtd/laneDefinitions_v2.0.xsd"/>
+                  </lanes>
+                """;
+        Path file = write("dupwrapped.xml", withTail(lanes));
+        LaneReadResult result = new NetworkDocumentReader().readBundle(file).embeddedLanes();
+        assertEquals(LaneReadState.INVALID, result.state());
+        assertTrue(hasCode(result, "lanes.competing_blocks"));
+    }
+
+    @Test
     void duplicateLaneIdsAreInvalid() throws IOException {
         String lanes = """
                   <laneDefinitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
