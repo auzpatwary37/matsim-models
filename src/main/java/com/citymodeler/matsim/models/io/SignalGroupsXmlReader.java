@@ -61,6 +61,10 @@ public final class SignalGroupsXmlReader {
 
     private Map<Id<SignalSystem>, SignalSystemGroups> read(Element root) {
         unknownElements.clear();
+        if (!FAMILY.equals(root.getTagName())) {
+            throw new IllegalArgumentException("expected <" + FAMILY + "> root element, got <"
+                    + root.getTagName() + ">");
+        }
         Map<Id<SignalSystem>, SignalSystemGroups> bySystem = new LinkedHashMap<>();
         for (Element systemElement : XmlSupport.children(root, "signalSystem")) {
             recordUnknown(systemElement, "signalSystem", List.of("attributes", "signalGroup"));

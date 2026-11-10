@@ -60,6 +60,10 @@ public final class IntergreenTimesXmlReader {
 
     private IntergreenTimes read(Element root) {
         unknownElements.clear();
+        if (!FAMILY.equals(root.getTagName())) {
+            throw new IllegalArgumentException("expected <" + FAMILY + "> root element, got <"
+                    + root.getTagName() + ">");
+        }
         IntergreenTimes times = new IntergreenTimes();
         recordUnknown(root, "intergreenTimes", List.of("signalSystem"));
         for (Element systemElement : XmlSupport.children(root, "signalSystem")) {

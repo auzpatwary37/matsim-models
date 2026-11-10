@@ -79,4 +79,10 @@ class SignalSystemsXmlTest {
         reader.read("<signalSystems><signalSystem id=\"s1\"><signals/></signalSystem></signalSystems>");
         assertTrue(reader.getUnknownElements().isEmpty());
     }
+
+    @Test
+    void wrongRootElementIsRejected() {
+        String wrongRoot = "<signalControl><signalSystem refId=\"rax\"/></signalControl>";
+        assertThrows(IllegalArgumentException.class, () -> new SignalSystemsXmlReader().read(wrongRoot));
+    }
 }

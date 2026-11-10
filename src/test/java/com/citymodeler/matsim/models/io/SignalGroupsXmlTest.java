@@ -36,4 +36,11 @@ class SignalGroupsXmlTest {
             g1.getSignalRefIds().stream().map(Id::toString).toList());
         assertEquals(Boolean.TRUE, g1.getAttributes().getAttribute("protected-left"));
     }
+
+    @Test
+    void wrongRootElementIsRejected() {
+        String wrongRoot = "<signalSystems><signalSystem id=\"rax\"/></signalSystems>";
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> new SignalGroupsXmlReader().read(wrongRoot));
+    }
 }

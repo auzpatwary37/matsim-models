@@ -98,6 +98,31 @@ class SignalsValidatorTest {
     }
 
     @Test
+    void nullSystemsSkipsUnknownSystemChecksEntirely() {
+        Map<Id<SignalSystem>, SignalSystemGroups> groups = new LinkedHashMap<>();
+        SignalSystemGroups g = new SignalSystemGroups(Id.create("ghost-system", SignalSystem.class));
+        SignalGroup group = new SignalGroup(Id.create("g1", SignalGroup.class));
+        group.addSignalRef(Id.create("rax_1", Signal.class));   // unresolvable without systems
+        g.addGroup(group);
+        groups.put(Id.create("ghost-system", SignalSystem.class), g);
+        Map<Id<SignalSystem>, ControlledSignalSystem> control = new LinkedHashMap<>();
+        control.put(Id.create("ghost-system", SignalSystem.class),
+            new ControlledSignalSystem(Id.create("ghost-system", SignalSystem.class)));
+
+        // null == the systems file was not supplied: no UNKNOWN_SYSTEM at all, warning or error.
+        ValidationReport absent = new SignalsValidator(network())
+            .validate(null, groups, control, null, null);
+        assertTrue(absent.getIssues().stream().noneMatch(i -> i.getCode().equals("UNKNOWN_SYSTEM")),
+            () -> "systems file absent must skip cross-file system resolution: " + absent.getIssues());
+
+        // empty == the file was supplied and contains no systems: the reference cannot resolve.
+        ValidationReport empty = new SignalsValidator(network())
+            .validate(Map.of(), groups, control, null, null);
+        assertTrue(empty.getIssues().stream().anyMatch(i -> i.getCode().equals("UNKNOWN_SYSTEM")),
+            "systems supplied-but-empty must still report unresolvable system ids");
+    }
+
+    @Test
     void linkRefOutsideNetworkIsError() {
         SignalSystem system = new SignalSystem(Id.create("rax", SignalSystem.class));
         system.addSignal(new Signal(Id.create("rax_1", Signal.class), Id.createLinkId("ghost-link")));

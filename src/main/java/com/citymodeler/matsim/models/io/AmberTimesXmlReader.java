@@ -61,6 +61,10 @@ public final class AmberTimesXmlReader {
 
     private AmberTimes read(Element root) {
         unknownElements.clear();
+        if (!FAMILY.equals(root.getTagName())) {
+            throw new IllegalArgumentException("expected <" + FAMILY + "> root element, got <"
+                    + root.getTagName() + ">");
+        }
         AmberTimes times = new AmberTimes();
         recordUnknown(root, "amberTimes", List.of("attributes", "globalDefaults", "signalSystem"));
         XmlSupport.readAttributes(root, times.getAttributes());

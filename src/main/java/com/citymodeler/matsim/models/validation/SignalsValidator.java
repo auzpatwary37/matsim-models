@@ -64,26 +64,24 @@ public final class SignalsValidator {
                                      AmberTimes amberTimes, IntergreenTimes intergreenTimes,
                                      List<String> unknownElements) {
         ValidationReport report = new ValidationReport();
-        Map<Id<SignalSystem>, SignalSystem> safeSystems =
-                systems == null ? Map.of() : systems;
         Set<String> linkIds = new HashSet<>();
         for (Id<Link> linkId : network.getLinks().keySet()) {
             linkIds.add(linkId.toString());
         }
         if (systems != null) {
-            validateSystems(safeSystems, linkIds, report);
+            validateSystems(systems, linkIds, report);
         }
         if (groups != null) {
-            validateGroups(safeSystems, groups, report);
+            validateGroups(systems, groups, report);
         }
         if (control != null) {
-            validateControl(safeSystems, groups, control, report);
+            validateControl(systems, groups, control, report);
         }
         if (amberTimes != null) {
-            validateAmber(safeSystems, amberTimes, report);
+            validateAmber(systems, amberTimes, report);
         }
         if (intergreenTimes != null) {
-            validateIntergreen(safeSystems, groups, intergreenTimes, report);
+            validateIntergreen(systems, groups, intergreenTimes, report);
         }
         if (unknownElements != null) {
             for (String entry : unknownElements) {
@@ -130,6 +128,9 @@ public final class SignalsValidator {
                                 ValidationReport report) {
         for (SignalSystemGroups systemGroups : groups.values()) {
             Id<SignalSystem> systemId = systemGroups.getId();
+            if (systems == null) {
+                continue; // systems family absent: signal refs cannot be resolved, skip
+            }
             if (!systems.containsKey(systemId)) {
                 unknownSystem(systems, systemId, "signalGroups", report);
                 continue;
@@ -154,7 +155,7 @@ public final class SignalsValidator {
                                  ValidationReport report) {
         for (ControlledSignalSystem system : control.values()) {
             Id<SignalSystem> systemId = system.getId();
-            if (!systems.containsKey(systemId)) {
+            if (systems != null && !systems.containsKey(systemId)) {
                 unknownSystem(systems, systemId, "signalControl", report);
             }
             if (system.isControllerPresent() && isBlank(system.getControllerIdentifier())) {
@@ -189,7 +190,7 @@ public final class SignalsValidator {
         checkAmberIntervals(amberTimes.getGlobalDefaults(), "globalDefaults", report);
         for (SystemAmberTimes system : amberTimes.getSystems().values()) {
             Id<SignalSystem> systemId = system.getId();
-            if (!systems.containsKey(systemId)) {
+            if (systems == null || !systems.containsKey(systemId)) {
                 unknownSystem(systems, systemId, "amberTimes", report);
                 continue;
             }
@@ -222,7 +223,7 @@ public final class SignalsValidator {
                                     IntergreenTimes intergreenTimes, ValidationReport report) {
         for (SystemIntergreens system : intergreenTimes.getSystems().values()) {
             Id<SignalSystem> systemId = system.getId();
-            if (!systems.containsKey(systemId)) {
+            if (systems == null || !systems.containsKey(systemId)) {
                 unknownSystem(systems, systemId, "intergreenTimes", report);
                 continue;
             }
@@ -258,6 +259,12 @@ public final class SignalsValidator {
 
     private void unknownSystem(Map<Id<SignalSystem>, SignalSystem> systems, Id<SignalSystem> systemId,
                                String family, ValidationReport report) {
+        if (systems == null) {
+            // The systems family was not supplied at all: cross-file system resolution
+            // is skipped entirely (no warning, no error). Supplying an EMPTY map means
+            // the file was supplied with no systems, which is a different case handled below.
+            return;
+        }
         ValidationSeverity severity = systems.isEmpty()
                 ? ValidationSeverity.WARNING : ValidationSeverity.ERROR;
         report.addIssue(issue(severity, "UNKNOWN_SYSTEM",

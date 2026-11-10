@@ -52,4 +52,11 @@ class IntergreenTimesXmlTest {
         assertEquals(java.util.List.of("intergreenTimes:beginningSignalGroup:mystery"),
             reader.getUnknownElements());
     }
+
+    @Test
+    void wrongRootElementIsRejected() {
+        String wrongRoot = "<amberTimes><signalSystem refId=\"rax\"/></amberTimes>";
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> new IntergreenTimesXmlReader().read(wrongRoot));
+    }
 }

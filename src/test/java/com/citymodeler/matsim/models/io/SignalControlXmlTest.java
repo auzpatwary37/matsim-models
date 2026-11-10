@@ -86,4 +86,11 @@ class SignalControlXmlTest {
         org.junit.jupiter.api.Assertions.assertTrue(rax.isControllerPresent());
         org.junit.jupiter.api.Assertions.assertNull(rax.getControllerIdentifier());
     }
+
+    @Test
+    void wrongRootElementIsRejected() {
+        String wrongRoot = "<signalGroups><signalSystem refId=\"rax\"/></signalGroups>";
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> new SignalControlXmlReader().read(wrongRoot));
+    }
 }
