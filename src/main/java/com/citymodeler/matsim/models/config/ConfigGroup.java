@@ -30,6 +30,10 @@ public final class ConfigGroup {
         return Optional.ofNullable(params.get(name));
     }
 
+    public void removeParam(String name) {
+        params.remove(name);
+    }
+
     public Map<String, String> getParams() {
         return Collections.unmodifiableMap(params);
     }
